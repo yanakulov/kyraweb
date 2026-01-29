@@ -1,5 +1,5 @@
 import { DEFAULT_ANIM_STEP_INTERVAL, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS } from "./constants";
-import { loadImage, loadMask, loadNpcTextJson, loadSceneEmc, loadSceneMeta, loadSceneShapes } from "./assets";
+import { loadImage, loadMask, loadNpcTextJson, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "./assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
 import {
   buildInventoryItems,
@@ -33,8 +33,8 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
     loadImage(scene.brSrc),
     scene.uiOverlaySrc ? loadImage(scene.uiOverlaySrc) : Promise.resolve(null),
     scene.maskSrc ? loadMask(scene.maskSrc) : Promise.resolve(null),
-    loadImage("/assets/inventory/items.png"),
-    loadNpcTextJson("/assets/text/npc_text.json").catch(() => null)
+    loadImage(withBase("assets/inventory/items.png")),
+    loadNpcTextJson(withBase("assets/text/npc_text.json")).catch(() => null)
   ]);
   const sceneMeta = scene.sceneMetaSrc ? await loadSceneMeta(scene.sceneMetaSrc) : null;
   const sceneEmc = scene.sceneEmcSrc ? await loadSceneEmc(scene.sceneEmcSrc) : null;
