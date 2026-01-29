@@ -1,0 +1,16 @@
+dist
+node_modules
+.idea
+scummvm-2.9.1/
+extractor/__pycache__/
+tmp_sprites/
+
+# Original game files / raw assets (do not commit)
+original_files/
+extractor/kyr-game/
+extracted_files/original/
+
+# Keep only decompiled JSON under extracted_files
+extracted_files/**
+!extracted_files/**/
+!extracted_files/**/*.json

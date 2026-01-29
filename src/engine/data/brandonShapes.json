@@ -1,0 +1,346 @@
+{
+  "imageIndex": 0,
+  "imageName": "BRANDON.CPS",
+  "frames": [
+    {
+      "imageIndex": 0,
+      "x": 0,
+      "y": 0,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 7
+    },
+    {
+      "imageIndex": 0,
+      "x": 24,
+      "y": 0,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 8
+    },
+    {
+      "imageIndex": 0,
+      "x": 48,
+      "y": 0,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 9
+    },
+    {
+      "imageIndex": 0,
+      "x": 72,
+      "y": 0,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 10
+    },
+    {
+      "imageIndex": 0,
+      "x": 96,
+      "y": 0,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 11
+    },
+    {
+      "imageIndex": 0,
+      "x": 120,
+      "y": 0,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 12
+    },
+    {
+      "imageIndex": 0,
+      "x": 144,
+      "y": 0,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 13
+    },
+    {
+      "imageIndex": 0,
+      "x": 168,
+      "y": 0,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 14
+    },
+    {
+      "imageIndex": 0,
+      "x": 192,
+      "y": 0,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 15
+    },
+    {
+      "imageIndex": 0,
+      "x": 216,
+      "y": 0,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 16
+    },
+    {
+      "imageIndex": 0,
+      "x": 0,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 17
+    },
+    {
+      "imageIndex": 0,
+      "x": 16,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 18
+    },
+    {
+      "imageIndex": 0,
+      "x": 32,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 19
+    },
+    {
+      "imageIndex": 0,
+      "x": 48,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 20
+    },
+    {
+      "imageIndex": 0,
+      "x": 64,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 21
+    },
+    {
+      "imageIndex": 0,
+      "x": 80,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 22
+    },
+    {
+      "imageIndex": 0,
+      "x": 96,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 23
+    },
+    {
+      "imageIndex": 0,
+      "x": 112,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 24
+    },
+    {
+      "imageIndex": 0,
+      "x": 128,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 25
+    },
+    {
+      "imageIndex": 0,
+      "x": 144,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 26
+    },
+    {
+      "imageIndex": 0,
+      "x": 160,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 27
+    },
+    {
+      "imageIndex": 0,
+      "x": 176,
+      "y": 51,
+      "w": 16,
+      "h": 11,
+      "xOffset": -2,
+      "yOffset": -8,
+      "shapeIndex": 28
+    },
+    {
+      "imageIndex": 0,
+      "x": 0,
+      "y": 80,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 29
+    },
+    {
+      "imageIndex": 0,
+      "x": 24,
+      "y": 80,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 30
+    },
+    {
+      "imageIndex": 0,
+      "x": 48,
+      "y": 80,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 31
+    },
+    {
+      "imageIndex": 0,
+      "x": 72,
+      "y": 80,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 32
+    },
+    {
+      "imageIndex": 0,
+      "x": 96,
+      "y": 80,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 33
+    },
+    {
+      "imageIndex": 0,
+      "x": 120,
+      "y": 80,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 34
+    },
+    {
+      "imageIndex": 0,
+      "x": 0,
+      "y": 129,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 35
+    },
+    {
+      "imageIndex": 0,
+      "x": 24,
+      "y": 129,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 36
+    },
+    {
+      "imageIndex": 0,
+      "x": 48,
+      "y": 129,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 37
+    },
+    {
+      "imageIndex": 0,
+      "x": 72,
+      "y": 129,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 38
+    },
+    {
+      "imageIndex": 0,
+      "x": 96,
+      "y": 129,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 39
+    },
+    {
+      "imageIndex": 0,
+      "x": 120,
+      "y": 129,
+      "w": 24,
+      "h": 48,
+      "xOffset": -12,
+      "yOffset": -48,
+      "shapeIndex": 40
+    }
+  ]
+}

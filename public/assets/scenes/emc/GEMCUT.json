@@ -1,0 +1,24 @@
+{
+  "file": "GEMCUT.EMC",
+  "sceneShapes": [],
+  "sceneAnimShapes": [
+    {
+      "func": 0,
+      "shape": 6,
+      "x": 248,
+      "y": 93,
+      "flags": 0,
+      "page": 2
+    },
+    {
+      "func": 0,
+      "shape": 10,
+      "x": 213,
+      "y": 81,
+      "flags": 0,
+      "page": 2
+    }
+  ],
+  "itemShapes": [],
+  "dropItems": []
+}
