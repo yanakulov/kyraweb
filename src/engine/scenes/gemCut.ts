@@ -1,4 +1,5 @@
 import { BRANDON_FRAMES } from "../brandonFrames";
+import { withBase } from "../assets";
 import type { SceneConfig, Vec2 } from "../types";
 
 // Approximate walkable floor area for Kalak's Place.
@@ -14,13 +15,13 @@ const WALK_POLYGON: Vec2[] = [
 
 export const gemCutScene: SceneConfig = {
   name: "Kalak's Place",
-  bgSrc: "/assets/backgrounds/kalaks_place/gemcut.png",
-  brSrc: "/assets/characters/brandon/brandon.png",
-  uiOverlaySrc: "/assets/interface/HUD/main15.png",
-  maskSrc: "/assets/masks/GEMCUT.json",
-  sceneMetaSrc: "/assets/scenes/dat/GEMCUT.json",
-  sceneEmcSrc: "/assets/scenes/emc/GEMCUT.json",
-  sceneShapesSrc: "/assets/scenes/cps/GEMCUT.json",
+  bgSrc: withBase("assets/backgrounds/kalaks_place/gemcut.png"),
+  brSrc: withBase("assets/characters/brandon/brandon.png"),
+  uiOverlaySrc: withBase("assets/interface/HUD/main15.png"),
+  maskSrc: withBase("assets/masks/GEMCUT.json"),
+  sceneMetaSrc: withBase("assets/scenes/dat/GEMCUT.json"),
+  sceneEmcSrc: withBase("assets/scenes/emc/GEMCUT.json"),
+  sceneShapesSrc: withBase("assets/scenes/cps/GEMCUT.json"),
   uiMaskY: 136,
   walkPolygon: WALK_POLYGON,
   frames: BRANDON_FRAMES,
