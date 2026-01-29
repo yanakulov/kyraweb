@@ -6,7 +6,7 @@
 
 [![N|Solid](https://img.shields.io/badge/Vue%20js-35495E?style=for-the-badge&logo=vuedotjs&logoColor=4FC08D)](https://nodesource.com/products/nsolid) [![N|Solid](https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)](https://nodesource.com/products/nsolid)
 
-![CURRENT STAGE](https://img.shields.io/badge/CURRENT%20STAGE-Preparing%20intro%20cutscene-green?style=for-the-badge)
+![CURRENT STAGE](https://img.shields.io/badge/CURRENT%20STAGE-Preparing%20main%20menu-green?style=for-the-badge)
 
 **The Legend of Kyrandia** — приключенческая point‑and‑click игра от Westwood Studios (1992). История следует за принцем Брэндоном, который отправляется спасать королевство от злого шута Малкольма. Игра известна живописными фонами, головоломками и атмосферным сюжетом.
 

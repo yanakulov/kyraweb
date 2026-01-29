@@ -53,6 +53,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { mapPointerToCanvas, startGame } from "./engine/game";
+import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
 import { gemCutScene } from "./engine/scenes/gemCut";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -62,6 +63,8 @@ const showLayerInfo = ref(false);
 const maskOpacity = ref(0.35);
 const walkSpeed = ref<"slowest" | "slow" | "fast" | "fastest">("fast");
 const animStepInterval = ref(1);
+const introActive = ref(true);
+let intro: IntroPlayback | null = null;
 
 const config = {
   scene: gemCutScene
@@ -69,6 +72,12 @@ const config = {
 
 async function boot() {
   if (!canvasRef.value) return;
+  intro?.stop();
+  introActive.value = true;
+  intro = playIntro(canvasRef.value, buildIntroSteps());
+  await intro.done;
+  introActive.value = false;
+  intro = null;
   game = await startGame(canvasRef.value, config);
   game.setDebug({
     showMask: showMask.value,
@@ -80,6 +89,10 @@ async function boot() {
 }
 
 function handleClick(event: MouseEvent) {
+  if (introActive.value) {
+    intro?.skip();
+    return;
+  }
   if (!canvasRef.value || !game) return;
   const point = mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY);
   const used = game.handleClick(point);
@@ -89,12 +102,14 @@ function handleClick(event: MouseEvent) {
 }
 
 function handleMove(event: MouseEvent) {
+  if (introActive.value) return;
   if (!canvasRef.value || !game) return;
   const point = mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY);
   game.setPointer(point);
 }
 
 function handleLeave() {
+  if (introActive.value) return;
   if (!game) return;
   game.setPointer(null);
 }
@@ -104,6 +119,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  intro?.stop();
   game?.stop();
 });
 
