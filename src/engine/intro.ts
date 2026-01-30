@@ -1,6 +1,28 @@
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from "./constants";
 import { loadImage, withBase } from "./assets";
 import type { Vec2 } from "./types";
+import {
+  INTRO_TIMING_UNIT_MS,
+  WESTWOOD_RLE,
+  WESTWOOD_TOTAL_MS,
+  KYRANDIA_RLE,
+  KYRANDIA_TOTAL_MS,
+  SCROLL_TOTAL_MS,
+  SHORE_PRE_RLE,
+  SHORE_PRE_TOTAL_MS,
+  SHORE_POST_RLE,
+  SHORE_POST_TOTAL_MS,
+  DESTRUCT_RLE,
+  DESTRUCT_TOTAL_MS,
+  TREE1_RLE,
+  TREE1_TOTAL_MS,
+  TREE2_RLE,
+  TREE2_TOTAL_MS,
+  KALLAK_RLE,
+  KALLAK_TOTAL_MS,
+  HAND_RLE,
+  HAND_TOTAL_MS
+} from "./introTiming";
 
 export type IntroStep = {
   id: string;
@@ -54,8 +76,13 @@ export type IntroPlayback = {
 };
 
 export function buildIntroSteps(): IntroStep[] {
-  const baseFrameMs = 100;
-  const slowFrameMs = 120;
+  const logoFrameMs = INTRO_TIMING_UNIT_MS;
+  const malcolmFrameTicks = 4;
+  const shoreFrameMs = 120;
+  const treeFrameMs = 120;
+  const malcolmFrameMsFixed = 100;
+  const storyFrameMs = 6000;
+  const scrollMs = SCROLL_TOTAL_MS;
   const westwoodFrames = buildFrameList("assets/intro/frames/westwood", 23);
   const kyrandiaFrames = buildFrameList("assets/intro/frames/kyrandia", 30);
   const tree1Frames = buildFrameList("assets/intro/frames/tree1", 185);
@@ -69,36 +96,58 @@ export function buildIntroSteps(): IntroStep[] {
     30
   );
 
+  const buildSequenceFromRle = (frames: string[], rle: [number, number][]) =>
+    rle.flatMap(([frameIndex, units]) => {
+      const normalizedIndex = frameIndex % frames.length;
+      const src = frames[normalizedIndex] ?? frames[0];
+      return Array.from({ length: units }, () => src);
+    });
+  const rleUnits = (rle: [number, number][]) => rle.reduce((sum, [, units]) => sum + units, 0);
+  const rleFrameMs = (totalMs: number, rle: [number, number][]) => totalMs / Math.max(1, rleUnits(rle));
+  const malcolmFrameMs = logoFrameMs * malcolmFrameTicks;
+  const handStopFrameIndex = 30;
+  const frameIndexFromSrc = (src: string) => {
+    const match = src.match(/(\d{4})\.png$/i);
+    return match ? Number(match[1]) : 0;
+  };
+
+  const kallakSequence = buildSequenceFromRle(kallakFrames, KALLAK_RLE);
+  const handSequence = buildSequenceFromRle(handFrames, HAND_RLE);
+  const kallakHandSequence = kallakSequence.map((kallakSrc, i) => {
+    if (frameIndexFromSrc(kallakSrc) >= handStopFrameIndex) return "";
+    return handSequence[i % handSequence.length] ?? "";
+  });
+
   return [
     {
       id: "westwood",
-      durationMs: westwoodFrames.length * slowFrameMs,
+      durationMs: WESTWOOD_TOTAL_MS,
       fadeInMs: 0,
       fadeOutMs: 0,
       bgSrc: withBase("assets/intro/logo_bg.png"),
       frames: {
-        src: westwoodFrames,
-        frameDurationMs: baseFrameMs,
+        src: buildSequenceFromRle(westwoodFrames, WESTWOOD_RLE),
+        frameDurationMs: rleFrameMs(WESTWOOD_TOTAL_MS, WESTWOOD_RLE),
         loop: false,
         pos: { x: 0, y: 60 }
       }
     },
     {
       id: "kyrandia",
-      durationMs: kyrandiaFrames.length * slowFrameMs,
+      durationMs: KYRANDIA_TOTAL_MS,
       fadeInMs: 0,
       fadeOutMs: 0,
       bgSrc: withBase("assets/intro/logo_bg.png"),
       frames: {
-        src: kyrandiaFrames,
-        frameDurationMs: baseFrameMs,
+        src: buildSequenceFromRle(kyrandiaFrames, KYRANDIA_RLE),
+        frameDurationMs: rleFrameMs(KYRANDIA_TOTAL_MS, KYRANDIA_RLE),
         loop: false,
         pos: { x: 0, y: 48 }
       }
     },
     {
       id: "kyrandia_scroll",
-      durationMs: 1800,
+      durationMs: scrollMs,
       scrollIntro: {
         baseSrc: withBase("assets/intro/scroll_bg.png"),
         bottomSrc: withBase("assets/intro/bottom.png"),
@@ -109,62 +158,83 @@ export function buildIntroSteps(): IntroStep[] {
       }
     },
     {
-      id: "kyrandia_fade",
-      durationMs: Math.max(shoreFrames.length, destructFrames.length) * baseFrameMs,
-      fadeInMs: 0,
+      id: "story_text",
+      durationMs: storyFrameMs,
+      fadeInMs: 250,
+      fadeOutMs: 250,
+      bgSrc: withBase("assets/intro/text.png")
+    },
+    {
+      id: "shore_anim",
+      durationMs: shoreFrames.length * shoreFrameMs,
+      fadeInMs: 200,
       fadeOutMs: 0,
       frames: {
         src: shoreFrames,
-        frameDurationMs: slowFrameMs,
+        frameDurationMs: shoreFrameMs,
+        loop: true,
+        pos: { x: 0, y: 8 }
+      }
+    },
+    {
+      id: "shore_destruct",
+      durationMs: Math.max(
+        shoreFrames.length * shoreFrameMs,
+        destructFrames.length * shoreFrameMs * 2
+      ),
+      fadeInMs: 0,
+      fadeOutMs: 200,
+      bgFrames: {
+        src: shoreFrames,
+        frameDurationMs: shoreFrameMs,
         loop: true,
         pos: { x: 0, y: 8 }
       },
-      overlayFrames: {
+      frames: {
         src: destructFrames,
-        frameDurationMs: slowFrameMs,
+        frameDurationMs: shoreFrameMs * 2,
         loop: false,
-        holdLast: true,
         pos: { x: 152, y: 56 }
       }
     },
     {
       id: "tree_anim_1",
-      durationMs: tree1Frames.length * slowFrameMs,
+      durationMs: tree1Frames.length * treeFrameMs,
       fadeInMs: 200,
-      fadeOutMs: 0,
+      fadeOutMs: 200,
       frames: {
         src: tree1Frames,
-        frameDurationMs: slowFrameMs,
+        frameDurationMs: treeFrameMs,
         loop: false,
         pos: { x: 0, y: 8 }
       }
     },
     {
       id: "tree_anim_2",
-      durationMs: tree2Frames.length * slowFrameMs,
-      fadeInMs: 0,
+      durationMs: tree2Frames.length * treeFrameMs,
+      fadeInMs: 200,
       fadeOutMs: 200,
       frames: {
         src: tree2Frames,
-        frameDurationMs: slowFrameMs,
+        frameDurationMs: treeFrameMs,
         loop: false,
         pos: { x: 0, y: 8 }
       }
     },
     {
       id: "kallak_writing",
-      durationMs: kallakFrames.length * slowFrameMs,
+      durationMs: KALLAK_TOTAL_MS,
       fadeInMs: 250,
       fadeOutMs: 250,
       frames: {
-        src: kallakFrames,
-        frameDurationMs: slowFrameMs,
+        src: kallakSequence,
+        frameDurationMs: rleFrameMs(KALLAK_TOTAL_MS, KALLAK_RLE),
         loop: false,
         pos: { x: 0, y: 8 }
       },
       overlayFrames: {
-        src: handFrames,
-        frameDurationMs: slowFrameMs,
+        src: kallakHandSequence,
+        frameDurationMs: rleFrameMs(HAND_TOTAL_MS, HAND_RLE),
         loop: false,
         holdLast: false,
         pos: { x: 92, y: 20 }
@@ -173,12 +243,12 @@ export function buildIntroSteps(): IntroStep[] {
     {
       id: "kallak_malcolm",
       bgSrc: withBase("assets/intro/gemcuti.png"),
-      durationMs: malKalFrames.length * baseFrameMs,
-      fadeInMs: 0,
+      durationMs: malKalFrames.length * malcolmFrameMsFixed,
+      fadeInMs: 250,
       fadeOutMs: 250,
       frames: {
         src: malKalFrames,
-        frameDurationMs: baseFrameMs,
+        frameDurationMs: malcolmFrameMsFixed,
         loop: false,
         pos: { x: 16, y: 58 }
       }
@@ -203,7 +273,9 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
     "westwood",
     "kyrandia",
     "kyrandia_scroll",
-    "kyrandia_fade"
+    "story_text",
+    "shore_anim",
+    "shore_destruct"
   ]);
 
   const sources = new Map<string, Promise<HTMLImageElement>>();
@@ -221,8 +293,16 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
         }
       }
     }
+    if (step.bgFrames) {
+      for (const frameSrc of step.bgFrames.src) {
+        if (!sources.has(frameSrc)) {
+          sources.set(frameSrc, loadImage(frameSrc));
+        }
+      }
+    }
     if (step.overlayFrames) {
       for (const frameSrc of step.overlayFrames.src) {
+        if (!frameSrc) continue;
         if (!sources.has(frameSrc)) {
           sources.set(frameSrc, loadImage(frameSrc));
         }
@@ -366,6 +446,16 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
           if (bg) ctx.drawImage(bg, 0, 0);
         }
 
+        if (step.bgFrames && step.bgFrames.src.length) {
+          const frameIdx = step.bgFrames.loop
+            ? Math.floor(elapsed / step.bgFrames.frameDurationMs) % step.bgFrames.src.length
+            : Math.min(step.bgFrames.src.length - 1, Math.floor(elapsed / step.bgFrames.frameDurationMs));
+          const frameSrc = step.bgFrames.src[frameIdx];
+          const frameImg = imageMap.get(frameSrc);
+          const pos = step.bgFrames.pos ?? { x: 0, y: 0 };
+          if (frameImg) ctx.drawImage(frameImg, pos.x, pos.y);
+        }
+
         if (step.frames && step.frames.src.length) {
           const frameIdx = step.frames.loop
             ? Math.floor(elapsed / step.frames.frameDurationMs) % step.frames.src.length
@@ -385,9 +475,11 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
                   Math.floor(elapsed / step.overlayFrames.frameDurationMs)
                 );
             const frameSrc = step.overlayFrames.src[frameIdx];
-            const frameImg = imageMap.get(frameSrc);
-            const pos = step.overlayFrames.pos ?? { x: 0, y: 0 };
-            if (frameImg) ctx.drawImage(frameImg, pos.x, pos.y);
+            if (frameSrc) {
+              const frameImg = imageMap.get(frameSrc);
+              const pos = step.overlayFrames.pos ?? { x: 0, y: 0 };
+              if (frameImg) ctx.drawImage(frameImg, pos.x, pos.y);
+            }
           }
         }
 
@@ -404,8 +496,8 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
 
         // Mask the UI area like the original intro (black bar at the bottom).
         if (!NO_UI_OVERLAY.has(step.id)) {
-        ctx.fillStyle = "#000000";
-        ctx.fillRect(0, 136, LOGICAL_WIDTH, LOGICAL_HEIGHT - 136);
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(0, 136, LOGICAL_WIDTH, LOGICAL_HEIGHT - 136);
         }
         requestAnimationFrame(loop);
       };
