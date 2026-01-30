@@ -1,8 +1,16 @@
 :root {
   color-scheme: light;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Kyrandia", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   background: #12110f;
   color: #f5f0e6;
+}
+
+@font-face {
+  font-family: "Kyrandia";
+  src: url("/assets/font/kyrandia.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 
 * {
@@ -28,7 +36,7 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: 1fr 220px;
+  grid-template-columns: 1fr;
   gap: 12px;
   align-items: start;
 }
@@ -43,42 +51,138 @@ body {
   overflow: hidden;
 }
 
-.debug {
-  display: grid;
-  gap: 12px;
-  padding: 12px;
+.panel-toggle {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 3;
+  border: 1px solid #4a3a28;
   background: #1c1812;
+  color: #f5e7c8;
+  font-family: "Kyrandia", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.debug-panel {
+  position: absolute;
+  right: 12px;
+  top: 48px;
+  width: 320px;
+  padding: 12px;
+  background: rgba(20, 16, 12, 0.92);
   border: 1px solid #352a1d;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.4;
+  display: grid;
+  gap: 10px;
+  max-height: calc(100% - 72px);
+  overflow-y: auto;
+  transform: translateY(-8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 2;
+}
+
+.debug-panel.open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.debug-header {
+  display: grid;
+  gap: 2px;
 }
 
 .debug-title {
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-family: "Kyrandia", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-size: 12px;
   color: #e8d7b3;
+}
+
+.debug-sub {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  color: #bfa77a;
+  font-size: 11px;
 }
 
 .debug-row {
   display: grid;
-  gap: 6px;
-}
-
-.debug-value {
-  justify-self: start;
+  grid-template-columns: 16px 1fr;
+  align-items: start;
+  gap: 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  color: #f5d28f;
 }
 
-.debug input[type="range"] {
+.debug-row span {
+  white-space: nowrap;
+}
+
+.debug-row input[type="checkbox"] {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #a7844a;
+  background: #1b140c;
+  box-shadow: inset 0 0 0 2px #1b140c;
+  image-rendering: pixelated;
+}
+
+.debug-row input[type="checkbox"]:checked {
+  background: #d7b46a;
+  box-shadow: inset 0 0 0 2px #1b140c;
+}
+
+.debug-row select,
+.debug-row input[type="range"] {
+  grid-column: 1 / -1;
   width: 100%;
 }
 
-.debug input[type="checkbox"] {
-  accent-color: #c99b5b;
+.debug-row select {
+  background: #1b140c;
+  color: #f1e2c2;
+  border: 1px solid #3f2f1f;
+  padding: 4px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.debug-row input[type="range"] {
+  appearance: none;
+  height: 8px;
+  background: #1b140c;
+  border: 1px solid #3f2f1f;
+  image-rendering: pixelated;
+}
+
+.debug-row input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: #d7b46a;
+  border: 1px solid #3f2f1f;
+}
+
+.debug-row input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: #d7b46a;
+  border: 1px solid #3f2f1f;
+}
+
+.debug-value {
+  grid-column: 1 / -1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  color: #f5d28f;
+  font-size: 11px;
 }
 
 .stage canvas {
@@ -87,6 +191,105 @@ body {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   display: block;
+}
+
+.intro-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  aspect-ratio: 2000 / 389;
+  height: auto;
+  background-image: url("/assets/interface/HUD/panel.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  z-index: 2;
+  overflow: hidden;
+  cursor: pointer;
+  animation: intro-fade-in 0.6s steps(12, end) forwards;
+}
+
+.intro-panel.closing {
+  animation: none;
+  pointer-events: none;
+}
+
+.intro-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("/assets/interface/HUD/panel-hover.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  opacity: 0;
+  transition: opacity 0.16s linear;
+  pointer-events: none;
+}
+
+.intro-panel.hover::before {
+  opacity: 1;
+}
+
+.intro-logo {
+  position: absolute;
+    left: 69px;
+    top: 155px;
+    width: 452px;
+  height: auto;
+  image-rendering: pixelated;
+  opacity: 0;
+  transform: none;
+  animation: intro-fade-in 0.6s steps(12, end) forwards;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.intro-logo.closing {
+  animation: none;
+}
+
+.intro-logo-text {
+  position: absolute;
+  left: 69px;
+  top: 276px;
+  width: 460px;
+  font-family: "Kyrandia", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+  line-height: 1.2;
+  color: #f2e6c9;
+  text-shadow: none;
+  opacity: 0;
+  animation: intro-fade-in 0.6s steps(12, end) forwards;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.intro-logo-text.closing {
+  animation: none;
+}
+
+@keyframes intro-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes intro-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes intro-logo-fade {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .hud {
@@ -99,6 +302,19 @@ body {
   border: 1px solid #352a1d;
   border-radius: 8px;
   font-size: 14px;
+}
+
+.hud-title {
+  font-family: "Kyrandia", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hud-body {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  color: #d5c7a4;
 }
 
 .hud code {

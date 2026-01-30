@@ -1,4 +1,4 @@
-import type { SceneOverlayConfig, SceneOverlayState, SceneSpriteDef } from "./types";
+import type { SceneOverlayConfig, SceneOverlayState, SceneSpriteDef } from "../core/types";
 
 export function initSceneOverlays(overlays?: SceneOverlayConfig[]): SceneOverlayState[] {
   if (!overlays || !overlays.length) return [];

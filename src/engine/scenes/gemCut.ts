@@ -1,6 +1,6 @@
-import { BRANDON_FRAMES } from "../brandonFrames";
-import { withBase } from "../assets";
-import type { SceneConfig, Vec2 } from "../types";
+import { BRANDON_FRAMES } from "../characters/brandonFrames";
+import { withBase } from "../core/assets";
+import type { SceneConfig, Vec2 } from "../core/types";
 
 // Approximate walkable floor area for Kalak's Place.
 // Replace with a real mask from the original .MSC when available.

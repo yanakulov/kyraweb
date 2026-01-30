@@ -1,7 +1,7 @@
-import { LOGICAL_WIDTH } from "./constants";
-import { clampTarget, isWalkable } from "./masks";
+import { LOGICAL_WIDTH } from "../core/constants";
+import { clampTarget, isWalkable } from "../scene/masks";
 import { getTileRect } from "./inventory";
-import type { DropAnim, InventoryItem, InventoryItemId, MaskData, SceneConfig, SceneItem, Vec2 } from "./types";
+import type { DropAnim, InventoryItem, InventoryItemId, MaskData, SceneConfig, SceneItem, Vec2 } from "../core/types";
 
 export function dropItemAt(
   point: Vec2,

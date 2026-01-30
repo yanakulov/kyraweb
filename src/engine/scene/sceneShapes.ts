@@ -1,5 +1,5 @@
-import { decodeBase64Bytes } from "./assets";
-import type { SceneShapesData, SceneSpriteDef } from "./types";
+import { decodeBase64Bytes } from "../core/assets";
+import type { SceneShapesData, SceneSpriteDef } from "../core/types";
 
 export function buildSceneShapesCanvas(data: SceneShapesData): HTMLCanvasElement {
   const width = data.width;
