@@ -52,7 +52,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { mapPointerToCanvas, startGame } from "./engine/game";
+import { mapPointerToCanvas, startGame } from "./engine/gameplay/game";
 import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
 import { gemCutScene } from "./engine/scenes/gemCut";
 

@@ -1,6 +1,6 @@
-import { INVENTORY_ICON_SIZE, ITEMS_SHEET_COLS } from "./constants";
-import { getDrawLayer } from "./masks";
-import type { InventoryItem, InventoryItemId, InventorySlot, MaskData, SceneItem } from "./types";
+import { INVENTORY_ICON_SIZE, ITEMS_SHEET_COLS } from "../core/constants";
+import { getDrawLayer } from "../scene/masks";
+import type { InventoryItem, InventoryItemId, InventorySlot, MaskData, SceneItem } from "../core/types";
 
 const INVENTORY_ITEM_DEFS: Record<InventoryItemId, InventoryItem> = {
   // Tile indices are 0-based, 20 columns per row in items.png.

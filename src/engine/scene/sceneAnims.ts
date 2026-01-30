@@ -1,5 +1,5 @@
-import { TICK_MS } from "./constants";
-import type { SceneAnimDef, SceneAnimState, SceneSpriteDef } from "./types";
+import { TICK_MS } from "../core/constants";
+import type { SceneAnimDef, SceneAnimState, SceneSpriteDef } from "../core/types";
 
 export function buildSceneAnimStates(anims: SceneAnimDef[]): SceneAnimState[] {
   return anims

@@ -1,5 +1,5 @@
-import { LOGICAL_HEIGHT, LOGICAL_WIDTH, WALK_PAD_X, WALK_PAD_Y } from "./constants";
-import type { MaskData, SceneConfig, Vec2 } from "./types";
+import { LOGICAL_HEIGHT, LOGICAL_WIDTH, WALK_PAD_X, WALK_PAD_Y } from "../core/constants";
+import type { MaskData, SceneConfig, Vec2 } from "../core/types";
 
 export function buildMaskCanvas(mask: MaskData): HTMLCanvasElement {
   const canvas = document.createElement("canvas");

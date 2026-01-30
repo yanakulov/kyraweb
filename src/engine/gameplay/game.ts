@@ -1,5 +1,5 @@
-import { DEFAULT_ANIM_STEP_INTERVAL, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS } from "./constants";
-import { loadImage, loadMask, loadNpcTextJson, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "./assets";
+import { DEFAULT_ANIM_STEP_INTERVAL, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS } from "../core/constants";
+import { loadImage, loadMask, loadNpcTextJson, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
 import {
   buildInventoryItems,
@@ -11,13 +11,13 @@ import {
   getTileRect,
   initInventory
 } from "./inventory";
-import { buildMaskCanvas, buildForegroundFrame, clampTarget, isWalkable, resolveActorLayer } from "./masks";
+import { buildMaskCanvas, buildForegroundFrame, clampTarget, isWalkable, resolveActorLayer } from "../scene/masks";
 import { getIdleFrame, getSequence, pickDirection } from "./movement";
-import { filterSceneAnimShapes, findOverlayAt, initSceneOverlays, drawSceneOverlays } from "./overlays";
-import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "./sceneAnims";
-import { buildSceneShapesCanvas, buildSpriteDefMap, drawSceneAnimShapes } from "./sceneShapes";
-import { buildUiOverlay, drawLayerDebug, drawStatusLine } from "./ui";
-import type { DropAnim, GameConfig, InventoryItemId, SceneItem, SceneOverlayState, Vec2 } from "./types";
+import { filterSceneAnimShapes, findOverlayAt, initSceneOverlays, drawSceneOverlays } from "../scene/overlays";
+import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
+import { buildSceneShapesCanvas, buildSpriteDefMap, drawSceneAnimShapes } from "../scene/sceneShapes";
+import { buildUiOverlay, drawLayerDebug, drawStatusLine } from "../core/ui";
+import type { DropAnim, GameConfig, InventoryItemId, SceneItem, SceneOverlayState, Vec2 } from "../core/types";
 
 export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
   const ctx = canvas.getContext("2d");

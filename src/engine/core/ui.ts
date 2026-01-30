@@ -1,5 +1,5 @@
 import type { MaskData, Vec2 } from "./types";
-import { getMaskValue } from "./masks";
+import { getMaskValue } from "../scene/masks";
 
 export function buildUiOverlay(image: HTMLImageElement) {
   const width = image.width;

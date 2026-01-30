@@ -1,4 +1,4 @@
-import { BRANDON_WALK_DOWN, BRANDON_WALK_SIDE, BRANDON_WALK_UP } from "./brandonFrames";
+import { BRANDON_WALK_DOWN, BRANDON_WALK_SIDE, BRANDON_WALK_UP } from "../characters/brandonFrames";
 
 export function getSequence(dir: "left" | "right" | "up" | "down") {
   if (dir === "up") return BRANDON_WALK_DOWN;

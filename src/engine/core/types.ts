@@ -1,4 +1,4 @@
-import type { Frame } from "./brandonFrames";
+import type { Frame } from "../characters/brandonFrames";
 
 export type Vec2 = { x: number; y: number };
 

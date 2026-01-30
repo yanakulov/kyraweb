@@ -1,4 +1,4 @@
-import data from "./data/brandonShapes.json";
+import data from "../data/brandonShapes.json";
 
 export type Frame = {
   x: number;
