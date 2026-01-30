@@ -36,6 +36,8 @@ export type IntroStep = {
   overlaySrc?: string;
   overlayPos?: Vec2;
   textLines?: string[];
+  footerText?: string;
+  footerTextY?: number;
   frames?: {
     src: string[];
     frameDurationMs: number;
@@ -148,6 +150,8 @@ export function buildIntroSteps(): IntroStep[] {
       fadeInMs: 0,
       fadeOutMs: 0,
       bgSrc: withBase("assets/intro/logo_bg.png"),
+      footerText: "Copyright (c) 1992 Westwood Studios",
+      footerTextY: 179,
       frames: {
         src: buildSequenceFromRle(kyrandiaFrames, KYRANDIA_RLE),
         frameDurationMs: rleFrameMs(KYRANDIA_TOTAL_MS, KYRANDIA_RLE),
@@ -420,6 +424,17 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
         });
         ctx.restore();
       };
+      const drawFooterText = (text: string, y: number) => {
+        ctx.save();
+        ctx.font = "bold 12px 'Courier New', monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillStyle = "#f2f2f2";
+        ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+        ctx.shadowBlur = 2;
+        ctx.fillText(text, LOGICAL_WIDTH / 2, y);
+        ctx.restore();
+      };
 
       const loop = (now: number) => {
         if (!running) return;
@@ -582,6 +597,9 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
 
         if (step.textLines && step.textLines.length) {
           drawText(step.textLines);
+        }
+        if (step.footerText) {
+          drawFooterText(step.footerText, step.footerTextY ?? 179);
         }
         ctx.restore();
 
