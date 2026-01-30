@@ -48,6 +48,7 @@ export type IntroStep = {
     loop?: boolean;
     pos?: Vec2;
     holdLast?: boolean;
+    oscillateX?: { amplitude: number; periodMs: number };
   };
   sceneAnim?: {
     metaSrc: string;
@@ -89,6 +90,7 @@ export function buildIntroSteps(): IntroStep[] {
   const shoreFrameMs = 120;
   const treeFrameMs = 120;
   const malcolmFrameMsFixed = 100;
+  const softFadeMs = 250;
   const storyFrameMs = 6000;
   const scrollMs = SCROLL_TOTAL_MS;
   const westwoodFrames = buildFrameList("assets/intro/frames/westwood", 23);
@@ -175,7 +177,7 @@ export function buildIntroSteps(): IntroStep[] {
     {
       id: "shore_anim",
       durationMs: shoreFrames.length * shoreFrameMs,
-      fadeInMs: 200,
+      fadeInMs: 0,
       fadeOutMs: 0,
       frames: {
         src: shoreFrames,
@@ -191,7 +193,7 @@ export function buildIntroSteps(): IntroStep[] {
         destructFrames.length * shoreFrameMs * 2
       ),
       fadeInMs: 0,
-      fadeOutMs: 200,
+      fadeOutMs: 0,
       bgFrames: {
         src: shoreFrames,
         frameDurationMs: shoreFrameMs,
@@ -208,8 +210,8 @@ export function buildIntroSteps(): IntroStep[] {
     {
       id: "tree_anim_1",
       durationMs: tree1Frames.length * treeFrameMs,
-      fadeInMs: 200,
-      fadeOutMs: 200,
+      fadeInMs: softFadeMs,
+      fadeOutMs: softFadeMs,
       frames: {
         src: tree1Frames,
         frameDurationMs: treeFrameMs,
@@ -220,8 +222,8 @@ export function buildIntroSteps(): IntroStep[] {
     {
       id: "tree_anim_2",
       durationMs: tree2Frames.length * treeFrameMs,
-      fadeInMs: 200,
-      fadeOutMs: 200,
+      fadeInMs: softFadeMs,
+      fadeOutMs: softFadeMs,
       frames: {
         src: tree2Frames,
         frameDurationMs: treeFrameMs,
@@ -232,8 +234,8 @@ export function buildIntroSteps(): IntroStep[] {
     {
       id: "kallak_writing",
       durationMs: KALLAK_TOTAL_MS,
-      fadeInMs: 250,
-      fadeOutMs: 250,
+      fadeInMs: softFadeMs,
+      fadeOutMs: softFadeMs,
       frames: {
         src: kallakSequence,
         frameDurationMs: rleFrameMs(KALLAK_TOTAL_MS, KALLAK_RLE),
@@ -245,15 +247,16 @@ export function buildIntroSteps(): IntroStep[] {
         frameDurationMs: rleFrameMs(HAND_TOTAL_MS, HAND_RLE),
         loop: false,
         holdLast: false,
-        pos: { x: 92, y: 20 }
+        pos: { x: 92, y: 20 },
+        oscillateX: { amplitude: 6, periodMs: 900 }
       }
     },
     {
       id: "kallak_malcolm",
       bgSrc: withBase("assets/intro/gemcuti.png"),
       durationMs: malKalFrames.length * malcolmFrameMsFixed,
-      fadeInMs: 250,
-      fadeOutMs: 250,
+      fadeInMs: 0,
+      fadeOutMs: 0,
       frames: {
         src: malKalFrames,
         frameDurationMs: malcolmFrameMsFixed,
@@ -558,7 +561,15 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
             if (frameSrc) {
               const frameImg = imageMap.get(frameSrc);
               const pos = step.overlayFrames.pos ?? { x: 0, y: 0 };
-              if (frameImg) ctx.drawImage(frameImg, pos.x, pos.y);
+              let drawX = pos.x;
+              let drawY = pos.y;
+              const oscillateX = step.overlayFrames.oscillateX;
+              if (oscillateX && oscillateX.periodMs > 0) {
+                const t = (elapsed % oscillateX.periodMs) / oscillateX.periodMs;
+                const tri = t < 0.5 ? t * 2 : (1 - t) * 2;
+                drawX = Math.round(drawX + tri * oscillateX.amplitude);
+              }
+              if (frameImg) ctx.drawImage(frameImg, drawX, drawY);
             }
           }
         }
