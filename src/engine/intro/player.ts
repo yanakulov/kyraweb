@@ -140,12 +140,10 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
 
       const drawText = (lines: string[]) => {
         ctx.save();
-        ctx.font = "bold 14px 'Times New Roman', serif";
+        ctx.font = "14px 'Kyrandia', 'Times New Roman', serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.fillStyle = "#f2e6c9";
-        ctx.shadowColor = "rgba(0, 0, 0, 0.75)";
-        ctx.shadowBlur = 4;
         const startY = 146;
         const lineHeight = 16;
         lines.forEach((line, i) => {
@@ -155,15 +153,10 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
       };
       const drawFooterText = (text: string, y: number) => {
         ctx.save();
-        ctx.font = "bold 12px 'Courier New', monospace";
-        if (document.fonts) {
-          ctx.font = "bold 12px 'Courier New', monospace";
-        }
+        ctx.font = "12px 'Kyrandia', 'Courier New', monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.fillStyle = "#f2f2f2";
-        ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
-        ctx.shadowBlur = 2;
         ctx.fillText(text, LOGICAL_WIDTH / 2, y);
         ctx.restore();
       };

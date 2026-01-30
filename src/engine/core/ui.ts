@@ -47,7 +47,7 @@ export function drawLayerDebug(
     `mask:${maskValue} layer:${maskLayer} blocked:${blocked ? 1 : 0} actor:${actorLayer}`;
 
   ctx.save();
-  ctx.font = "10px monospace";
+  ctx.font = "8px \"Kyrandia\", monospace";
   const padding = 4;
   const metrics = ctx.measureText(text);
   const width = Math.ceil(metrics.width) + padding * 2;
@@ -61,7 +61,7 @@ export function drawLayerDebug(
 
 export function drawStatusLine(ctx: CanvasRenderingContext2D, text: string, y: number, width: number) {
   ctx.save();
-  ctx.font = "10px \"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif";
+  ctx.font = "8px \"Kyrandia\", \"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   const x = 8;

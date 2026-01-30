@@ -1,8 +1,16 @@
 :root {
   color-scheme: light;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Kyrandia", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   background: #12110f;
   color: #f5f0e6;
+}
+
+@font-face {
+  font-family: "Kyrandia";
+  src: url("/assets/font/kyrandia.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 
 * {
