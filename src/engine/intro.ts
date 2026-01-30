@@ -1,6 +1,9 @@
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from "./constants";
-import { loadImage, withBase } from "./assets";
+import { loadImage, loadSceneMeta, loadSceneShapes, withBase } from "./assets";
+import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "./sceneAnims";
+import { buildSceneShapesCanvas, buildSpriteDefMap } from "./sceneShapes";
 import type { Vec2 } from "./types";
+import type { SceneAnimState, SceneMeta, SceneShapesData, SceneSpriteDef } from "./types";
 import {
   INTRO_TIMING_UNIT_MS,
   WESTWOOD_RLE,
@@ -45,6 +48,11 @@ export type IntroStep = {
     loop?: boolean;
     pos?: Vec2;
     holdLast?: boolean;
+  };
+  sceneAnim?: {
+    metaSrc: string;
+    shapesSrc: string;
+    animIndices?: number[];
   };
   scroll?: {
     topSrc: string;
@@ -129,7 +137,7 @@ export function buildIntroSteps(): IntroStep[] {
         src: buildSequenceFromRle(westwoodFrames, WESTWOOD_RLE),
         frameDurationMs: rleFrameMs(WESTWOOD_TOTAL_MS, WESTWOOD_RLE),
         loop: false,
-        pos: { x: 0, y: 60 }
+        pos: { x: 0, y: 46 }
       }
     },
     {
@@ -142,7 +150,7 @@ export function buildIntroSteps(): IntroStep[] {
         src: buildSequenceFromRle(kyrandiaFrames, KYRANDIA_RLE),
         frameDurationMs: rleFrameMs(KYRANDIA_TOTAL_MS, KYRANDIA_RLE),
         loop: false,
-        pos: { x: 0, y: 48 }
+        pos: { x: 0, y: 46 }
       }
     },
     {
@@ -251,6 +259,11 @@ export function buildIntroSteps(): IntroStep[] {
         frameDurationMs: malcolmFrameMsFixed,
         loop: false,
         pos: { x: 16, y: 58 }
+      },
+      sceneAnim: {
+        metaSrc: withBase("assets/scenes/dat/GEMCUT.json"),
+        shapesSrc: withBase("assets/scenes/cps/GEMCUT.json"),
+        animIndices: [0]
       }
     }
   ];
@@ -279,6 +292,8 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
   ]);
 
   const sources = new Map<string, Promise<HTMLImageElement>>();
+  const sceneMetaSources = new Map<string, Promise<SceneMeta>>();
+  const sceneShapesSources = new Map<string, Promise<SceneShapesData>>();
   for (const step of steps) {
     if (step.bgSrc && !sources.has(step.bgSrc)) {
       sources.set(step.bgSrc, loadImage(step.bgSrc));
@@ -332,6 +347,14 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
         sources.set(step.scrollSlices.bottomSrc, loadImage(step.scrollSlices.bottomSrc));
       }
     }
+    if (step.sceneAnim) {
+      if (!sceneMetaSources.has(step.sceneAnim.metaSrc)) {
+        sceneMetaSources.set(step.sceneAnim.metaSrc, loadSceneMeta(step.sceneAnim.metaSrc));
+      }
+      if (!sceneShapesSources.has(step.sceneAnim.shapesSrc)) {
+        sceneShapesSources.set(step.sceneAnim.shapesSrc, loadSceneShapes(step.sceneAnim.shapesSrc));
+      }
+    }
   }
 
   let running = true;
@@ -341,16 +364,43 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
     resolveDone = resolve;
   });
 
-  Promise.all(Array.from(sources.values()))
+  const imageKeys = Array.from(sources.keys());
+  const sceneMetaKeys = Array.from(sceneMetaSources.keys());
+  const sceneShapesKeys = Array.from(sceneShapesSources.keys());
+
+  Promise.all([
+    ...Array.from(sources.values()),
+    ...Array.from(sceneMetaSources.values()),
+    ...Array.from(sceneShapesSources.values())
+  ])
     .then((images) => {
       const imageMap = new Map<string, HTMLImageElement>();
       let idx = 0;
-      for (const key of sources.keys()) {
-        imageMap.set(key, images[idx++]);
+      for (const key of imageKeys) {
+        imageMap.set(key, images[idx++] as HTMLImageElement);
+      }
+      const sceneMetaMap = new Map<string, SceneMeta>();
+      for (const key of sceneMetaKeys) {
+        sceneMetaMap.set(key, images[idx++] as SceneMeta);
+      }
+      const sceneShapesMap = new Map<string, HTMLCanvasElement>();
+      for (const key of sceneShapesKeys) {
+        const data = images[idx++] as SceneShapesData;
+        sceneShapesMap.set(key, buildSceneShapesCanvas(data));
+      }
+      const spriteDefMapCache = new Map<string, Map<number, SceneSpriteDef>>();
+      for (const [key, meta] of sceneMetaMap) {
+        spriteDefMapCache.set(key, buildSpriteDefMap(meta.spriteDefs));
       }
 
       let stepIndex = 0;
       let stepStart = performance.now();
+      let activeSceneAnim: {
+        anims: SceneAnimState[];
+        spriteDefMap: Map<number, SceneSpriteDef>;
+        shapesImage: CanvasImageSource;
+      } | null = null;
+      let activeSceneAnimStep: string | null = null;
 
       const drawText = (lines: string[]) => {
         ctx.save();
@@ -380,6 +430,31 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
           running = false;
           resolveDone?.();
           return;
+        }
+
+        if (step.id !== activeSceneAnimStep) {
+          activeSceneAnimStep = step.id;
+          if (step.sceneAnim) {
+            const meta = sceneMetaMap.get(step.sceneAnim.metaSrc);
+            const shapes = sceneShapesMap.get(step.sceneAnim.shapesSrc);
+            const spriteDefMap = spriteDefMapCache.get(step.sceneAnim.metaSrc);
+            if (meta && shapes && spriteDefMap) {
+              const animDefs = step.sceneAnim.animIndices?.length
+                ? step.sceneAnim.animIndices
+                    .map((idx) => meta.anims[idx])
+                    .filter((anim): anim is NonNullable<typeof anim> => Boolean(anim))
+                : meta.anims;
+              activeSceneAnim = {
+                anims: buildSceneAnimStates(animDefs),
+                spriteDefMap,
+                shapesImage: shapes
+              };
+            } else {
+              activeSceneAnim = null;
+            }
+          } else {
+            activeSceneAnim = null;
+          }
         }
 
         const elapsed = now - stepStart;
@@ -444,6 +519,11 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
         } else if (step.bgSrc) {
           const bg = imageMap.get(step.bgSrc);
           if (bg) ctx.drawImage(bg, 0, 0);
+        }
+
+        if (activeSceneAnim) {
+          updateSceneAnims(activeSceneAnim.anims, now);
+          drawSceneAnims(ctx, activeSceneAnim.shapesImage, activeSceneAnim.spriteDefMap, activeSceneAnim.anims);
         }
 
         if (step.bgFrames && step.bgFrames.src.length) {
