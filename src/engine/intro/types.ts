@@ -36,6 +36,11 @@ export type IntroStep = {
     shapesSrc: string;
     animIndices?: number[];
   };
+  demoLoopRange?: {
+    start: number;
+    end: number;
+    resumeIndex: number;
+  };
   scroll?: {
     topSrc: string;
     bottomSrc: string;
@@ -62,5 +67,7 @@ export type IntroStep = {
 export type IntroPlayback = {
   skip: () => void;
   stop: () => void;
+  setDemoLoopStep: (id: string | null) => void;
+  exitDemoLoop: () => void;
   done: Promise<void>;
 };

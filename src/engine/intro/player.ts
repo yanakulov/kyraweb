@@ -5,12 +5,18 @@ import { buildSceneShapesCanvas, buildSpriteDefMap } from "../scene/sceneShapes"
 import type { SceneAnimState, SceneMeta, SceneShapesData, SceneSpriteDef } from "../core/types";
 import type { IntroPlayback, IntroStep } from "./types";
 
-export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroPlayback {
+export function playIntro(
+  canvas: HTMLCanvasElement,
+  steps: IntroStep[],
+  options?: { onStepChange?: (id: string) => void }
+): IntroPlayback {
   const ctx = canvas.getContext("2d");
   if (!ctx) {
     return {
       skip: () => {},
       stop: () => {},
+      setDemoLoopStep: () => {},
+      exitDemoLoop: () => {},
       done: Promise.resolve()
     };
   }
@@ -95,6 +101,8 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
 
   let running = true;
   let skipRequested = false;
+  let demoLoopStepId: string | null = null;
+  let demoExitRequested = false;
   let resolveDone: (() => void) | null = null;
   const done = new Promise<void>((resolve) => {
     resolveDone = resolve;
@@ -175,6 +183,12 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
           return;
         }
 
+        if (options?.onStepChange) {
+          if (step.id !== activeSceneAnimStep) {
+            options.onStepChange(step.id);
+          }
+        }
+
         if (step.id !== activeSceneAnimStep) {
           activeSceneAnimStep = step.id;
           if (step.sceneAnim) {
@@ -200,8 +214,22 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
           }
         }
 
+        if (demoExitRequested && demoLoopStepId && step.id === demoLoopStepId && step.demoLoopRange) {
+          const frameMs = step.frames?.frameDurationMs ?? step.overlayFrames?.frameDurationMs ?? 0;
+          if (frameMs > 0) {
+            stepStart = now - step.demoLoopRange.resumeIndex * frameMs;
+          }
+          demoExitRequested = false;
+          demoLoopStepId = null;
+        }
+
         const elapsed = now - stepStart;
         if (elapsed >= step.durationMs) {
+          if (demoLoopStepId && step.id === demoLoopStepId && !demoExitRequested) {
+            stepStart = now;
+            requestAnimationFrame(loop);
+            return;
+          }
           stepIndex += 1;
           stepStart = now;
           requestAnimationFrame(loop);
@@ -280,9 +308,18 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
         }
 
         if (step.frames && step.frames.src.length) {
-          const frameIdx = step.frames.loop
-            ? Math.floor(elapsed / step.frames.frameDurationMs) % step.frames.src.length
-            : Math.min(step.frames.src.length - 1, Math.floor(elapsed / step.frames.frameDurationMs));
+          let frameIdx = 0;
+          const loopRange =
+            demoLoopStepId && step.id === demoLoopStepId && !demoExitRequested ? step.demoLoopRange : null;
+          if (loopRange) {
+            const len = loopRange.end - loopRange.start + 1;
+            const loopElapsed = elapsed % (len * step.frames.frameDurationMs);
+            frameIdx = loopRange.start + Math.floor(loopElapsed / step.frames.frameDurationMs);
+          } else if (step.frames.loop) {
+            frameIdx = Math.floor(elapsed / step.frames.frameDurationMs) % step.frames.src.length;
+          } else {
+            frameIdx = Math.min(step.frames.src.length - 1, Math.floor(elapsed / step.frames.frameDurationMs));
+          }
           const frameSrc = step.frames.src[frameIdx];
           const frameImg = imageMap.get(frameSrc);
           const pos = step.frames.pos ?? { x: 0, y: 0 };
@@ -291,12 +328,21 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
         if (step.overlayFrames && step.overlayFrames.src.length) {
           const overlayMaxTime = step.overlayFrames.src.length * step.overlayFrames.frameDurationMs;
           if (step.overlayFrames.loop || elapsed <= overlayMaxTime || step.overlayFrames.holdLast !== false) {
-            const frameIdx = step.overlayFrames.loop
-              ? Math.floor(elapsed / step.overlayFrames.frameDurationMs) % step.overlayFrames.src.length
-              : Math.min(
-                  step.overlayFrames.src.length - 1,
-                  Math.floor(elapsed / step.overlayFrames.frameDurationMs)
-                );
+            let frameIdx = 0;
+            const loopRange =
+              demoLoopStepId && step.id === demoLoopStepId && !demoExitRequested ? step.demoLoopRange : null;
+            if (loopRange) {
+              const len = loopRange.end - loopRange.start + 1;
+              const loopElapsed = elapsed % (len * step.overlayFrames.frameDurationMs);
+              frameIdx = loopRange.start + Math.floor(loopElapsed / step.overlayFrames.frameDurationMs);
+            } else if (step.overlayFrames.loop) {
+              frameIdx = Math.floor(elapsed / step.overlayFrames.frameDurationMs) % step.overlayFrames.src.length;
+            } else {
+              frameIdx = Math.min(
+                step.overlayFrames.src.length - 1,
+                Math.floor(elapsed / step.overlayFrames.frameDurationMs)
+              );
+            }
             const frameSrc = step.overlayFrames.src[frameIdx];
             if (frameSrc) {
               const frameImg = imageMap.get(frameSrc);
@@ -350,6 +396,14 @@ export function playIntro(canvas: HTMLCanvasElement, steps: IntroStep[]): IntroP
     stop: () => {
       running = false;
       resolveDone?.();
+    },
+    setDemoLoopStep: (id: string | null) => {
+      demoLoopStepId = id;
+      demoExitRequested = false;
+    },
+    exitDemoLoop: () => {
+      demoExitRequested = true;
+      demoLoopStepId = null;
     },
     done
   };

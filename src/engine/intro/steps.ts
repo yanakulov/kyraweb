@@ -59,21 +59,7 @@ export function buildIntroSteps(): IntroStep[] {
         pos: { x: 0, y: 46 }
       }
     },
-    {
-      id: "kyrandia",
-      durationMs: KYRANDIA_TOTAL_MS,
-      fadeInMs: 0,
-      fadeOutMs: 0,
-      bgSrc: withBase("assets/intro/logo_bg.png"),
-      footerText: "Copyright (c) 1992 Westwood Studios",
-      footerTextY: 179,
-      frames: {
-        src: buildSequenceFromRle(kyrandiaFrames, KYRANDIA_RLE),
-        frameDurationMs: rleFrameMs(KYRANDIA_TOTAL_MS, KYRANDIA_RLE),
-        loop: false,
-        pos: { x: 0, y: 46 }
-      }
-    },
+    // Kyrandia logo step temporarily disabled.
     {
       id: "kyrandia_scroll",
       durationMs: scrollMs,
@@ -96,8 +82,8 @@ export function buildIntroSteps(): IntroStep[] {
     {
       id: "shore_anim",
       durationMs: shoreFrames.length * shoreFrameMs,
-      fadeInMs: 200,
-      fadeOutMs: 200,
+      fadeInMs: 0,
+      fadeOutMs: 0,
       frames: {
         src: shoreFrames,
         frameDurationMs: shoreFrameMs,
@@ -111,8 +97,8 @@ export function buildIntroSteps(): IntroStep[] {
         shoreFrames.length * shoreFrameMs,
         destructFrames.length * shoreFrameMs * 2
       ),
-      fadeInMs: 200,
-      fadeOutMs: 200,
+      fadeInMs: 0,
+      fadeOutMs: 0,
       bgFrames: {
         src: shoreFrames,
         frameDurationMs: shoreFrameMs,
@@ -130,7 +116,7 @@ export function buildIntroSteps(): IntroStep[] {
       id: "tree_anim_1",
       durationMs: tree1Frames.length * treeFrameMs,
       fadeInMs: 250,
-      fadeOutMs: 250,
+      fadeOutMs: 0,
       frames: {
         src: tree1Frames,
         frameDurationMs: treeFrameMs,
@@ -141,8 +127,8 @@ export function buildIntroSteps(): IntroStep[] {
     {
       id: "tree_anim_2",
       durationMs: tree2Frames.length * treeFrameMs,
-      fadeInMs: 250,
-      fadeOutMs: 250,
+      fadeInMs: 0,
+      fadeOutMs: 0,
       frames: {
         src: tree2Frames,
         frameDurationMs: treeFrameMs,
@@ -153,8 +139,9 @@ export function buildIntroSteps(): IntroStep[] {
     {
       id: "kallak_writing",
       durationMs: KALLAK_TOTAL_MS,
-      fadeInMs: 250,
-      fadeOutMs: 250,
+      fadeInMs: 0,
+      fadeOutMs: 0,
+      demoLoopRange: { start: 0, end: 29, resumeIndex: 30 },
       frames: {
         src: kallakSequence,
         frameDurationMs: rleFrameMs(KALLAK_TOTAL_MS, KALLAK_RLE),
@@ -174,8 +161,8 @@ export function buildIntroSteps(): IntroStep[] {
       id: "kallak_malcolm",
       bgSrc: withBase("assets/intro/gemcuti.png"),
       durationMs: malKalFrames.length * malcolmFrameMsFixed,
-      fadeInMs: 250,
-      fadeOutMs: 250,
+      fadeInMs: 0,
+      fadeOutMs: 0,
       frames: {
         src: malKalFrames,
         frameDurationMs: malcolmFrameMsFixed,
