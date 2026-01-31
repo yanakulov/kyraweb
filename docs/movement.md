@@ -1,31 +1,33 @@
-# Передвижение и маска проходимости
+# Movement and walkmask
 
-## Оригинальная логика (ScummVM / Kyrandia LoK)
+**Language:** English | [Русский](movement.ru.md)
 
-- Проходимость и слои берутся из `.MSC` (маска 320x144).
-- Слой персонажа определяется по `drawLayerTable` в `.DAT` по координате Y.
-- Окклюзия (перекрытие) решается сравнением слоя маски и слоя персонажа.
+## Original logic (ScummVM / Kyrandia LoK)
 
-## Реализация в этом проекте
+- Walkability and layers come from `.MSC` (mask 320x144).
+- The actor layer is chosen from `drawLayerTable` in `.DAT` by Y coordinate.
+- Occlusion (overdraw) is resolved by comparing mask layer vs actor layer.
 
-Форматы:
-- Маска: `extractor/msc_to_json.py` -> `public/assets/masks/<SCENE>.json`
-- Метаданные сцены: `public/assets/scenes/dat/<SCENE>.json`
+## Implementation in this project
 
-Логика:
-- Точка непроходима, если `(mask & 0x80) != 0`
-- Если `maskLayer > actorLayer`, рисуем фон поверх персонажа
-- `actorLayer` берём из `drawLayerTable` (JSON сцены)
-- Движение и pathing: `src/engine/game.ts`
-- Скорость шага: используем тик `1000/60` мс и задержку в тиках как в ScummVM.
+Formats:
+- Mask: `extractor/msc_to_json.py` -> `public/assets/masks/<SCENE>.json`
+- Scene metadata: `public/assets/scenes/dat/<SCENE>.json`
 
-Скорости (LoK / ScummVM, `timer_lok.cpp`):
-- slowest → 11 тиков
-- slow → 9 тиков
-- fast → 6 тиков
-- fastest → 3 тика
+Logic:
+- A point is blocked if `(mask & 0x80) != 0`
+- If `maskLayer > actorLayer`, draw the background over the actor
+- `actorLayer` comes from `drawLayerTable` (scene JSON)
+- Movement and pathing: `src/engine/game.ts`
+- Step speed: use the DOS tick `1000/60` ms and delays in ticks as in ScummVM
 
-Каждый тик — это один пиксель шага, поэтому скорость ≈ `60 / ticks` px/s.
+Speeds (LoK / ScummVM, `timer_lok.cpp`):
+- slowest → 11 ticks
+- slow → 9 ticks
+- fast → 6 ticks
+- fastest → 3 ticks
 
-Отладка:
-- В правой панели можно включить маску и информацию по пикселю (x/y, mask, layer, blocked, actor).
+Each tick equals one pixel step, so speed ≈ `60 / ticks` px/s.
+
+Debug:
+- The right panel can show mask and per-pixel info (x/y, mask, layer, blocked, actor).

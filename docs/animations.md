@@ -1,35 +1,37 @@
-# Анимации сцены
+# Scene animations
 
-## Оригинальная логика (ScummVM / Kyrandia LoK)
+**Language:** English | [Русский](animations.ru.md)
 
-В оригинале анимации комнаты описаны в файлах сцены `.DAT`:
-- `spriteDefs` задают прямоугольники внутри фонового изображения. Эти прямоугольники и есть кадры (например огонь лампы).
-- `anims` — это небольшие скрипты с опкодами (`FF88`, `FF8A`, `FF8B` и т.д.), которые меняют кадр и задают задержки.
-- Отрисовка идёт поверх фона, до персонажей.
+## Original logic (ScummVM / Kyrandia LoK)
 
-Источник в ScummVM: `engines/kyra/engine/sprites.cpp`.
+In the original game, room animations are described in scene `.DAT` files:
+- `spriteDefs` define rectangles inside the background image. These rectangles are the animation frames (e.g. the lamp flame).
+- `anims` are small scripts with opcodes (`FF88`, `FF8A`, `FF8B`, etc.) that change frames and set delays.
+- Rendering happens on top of the background, before characters.
 
-## Реализация в этом проекте
+Source in ScummVM: `engines/kyra/engine/sprites.cpp`.
 
-Мы конвертируем `.DAT` в JSON и выполняем те же скрипты в рантайме:
+## Implementation in this project
 
-- JSON сцены: `public/assets/scenes/dat/<SCENE>.json`
-- Конвертер: `extractor/dat_to_json.py` и пакетный `extractor/dat_batch_to_json.py`
-- Рантайм: `src/engine/game.ts` (обновление и отрисовка scene anims)
+We convert `.DAT` to JSON and execute the same scripts at runtime:
 
-Поддерживаемые опкоды:
-- `FF88` / `FF8D` — выбрать кадр и позицию (обычный / отзеркаленный)
-- `FF8A` — задержка (в тиках)
-- `FF8B` — переход в начало скрипта
-- `FF90` / `FF91` — выбрать кадр по default X/Y (обычный / отзеркаленный)
-- `FF92..FF95` — изменить default X/Y
-- `FF96` — остановить другую анимацию
-- `FFA7` — запустить другую анимацию
+- Scene JSON: `public/assets/scenes/dat/<SCENE>.json`
+- Converter: `extractor/dat_to_json.py` and batch `extractor/dat_batch_to_json.py`
+- Runtime: `src/engine/game.ts` (scene anim updates + drawing)
 
-Длина тика: `1000 / 60` мс (скорость DOS), совпадает с логикой ScummVM для LoK.
+Supported opcodes:
+- `FF88` / `FF8D` — choose frame and position (normal / mirrored)
+- `FF8A` — delay (ticks)
+- `FF8B` — jump to start of script
+- `FF90` / `FF91` — choose frame by default X/Y (normal / mirrored)
+- `FF92..FF95` — change default X/Y
+- `FF96` — stop another animation
+- `FFA7` — start another animation
 
-## Перегенерация JSON
+Tick length: `1000 / 60` ms (DOS timing), matches ScummVM logic for LoK.
+
+## Regenerating JSON
 
 ```
-python extractor/dat_batch_to_json.py d:\GitHub\vuekyr\extracted_files\dat_pak d:\GitHub\vuekyr\public\assets\scenes\dat
+python extractor/dat_batch_to_json.py d:\GitHub\kyraweb\extracted_files\dat_pak d:\GitHub\kyraweb\public\assets\scenes\dat
 ```

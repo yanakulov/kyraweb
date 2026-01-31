@@ -1,34 +1,65 @@
-
 # KyraWeb
 
-![Логотип оригинальной игры](https://upload.wikimedia.org/wikipedia/commons/6/6d/The_Legend_of_Kyrandia_Series_-_Logo.png?20210417191824)
-## The Legend of Kyrandia, переписанная под веб.
+![Original game logo](https://upload.wikimedia.org/wikipedia/commons/6/6d/The_Legend_of_Kyrandia_Series_-_Logo.png?20210417191824)
 
-[![N|Solid](https://img.shields.io/badge/Vue%20js-35495E?style=for-the-badge&logo=vuedotjs&logoColor=4FC08D)](https://nodesource.com/products/nsolid) [![N|Solid](https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)](https://nodesource.com/products/nsolid)
+![CURRENT STAGE](https://img.shields.io/badge/CURRENT%20STAGE-Working%20with%20subtitles-green?style=for-the-badge)
 
-![CURRENT STAGE](https://img.shields.io/badge/CURRENT%20STAGE-Preparing%20main%20menu-green?style=for-the-badge)
+**Language:** English | [Русский](README.ru.md)
 
-**The Legend of Kyrandia** — приключенческая point‑and‑click игра от Westwood Studios (1992). История следует за принцем Брэндоном, который отправляется спасать королевство от злого шута Малкольма. Игра известна живописными фонами, головоломками и атмосферным сюжетом.
+---
 
-***KyraWeb*** — независимый проект. Автор не связан с правообладателями и не получаем их официальной поддержки.
+**KyraWeb** is an independent web remake of *The Legend of Kyrandia* (Westwood Studios, 1992). The project recreates the original game logic and presentation using modern web tech (Vue 3 + Vite), while relying on the original game data for accuracy.
 
-Цель — воссоздать The Legend of Kyrandia, используя современные веб‑технологии (Vue3, Vite), при этом опираясь на данные оригинальной игры.
+## Current status
 
-## Основные цели
+- Playable intro with timing, fades, and scene-level animation control
+- Kalak’s Place (GEMCUT) scene with walkmask, walk logic, and sprite layering
+- Scene overlays (items on the desk, saw/letter replacement)
+- Inventory, item pickup/drop with bounce
+- Debug panel (mask, layer, walk speed, animation steps)
+- Intro demo loop on the writing scene with interactive UI overlay
 
-- Разрабатывать проект на Vue3 и Vite.
-- Сохранить сюжет, логику и оригинальные головоломки.
-- Сделать интерфейс понятным и удобным.
+## Planned
 
-## Дополнительные идеи
-- Автосейв в ключевых моментах.
-- Система подсказок для сложных пазлов.
-- Встроенная карта сложных локаций (например, пещер).
-- Улучшение доступности: размер текста, хоткеи.
+- Credits system (in-game titles)
+- Expand scene library and scripts
+- More original UI/menus
+- Save/load and configuration
 
-Проект делается одним человеком. Моя задача — расти в веб‑разработке, реверс‑инжиниринге, изучить движок игры.
+## Documentation
 
-## Документация
+**English (default):**
+- Scene animations: `docs/animations.md`
+- Movement & walkmask: `docs/movement.md`
 
-- [Анимации сцены](docs/animations.md)
-- [Передвижение и маска проходимости](docs/movement.md)
+**Русская версия:**
+- Анимации сцены: `docs/animations.ru.md`
+- Передвижение и walk-mask: `docs/movement.ru.md`
+
+## Extractor tools
+
+The `extractor/` folder contains scripts used to convert original resources into JSON or PNG for the web engine. These are **required only locally** and should not be committed with original game data.
+
+Summary of available scripts (see `extractor/README.md`):
+
+- `msc_unpack.py` — unpack `MSC.PAK`
+- `msc_to_json.py` — decode a single `.MSC` to JSON (walkmask)
+- `cps_to_json.py` — decode `.CPS` to JSON (pixels + palette)
+- `dat_to_json.py` / `dat_batch_to_json.py` — decode `.DAT` scene metadata
+- `emc_to_json.py` — extract scene animation commands
+- `emc_text_to_json.py` — extract text strings from `.EMC`
+- `wsa_to_png.py` — decode `.WSA` animations to PNG frames
+
+## Font
+
+The in-game UI uses the **Kyrandia** font located at:
+
+```
+public/assets/font/kyrandia.otf
+```
+
+Font author (reference):
+
+```
+https://fontstruct.com/fontstructions/show/1132362/kyrandia_2
+```
