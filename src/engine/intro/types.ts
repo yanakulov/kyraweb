@@ -11,6 +11,7 @@ export type IntroStep = {
   textLines?: string[];
   footerText?: string;
   footerTextY?: number;
+  subtitles?: IntroSubtitle[];
   frames?: {
     src: string[];
     frameDurationMs: number;
@@ -70,4 +71,16 @@ export type IntroPlayback = {
   setDemoLoopStep: (id: string | null) => void;
   exitDemoLoop: () => void;
   done: Promise<void>;
+};
+
+export type IntroSubtitle = {
+  startMs: number;
+  endMs: number;
+  text: string;
+  x?: number;
+  y: number;
+  align?: CanvasTextAlign;
+  maxWidth?: number;
+  type?: "text" | "talk";
+  color?: string;
 };

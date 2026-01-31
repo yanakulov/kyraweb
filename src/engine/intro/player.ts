@@ -3,12 +3,12 @@ import { loadImage, loadSceneMeta, loadSceneShapes } from "../core/assets";
 import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
 import { buildSceneShapesCanvas, buildSpriteDefMap } from "../scene/sceneShapes";
 import type { SceneAnimState, SceneMeta, SceneShapesData, SceneSpriteDef } from "../core/types";
-import type { IntroPlayback, IntroStep } from "./types";
+import type { IntroPlayback, IntroStep, IntroSubtitle } from "./types";
 
 export function playIntro(
   canvas: HTMLCanvasElement,
   steps: IntroStep[],
-  options?: { onStepChange?: (id: string) => void }
+  options?: { onStepChange?: (id: string) => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean }
 ): IntroPlayback {
   const ctx = canvas.getContext("2d");
   if (!ctx) {
@@ -23,6 +23,8 @@ export function playIntro(
 
   canvas.width = LOGICAL_WIDTH;
   canvas.height = LOGICAL_HEIGHT;
+
+  const renderSubtitlesOnCanvas = options?.renderSubtitlesOnCanvas ?? false;
 
   const NO_UI_OVERLAY = new Set([
     "westwood",
@@ -169,6 +171,62 @@ export function playIntro(
         ctx.restore();
       };
 
+
+      const wrapText = (value: string, maxWidth: number) => {
+        const words = value.split(/\s+/).filter(Boolean);
+        const lines: string[] = [];
+        let current = "";
+        for (const word of words) {
+          const next = current ? `${current} ${word}` : word;
+          if (ctx.measureText(next).width <= maxWidth || !current) {
+            current = next;
+          } else {
+            lines.push(current);
+            current = word;
+          }
+        }
+        if (current) lines.push(current);
+        return lines.length ? lines : [value];
+      };
+
+      const getActiveSubtitles = (lines: IntroSubtitle[], elapsedMs: number) =>
+        lines.filter((line) => elapsedMs >= line.startMs && elapsedMs < line.endMs);
+
+      const drawSubtitles = (lines: IntroSubtitle[], elapsedMs: number, alpha: number) => {
+        if (!lines.length) return;
+        const active = getActiveSubtitles(lines, elapsedMs);
+        if (!active.length) return;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.font = "12px 'Kyrandia', 'Courier New', monospace";
+        ctx.fillStyle = "#f2f2f2";
+        ctx.textAlign = "center";
+        const lineHeight = 14;
+        for (const line of active) {
+          const align = line.align ?? "center";
+          const x = line.x ?? LOGICAL_WIDTH / 2;
+          const maxWidth = line.maxWidth ?? 300;
+          const color = line.color ?? "#f2f2f2";
+          ctx.fillStyle = color;
+          ctx.textAlign = align;
+          if (line.type === "talk") {
+            ctx.textBaseline = "bottom";
+            const wrapped = wrapText(line.text, maxWidth);
+            const startY = line.y - (wrapped.length - 1) * lineHeight;
+            wrapped.forEach((segment, idx) => {
+              ctx.fillText(segment, Math.round(x), Math.round(startY + idx * lineHeight));
+            });
+          } else {
+            ctx.textBaseline = "top";
+            const wrapped = wrapText(line.text, maxWidth);
+            wrapped.forEach((segment, idx) => {
+              ctx.fillText(segment, Math.round(x), Math.round(line.y + idx * lineHeight));
+            });
+          }
+        }
+        ctx.restore();
+      };
+
       const loop = (now: number) => {
         if (!running) return;
         if (skipRequested) {
@@ -224,6 +282,15 @@ export function playIntro(
         }
 
         const elapsed = now - stepStart;
+        let subtitleElapsed = elapsed;
+        const subtitleLoopRange =
+          demoLoopStepId && step.id === demoLoopStepId && !demoExitRequested ? step.demoLoopRange : null;
+        const subtitleFrameMs = step.frames?.frameDurationMs ?? step.overlayFrames?.frameDurationMs ?? 0;
+        if (subtitleLoopRange && subtitleFrameMs > 0) {
+          const len = subtitleLoopRange.end - subtitleLoopRange.start + 1;
+          const loopDuration = len * subtitleFrameMs;
+          if (loopDuration > 0) subtitleElapsed = elapsed % loopDuration;
+        }
         if (elapsed >= step.durationMs) {
           if (demoLoopStepId && step.id === demoLoopStepId && !demoExitRequested) {
             stepStart = now;
@@ -378,6 +445,10 @@ export function playIntro(
         if (!NO_UI_OVERLAY.has(step.id)) {
           ctx.fillStyle = "#000000";
           ctx.fillRect(0, 136, LOGICAL_WIDTH, LOGICAL_HEIGHT - 136);
+        }
+
+        if (step.subtitles && step.subtitles.length) {
+          drawSubtitles(step.subtitles, subtitleElapsed, alpha);
         }
         requestAnimationFrame(loop);
       };

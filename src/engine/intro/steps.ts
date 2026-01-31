@@ -1,6 +1,7 @@
 import { withBase } from "../core/assets";
 import { INTRO_TIMING_UNIT_MS, WESTWOOD_RLE, WESTWOOD_TOTAL_MS, KYRANDIA_RLE, KYRANDIA_TOTAL_MS, SCROLL_TOTAL_MS, SHORE_PRE_RLE, SHORE_PRE_TOTAL_MS, SHORE_POST_RLE, SHORE_POST_TOTAL_MS, DESTRUCT_RLE, DESTRUCT_TOTAL_MS, TREE1_RLE, TREE1_TOTAL_MS, TREE2_RLE, TREE2_TOTAL_MS, KALLAK_RLE, KALLAK_TOTAL_MS, HAND_RLE, HAND_TOTAL_MS } from "./introTiming";
 import type { IntroStep } from "./types";
+import { KALLAK_MALCOLM_EVENTS, KALLAK_WRITING_EVENTS, TREE_EVENTS, buildSubtitles, sliceSubtitles } from "./subtitles";
 
 export function buildIntroSteps(): IntroStep[] {
   const logoFrameMs = INTRO_TIMING_UNIT_MS;
@@ -18,6 +19,9 @@ export function buildIntroSteps(): IntroStep[] {
   const malKalFrames = buildFrameList("assets/intro/frames/mal-kal", 325);
   const shoreFrames = buildFrameList("assets/intro/frames/shore", 12);
   const destructFrames = buildFrameList("assets/intro/frames/destruct", 44);
+  const tree1DurationMs = tree1Frames.length * treeFrameMs;
+  const tree2DurationMs = tree2Frames.length * treeFrameMs;
+  const treeTotalDurationMs = tree1DurationMs + tree2DurationMs;
   const handFrames = buildLoopFrames(
     ["assets/intro/hand0.png", "assets/intro/hand1.png", "assets/intro/hand2.png", "assets/intro/hand1.png"],
     30
@@ -44,6 +48,12 @@ export function buildIntroSteps(): IntroStep[] {
     if (frameIndexFromSrc(kallakSrc) >= handStopFrameIndex) return "";
     return handSequence[i % handSequence.length] ?? "";
   });
+
+  const treeSubtitles = buildSubtitles(TREE_EVENTS, treeTotalDurationMs, { holdMs: 1500 });
+  const treeSubtitlesPart1 = sliceSubtitles(treeSubtitles, 0, tree1DurationMs);
+  const treeSubtitlesPart2 = sliceSubtitles(treeSubtitles, tree1DurationMs, treeTotalDurationMs);
+  const kallakWritingSubtitles = buildSubtitles(KALLAK_WRITING_EVENTS, KALLAK_TOTAL_MS, { holdMs: 1800 });
+  const kallakMalcolmSubtitles = buildSubtitles(KALLAK_MALCOLM_EVENTS, malKalFrames.length * malcolmFrameMsFixed, { holdMs: 1500 });
 
   return [
     {
@@ -114,7 +124,7 @@ export function buildIntroSteps(): IntroStep[] {
     },
     {
       id: "tree_anim_1",
-      durationMs: tree1Frames.length * treeFrameMs,
+      durationMs: tree1DurationMs,
       fadeInMs: 250,
       fadeOutMs: 0,
       frames: {
@@ -122,11 +132,12 @@ export function buildIntroSteps(): IntroStep[] {
         frameDurationMs: treeFrameMs,
         loop: false,
         pos: { x: 0, y: 8 }
-      }
+      },
+      subtitles: treeSubtitlesPart1
     },
     {
       id: "tree_anim_2",
-      durationMs: tree2Frames.length * treeFrameMs,
+      durationMs: tree2DurationMs,
       fadeInMs: 0,
       fadeOutMs: 0,
       frames: {
@@ -134,7 +145,8 @@ export function buildIntroSteps(): IntroStep[] {
         frameDurationMs: treeFrameMs,
         loop: false,
         pos: { x: 0, y: 8 }
-      }
+      },
+      subtitles: treeSubtitlesPart2
     },
     {
       id: "kallak_writing",
@@ -155,7 +167,8 @@ export function buildIntroSteps(): IntroStep[] {
         holdLast: false,
         pos: { x: 92, y: 20 },
         oscillateX: { amplitude: 6, periodMs: 900 }
-      }
+      },
+      subtitles: kallakWritingSubtitles
     },
     {
       id: "kallak_malcolm",
@@ -169,6 +182,7 @@ export function buildIntroSteps(): IntroStep[] {
         loop: false,
         pos: { x: 16, y: 58 }
       },
+      subtitles: kallakMalcolmSubtitles,
       sceneAnim: {
         metaSrc: withBase("assets/scenes/dat/GEMCUT.json"),
         shapesSrc: withBase("assets/scenes/cps/GEMCUT.json"),

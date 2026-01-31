@@ -2,6 +2,12 @@
   <div class="app">
     <div class="layout">
       <div class="stage">
+        <SubtitleOverlay
+          :lines="subtitleLines"
+          :scale="subtitleScale"
+          :alpha="subtitleAlpha"
+          :visible="subtitleVisible"
+        />
         <canvas
           ref="canvasRef"
           @click="handleClick"
@@ -101,9 +107,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { mapPointerToCanvas, startGame } from "./engine/gameplay/game";
+import { LOGICAL_WIDTH } from "./engine/core/constants";
 import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
 import { gemCutScene } from "./engine/scenes/gemCut";
-
+import SubtitleOverlay from "./components/SubtitleOverlay.vue";
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 let game: Awaited<ReturnType<typeof startGame>> | null = null;
 const showMask = ref(false);
@@ -129,6 +136,11 @@ const showIntroPanel = computed(
     introActive.value && currentIntroStep.value === "kallak_writing" && !introPanelDismissed.value
 );
 const introPanelVisible = computed(() => showIntroPanel.value || introPanelClosing.value);
+const subtitleLines = ref([] as import('./engine/intro/types').IntroSubtitle[]);
+const subtitleAlpha = ref(1);
+const subtitleVisible = computed(() => introActive.value && subtitleLines.value.length > 0);
+const subtitleScale = ref(1);
+
 
 const config = {
   scene: gemCutScene
@@ -136,7 +148,18 @@ const config = {
 
 async function boot() {
   if (!canvasRef.value) return;
+  updateSubtitleScale();
   await startIntro(0, true);
+}
+
+function updateSubtitleScale() {
+  if (!canvasRef.value) return;
+  const rect = canvasRef.value.getBoundingClientRect();
+  if (rect.width > 0) {
+    const raw = rect.width / LOGICAL_WIDTH;
+    const snapped = Math.max(1, Math.round(raw));
+    subtitleScale.value = Math.abs(raw - snapped) < 0.15 ? snapped : raw;
+  }
 }
 
 async function startIntro(startIndex: number, autoStartGame: boolean) {
@@ -155,11 +178,16 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   const runId = introRunId;
   const steps = introSteps.slice(startIndex);
   intro = playIntro(canvasRef.value, steps, {
+    renderSubtitlesOnCanvas: false,
     onStepChange: (id) => {
       currentIntroStep.value = id;
       if (id === "kallak_writing") {
         intro?.setDemoLoopStep("kallak_writing");
       }
+    },
+    onSubtitleChange: (payload) => {
+      subtitleLines.value = payload.lines;
+      subtitleAlpha.value = payload.alpha;
     }
   });
   await intro.done;
@@ -170,6 +198,8 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     return;
   }
   introActive.value = false;
+  subtitleLines.value = [];
+  subtitleAlpha.value = 1;
   if (!canvasRef.value) return;
   game = await startGame(canvasRef.value, config);
   game.setDebug({
@@ -259,11 +289,13 @@ function handleLeave() {
 
 onMounted(() => {
   void boot();
+  window.addEventListener("resize", updateSubtitleScale);
 });
 
 onBeforeUnmount(() => {
   intro?.stop();
   game?.stop();
+  window.removeEventListener("resize", updateSubtitleScale);
 });
 
 watch([showMask, maskOpacity, showLayerInfo, walkSpeed, animStepInterval], () => {
