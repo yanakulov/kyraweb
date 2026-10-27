@@ -20,8 +20,9 @@ import { buildUiOverlay, drawLayerDebug, drawStatusLine } from "../core/ui";
 import type { DropAnim, GameConfig, InventoryItemId, SceneItem, SceneOverlayState, Vec2 } from "../core/types";
 
 export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas 2D context not available");
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas 2D context not available");
+  const ctx = context;
 
   canvas.width = LOGICAL_WIDTH;
   canvas.height = LOGICAL_HEIGHT;

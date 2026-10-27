@@ -1,28 +1,20 @@
 import { withBase } from "../core/assets";
-import { INTRO_TIMING_UNIT_MS, WESTWOOD_RLE, WESTWOOD_TOTAL_MS, KYRANDIA_RLE, KYRANDIA_TOTAL_MS, SCROLL_TOTAL_MS, SHORE_PRE_RLE, SHORE_PRE_TOTAL_MS, SHORE_POST_RLE, SHORE_POST_TOTAL_MS, DESTRUCT_RLE, DESTRUCT_TOTAL_MS, TREE1_RLE, TREE1_TOTAL_MS, TREE2_RLE, TREE2_TOTAL_MS, KALLAK_RLE, KALLAK_TOTAL_MS, HAND_RLE, HAND_TOTAL_MS } from "./introTiming";
+import { WESTWOOD_RLE, WESTWOOD_TOTAL_MS, SCROLL_TOTAL_MS } from "./introTiming";
+import timeline from "./introTimeline.json";
 import type { IntroStep } from "./types";
+import { timelineSubtitles, sliceSubtitles } from "./subtitles";
 
 export function buildIntroSteps(): IntroStep[] {
-  const logoFrameMs = INTRO_TIMING_UNIT_MS;
-  const malcolmFrameTicks = 4;
   const shoreFrameMs = 120;
-  const treeFrameMs = 120;
-  const malcolmFrameMsFixed = 100;
   const storyFrameMs = 6000;
   const scrollMs = SCROLL_TOTAL_MS;
   const westwoodFrames = buildFrameList("assets/intro/frames/westwood", 23);
-  const kyrandiaFrames = buildFrameList("assets/intro/frames/kyrandia", 30);
   const tree1Frames = buildFrameList("assets/intro/frames/tree1", 185);
   const tree2Frames = buildFrameList("assets/intro/frames/tree2", 20);
   const kallakFrames = buildFrameList("assets/intro/frames/kallak", 75);
   const malKalFrames = buildFrameList("assets/intro/frames/mal-kal", 325);
   const shoreFrames = buildFrameList("assets/intro/frames/shore", 12);
   const destructFrames = buildFrameList("assets/intro/frames/destruct", 44);
-  const handFrames = buildLoopFrames(
-    ["assets/intro/hand0.png", "assets/intro/hand1.png", "assets/intro/hand2.png", "assets/intro/hand1.png"],
-    30
-  );
-
   const buildSequenceFromRle = (frames: string[], rle: [number, number][]) =>
     rle.flatMap(([frameIndex, units]) => {
       const normalizedIndex = frameIndex % frames.length;
@@ -31,19 +23,19 @@ export function buildIntroSteps(): IntroStep[] {
     });
   const rleUnits = (rle: [number, number][]) => rle.reduce((sum, [, units]) => sum + units, 0);
   const rleFrameMs = (totalMs: number, rle: [number, number][]) => totalMs / Math.max(1, rleUnits(rle));
-  const malcolmFrameMs = logoFrameMs * malcolmFrameTicks;
-  const handStopFrameIndex = 30;
-  const frameIndexFromSrc = (src: string) => {
-    const match = src.match(/(\d{4})\.png$/i);
-    return match ? Number(match[1]) : 0;
-  };
-
-  const kallakSequence = buildSequenceFromRle(kallakFrames, KALLAK_RLE);
-  const handSequence = buildSequenceFromRle(handFrames, HAND_RLE);
-  const kallakHandSequence = kallakSequence.map((kallakSrc, i) => {
-    if (frameIndexFromSrc(kallakSrc) >= handStopFrameIndex) return "";
-    return handSequence[i % handSequence.length] ?? "";
+  const writing = timeline.KallakWriting;
+  const tree = timeline.MalcolmTree;
+  const conversation = timeline.KallakMalcolm;
+  const treeSplitMs = tree.tracks.tree2.startMs;
+  const timedFrames = (frames: string[], track: { frames: number[][] }, offset = 0) => ({
+    src: track.frames.map(([, frame]) => frames[frame]),
+    frameTimesMs: track.frames.map(([ms]) => ms - offset),
+    frameDurationMs: 1000 / 60,
+    pos: { x: 0, y: 8 }
   });
+  const writingFrames = timedFrames(kallakFrames, writing.tracks.kallak);
+  const firstCycleEnd = writing.tracks.kallak.frames.findIndex(([, frame], i) => i > 0 && frame === 1 && writing.tracks.kallak.frames[i - 1][1] === 29);
+  const treeSubtitles = timelineSubtitles(tree.subtitles);
 
   return [
     {
@@ -114,61 +106,41 @@ export function buildIntroSteps(): IntroStep[] {
     },
     {
       id: "tree_anim_1",
-      durationMs: tree1Frames.length * treeFrameMs,
+      durationMs: treeSplitMs,
       fadeInMs: 250,
       fadeOutMs: 0,
-      frames: {
-        src: tree1Frames,
-        frameDurationMs: treeFrameMs,
-        loop: false,
-        pos: { x: 0, y: 8 }
-      }
+      frames: timedFrames(tree1Frames, tree.tracks.tree1),
+      subtitles: sliceSubtitles(treeSubtitles, 0, treeSplitMs)
     },
     {
       id: "tree_anim_2",
-      durationMs: tree2Frames.length * treeFrameMs,
+      durationMs: tree.durationMs - treeSplitMs,
       fadeInMs: 0,
       fadeOutMs: 0,
-      frames: {
-        src: tree2Frames,
-        frameDurationMs: treeFrameMs,
-        loop: false,
-        pos: { x: 0, y: 8 }
-      }
+      frames: timedFrames(tree2Frames, tree.tracks.tree2, treeSplitMs),
+      subtitles: sliceSubtitles(treeSubtitles, treeSplitMs, tree.durationMs)
     },
     {
       id: "kallak_writing",
-      durationMs: KALLAK_TOTAL_MS,
-      fadeInMs: 0,
-      fadeOutMs: 0,
-      demoLoopRange: { start: 0, end: 29, resumeIndex: 30 },
-      frames: {
-        src: kallakSequence,
-        frameDurationMs: rleFrameMs(KALLAK_TOTAL_MS, KALLAK_RLE),
-        loop: false,
-        pos: { x: 0, y: 8 }
-      },
+      durationMs: writing.durationMs,
+      demoLoopRange: { startMs: 0, endMs: writingFrames.frameTimesMs[firstCycleEnd], resumeMs: 0 },
+      frames: writingFrames,
       overlayFrames: {
-        src: kallakHandSequence,
-        frameDurationMs: rleFrameMs(HAND_TOTAL_MS, HAND_RLE),
-        loop: false,
-        holdLast: false,
-        pos: { x: 92, y: 20 },
-        oscillateX: { amplitude: 6, periodMs: 900 }
-      }
+        src: writing.tracks.kallak.hand.map(([, frame]) => frame < 0 ? "" : withBase(`assets/intro/hand${frame}.png`)),
+        frameTimesMs: writing.tracks.kallak.hand.map(([ms]) => ms),
+        positions: writing.tracks.kallak.hand.map(([, , x, y]) => ({ x: 92 + x - 149, y: 20 + y - 32 })),
+        frameDurationMs: 1000 / 60
+      },
+      subtitles: timelineSubtitles(writing.subtitles)
     },
     {
       id: "kallak_malcolm",
       bgSrc: withBase("assets/intro/gemcuti.png"),
-      durationMs: malKalFrames.length * malcolmFrameMsFixed,
+      durationMs: conversation.durationMs,
       fadeInMs: 0,
       fadeOutMs: 0,
-      frames: {
-        src: malKalFrames,
-        frameDurationMs: malcolmFrameMsFixed,
-        loop: false,
-        pos: { x: 16, y: 58 }
-      },
+      frames: { ...timedFrames(malKalFrames, conversation.tracks["mal-kal"]), pos: { x: 16, y: 58 } },
+      subtitles: timelineSubtitles(conversation.subtitles),
       sceneAnim: {
         metaSrc: withBase("assets/scenes/dat/GEMCUT.json"),
         shapesSrc: withBase("assets/scenes/cps/GEMCUT.json"),
@@ -183,15 +155,6 @@ function buildFrameList(folder: string, count: number): string[] {
   for (let i = 0; i < count; i += 1) {
     const frame = String(i).padStart(4, "0");
     items.push(withBase(`${folder}/${frame}.png`));
-  }
-  return items;
-}
-
-function buildLoopFrames(sources: string[], count: number): string[] {
-  const items: string[] = [];
-  if (!sources.length) return items;
-  for (let i = 0; i < count; i += 1) {
-    items.push(withBase(sources[i % sources.length]));
   }
   return items;
 }

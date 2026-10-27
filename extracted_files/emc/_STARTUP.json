@@ -1,8 +1,1 @@
-{
-  "file": "_STARTUP.EMC",
-  "sceneShapes": [],
-  "sceneAnimShapes": [],
-  "itemShapes": [],
-  "dropItems": [],
-  "groundItems": []
-}
+{"format": "kyra-emc-text", "source": "_STARTUP.EMC", "strings": []}

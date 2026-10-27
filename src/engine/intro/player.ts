@@ -3,12 +3,22 @@ import { loadImage, loadSceneMeta, loadSceneShapes } from "../core/assets";
 import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
 import { buildSceneShapesCanvas, buildSpriteDefMap } from "../scene/sceneShapes";
 import type { SceneAnimState, SceneMeta, SceneShapesData, SceneSpriteDef } from "../core/types";
-import type { IntroPlayback, IntroStep } from "./types";
+import type { IntroPlayback, IntroStep, IntroSubtitle } from "./types";
+
+export function frameAtTime(times: number[], elapsedMs: number) {
+  let low = 0, high = times.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (times[mid] <= elapsedMs) low = mid + 1;
+    else high = mid;
+  }
+  return Math.max(0, low - 1);
+}
 
 export function playIntro(
   canvas: HTMLCanvasElement,
   steps: IntroStep[],
-  options?: { onStepChange?: (id: string) => void }
+  options?: { onStepChange?: (id: string) => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean }
 ): IntroPlayback {
   const ctx = canvas.getContext("2d");
   if (!ctx) {
@@ -23,6 +33,8 @@ export function playIntro(
 
   canvas.width = LOGICAL_WIDTH;
   canvas.height = LOGICAL_HEIGHT;
+
+  const renderSubtitlesOnCanvas = options?.renderSubtitlesOnCanvas ?? false;
 
   const NO_UI_OVERLAY = new Set([
     "westwood",
@@ -100,13 +112,20 @@ export function playIntro(
   }
 
   let running = true;
-  let skipRequested = false;
+  let animationFrame = 0;
   let demoLoopStepId: string | null = null;
   let demoExitRequested = false;
   let resolveDone: (() => void) | null = null;
   const done = new Promise<void>((resolve) => {
     resolveDone = resolve;
   });
+  const finish = () => {
+    if (!running) return;
+    running = false;
+    cancelAnimationFrame(animationFrame);
+    options?.onSubtitleChange?.({ stepId: "", lines: [], alpha: 1 });
+    resolveDone?.();
+  };
 
   const imageKeys = Array.from(sources.keys());
   const sceneMetaKeys = Array.from(sceneMetaSources.keys());
@@ -118,6 +137,7 @@ export function playIntro(
     ...Array.from(sceneShapesSources.values())
   ])
     .then((images) => {
+      if (!running) return;
       const imageMap = new Map<string, HTMLImageElement>();
       let idx = 0;
       for (const key of imageKeys) {
@@ -169,17 +189,75 @@ export function playIntro(
         ctx.restore();
       };
 
+
+      const wrapText = (value: string, maxWidth: number) => {
+        const words = value.split(/\s+/).filter(Boolean);
+        const lines: string[] = [];
+        let current = "";
+        for (const word of words) {
+          const next = current ? `${current} ${word}` : word;
+          if (ctx.measureText(next).width <= maxWidth || !current) {
+            current = next;
+          } else {
+            lines.push(current);
+            current = word;
+          }
+        }
+        if (current) lines.push(current);
+        return lines.length ? lines : [value];
+      };
+
+      const getActiveSubtitles = (lines: IntroSubtitle[], elapsedMs: number) =>
+        lines.filter((line) => elapsedMs >= line.startMs && elapsedMs < line.endMs);
+
+      const drawSubtitles = (lines: IntroSubtitle[], elapsedMs: number, alpha: number) => {
+        if (!lines.length) return;
+        const active = getActiveSubtitles(lines, elapsedMs);
+        if (!active.length) return;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.font = "8px 'Kyrandia', 'Courier New', monospace";
+        ctx.fillStyle = "#f2f2f2";
+        ctx.textAlign = "center";
+        const lineHeight = 10;
+        for (const line of active) {
+          const align = line.align ?? "center";
+          const maxWidth = Math.min(300, line.maxWidth ?? 300);
+          const anchor = line.x ?? LOGICAL_WIDTH / 2;
+          const offset = align === "left" ? 0 : align === "right" ? maxWidth : maxWidth / 2;
+          const x = Math.max(10, Math.min(310 - maxWidth, anchor - offset)) + offset;
+          const color = line.color ?? "#f2f2f2";
+          ctx.fillStyle = color;
+          ctx.textAlign = align;
+          if (line.type === "talk") {
+            ctx.textBaseline = "bottom";
+            const wrapped = wrapText(line.text, maxWidth);
+            const startY = line.y - (wrapped.length - 1) * lineHeight;
+            wrapped.forEach((segment, idx) => {
+              ctx.fillText(segment, Math.round(x), Math.round(startY + idx * lineHeight));
+            });
+          } else {
+            ctx.textBaseline = "top";
+            const wrapped = wrapText(line.text, maxWidth);
+            wrapped.forEach((segment, idx) => {
+              ctx.fillText(segment, Math.round(x), Math.round(line.y + idx * lineHeight));
+            });
+          }
+        }
+        ctx.restore();
+      };
+
       const loop = (now: number) => {
         if (!running) return;
-        if (skipRequested) {
-          running = false;
-          resolveDone?.();
-          return;
+        // Keep the remainder instead of adding one display frame at every cut.
+        while (steps[stepIndex] && now - stepStart >= steps[stepIndex].durationMs) {
+          if (steps[stepIndex].id === demoLoopStepId) break;
+          stepStart += steps[stepIndex].durationMs;
+          stepIndex++;
         }
         const step = steps[stepIndex];
         if (!step) {
-          running = false;
-          resolveDone?.();
+          finish();
           return;
         }
 
@@ -215,33 +293,26 @@ export function playIntro(
         }
 
         if (demoExitRequested && demoLoopStepId && step.id === demoLoopStepId && step.demoLoopRange) {
-          const frameMs = step.frames?.frameDurationMs ?? step.overlayFrames?.frameDurationMs ?? 0;
-          if (frameMs > 0) {
-            stepStart = now - step.demoLoopRange.resumeIndex * frameMs;
-          }
+          stepStart = now - step.demoLoopRange.resumeMs;
           demoExitRequested = false;
           demoLoopStepId = null;
         }
 
-        const elapsed = now - stepStart;
-        if (elapsed >= step.durationMs) {
-          if (demoLoopStepId && step.id === demoLoopStepId && !demoExitRequested) {
-            stepStart = now;
-            requestAnimationFrame(loop);
-            return;
-          }
-          stepIndex += 1;
-          stepStart = now;
-          requestAnimationFrame(loop);
-          return;
+        let elapsed = now - stepStart;
+        const subtitleLoopRange =
+          demoLoopStepId && step.id === demoLoopStepId && !demoExitRequested ? step.demoLoopRange : null;
+        if (subtitleLoopRange) {
+          const loopDuration = subtitleLoopRange.endMs - subtitleLoopRange.startMs;
+          if (loopDuration > 0) elapsed = subtitleLoopRange.startMs + elapsed % loopDuration;
         }
+        const subtitleElapsed = elapsed;
 
         const fadeIn = step.fadeInMs ?? 0;
         const fadeOut = step.fadeOutMs ?? 0;
         let alpha = 1;
         if (fadeIn > 0 && elapsed < fadeIn) {
           alpha = elapsed / fadeIn;
-        } else if (fadeOut > 0 && elapsed > step.durationMs - fadeOut) {
+        } else if (fadeOut > 0 && !subtitleLoopRange && elapsed > step.durationMs - fadeOut) {
           alpha = Math.max(0, (step.durationMs - elapsed) / fadeOut);
         }
 
@@ -309,12 +380,8 @@ export function playIntro(
 
         if (step.frames && step.frames.src.length) {
           let frameIdx = 0;
-          const loopRange =
-            demoLoopStepId && step.id === demoLoopStepId && !demoExitRequested ? step.demoLoopRange : null;
-          if (loopRange) {
-            const len = loopRange.end - loopRange.start + 1;
-            const loopElapsed = elapsed % (len * step.frames.frameDurationMs);
-            frameIdx = loopRange.start + Math.floor(loopElapsed / step.frames.frameDurationMs);
+          if (step.frames.frameTimesMs) {
+            frameIdx = frameAtTime(step.frames.frameTimesMs, elapsed);
           } else if (step.frames.loop) {
             frameIdx = Math.floor(elapsed / step.frames.frameDurationMs) % step.frames.src.length;
           } else {
@@ -329,12 +396,8 @@ export function playIntro(
           const overlayMaxTime = step.overlayFrames.src.length * step.overlayFrames.frameDurationMs;
           if (step.overlayFrames.loop || elapsed <= overlayMaxTime || step.overlayFrames.holdLast !== false) {
             let frameIdx = 0;
-            const loopRange =
-              demoLoopStepId && step.id === demoLoopStepId && !demoExitRequested ? step.demoLoopRange : null;
-            if (loopRange) {
-              const len = loopRange.end - loopRange.start + 1;
-              const loopElapsed = elapsed % (len * step.overlayFrames.frameDurationMs);
-              frameIdx = loopRange.start + Math.floor(loopElapsed / step.overlayFrames.frameDurationMs);
+            if (step.overlayFrames.frameTimesMs) {
+              frameIdx = frameAtTime(step.overlayFrames.frameTimesMs, elapsed);
             } else if (step.overlayFrames.loop) {
               frameIdx = Math.floor(elapsed / step.overlayFrames.frameDurationMs) % step.overlayFrames.src.length;
             } else {
@@ -346,7 +409,7 @@ export function playIntro(
             const frameSrc = step.overlayFrames.src[frameIdx];
             if (frameSrc) {
               const frameImg = imageMap.get(frameSrc);
-              const pos = step.overlayFrames.pos ?? { x: 0, y: 0 };
+              const pos = step.overlayFrames.positions?.[frameIdx] ?? step.overlayFrames.pos ?? { x: 0, y: 0 };
               let drawX = pos.x;
               let drawY = pos.y;
               const oscillateX = step.overlayFrames.oscillateX;
@@ -377,33 +440,34 @@ export function playIntro(
         // Mask the UI area like the original intro (black bar at the bottom).
         if (!NO_UI_OVERLAY.has(step.id)) {
           ctx.fillStyle = "#000000";
-          ctx.fillRect(0, 136, LOGICAL_WIDTH, LOGICAL_HEIGHT - 136);
+          ctx.fillRect(0, 144, LOGICAL_WIDTH, LOGICAL_HEIGHT - 144);
         }
-        requestAnimationFrame(loop);
+
+        // Emit empty lists too: cuts and gaps must clear the DOM overlay.
+        const activeSubtitles = subtitleLoopRange ? [] : getActiveSubtitles(step.subtitles ?? [], subtitleElapsed);
+        options?.onSubtitleChange?.({ stepId: step.id, lines: activeSubtitles, alpha });
+        if (renderSubtitlesOnCanvas && !subtitleLoopRange && step.subtitles?.length) {
+          drawSubtitles(step.subtitles, subtitleElapsed, alpha);
+        }
+        animationFrame = requestAnimationFrame(loop);
       };
 
-      requestAnimationFrame(loop);
+      animationFrame = requestAnimationFrame(loop);
     })
-    .catch(() => {
-      running = false;
-      resolveDone?.();
+    .catch((error) => {
+      console.error("Failed to play intro", error);
+      finish();
     });
 
   return {
-    skip: () => {
-      skipRequested = true;
-    },
-    stop: () => {
-      running = false;
-      resolveDone?.();
-    },
+    skip: finish,
+    stop: finish,
     setDemoLoopStep: (id: string | null) => {
       demoLoopStepId = id;
       demoExitRequested = false;
     },
     exitDemoLoop: () => {
       demoExitRequested = true;
-      demoLoopStepId = null;
     },
     done
   };

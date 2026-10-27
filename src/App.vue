@@ -2,6 +2,12 @@
   <div class="app">
     <div class="layout">
       <div class="stage">
+        <SubtitleOverlay
+          :lines="subtitleLines"
+          :scale="subtitleScale"
+          :alpha="subtitleAlpha"
+          :visible="subtitleVisible"
+        />
         <canvas
           ref="canvasRef"
           @click="handleClick"
@@ -101,9 +107,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { mapPointerToCanvas, startGame } from "./engine/gameplay/game";
+import { LOGICAL_WIDTH } from "./engine/core/constants";
 import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
 import { gemCutScene } from "./engine/scenes/gemCut";
-
+import SubtitleOverlay from "./components/SubtitleOverlay.vue";
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 let game: Awaited<ReturnType<typeof startGame>> | null = null;
 const showMask = ref(false);
@@ -117,18 +124,26 @@ const panelOpen = ref(false);
 const introSteps = buildIntroSteps();
 const introScene = ref(introSteps[0]?.id ?? "");
 let introRunId = 0;
+let subtitleResizeObserver: ResizeObserver | null = null;
+let panelFadeFrame = 0;
 const currentIntroStep = ref(introSteps[0]?.id ?? "");
 const introPanelRef = ref<HTMLDivElement | null>(null);
 const introPanelHover = ref(false);
 const introPanelClosing = ref(false);
 const introPanelDismissed = ref(false);
+const introMenuEnabled = ref(true);
 const introPanelOpacity = ref(1);
 const introLogoOpacity = ref(1);
 const showIntroPanel = computed(
   () =>
-    introActive.value && currentIntroStep.value === "kallak_writing" && !introPanelDismissed.value
+    introActive.value && introMenuEnabled.value && currentIntroStep.value === "kallak_writing" && !introPanelDismissed.value
 );
 const introPanelVisible = computed(() => showIntroPanel.value || introPanelClosing.value);
+const subtitleLines = ref([] as import('./engine/intro/types').IntroSubtitle[]);
+const subtitleAlpha = ref(1);
+const subtitleVisible = computed(() => introActive.value && subtitleLines.value.length > 0);
+const subtitleScale = ref(1);
+
 
 const config = {
   scene: gemCutScene
@@ -136,30 +151,48 @@ const config = {
 
 async function boot() {
   if (!canvasRef.value) return;
+  updateSubtitleScale();
   await startIntro(0, true);
+}
+
+function updateSubtitleScale() {
+  if (!canvasRef.value) return;
+  const rect = canvasRef.value.getBoundingClientRect();
+  if (rect.width > 0) {
+    subtitleScale.value = rect.width / LOGICAL_WIDTH;
+  }
 }
 
 async function startIntro(startIndex: number, autoStartGame: boolean) {
   if (!canvasRef.value) return;
+  introRunId += 1;
+  cancelAnimationFrame(panelFadeFrame);
   intro?.stop();
   if (game) {
     game.stop();
     game = null;
   }
   introActive.value = true;
+  introMenuEnabled.value = autoStartGame;
   introPanelHover.value = false;
+  introPanelClosing.value = false;
   introPanelDismissed.value = false;
   introPanelOpacity.value = 1;
   introLogoOpacity.value = 1;
-  introRunId += 1;
+  subtitleLines.value = [];
   const runId = introRunId;
   const steps = introSteps.slice(startIndex);
   intro = playIntro(canvasRef.value, steps, {
+    renderSubtitlesOnCanvas: false,
     onStepChange: (id) => {
       currentIntroStep.value = id;
-      if (id === "kallak_writing") {
+      if (id === "kallak_writing" && autoStartGame) {
         intro?.setDemoLoopStep("kallak_writing");
       }
+    },
+    onSubtitleChange: (payload) => {
+      subtitleLines.value = payload.lines;
+      subtitleAlpha.value = payload.alpha;
     }
   });
   await intro.done;
@@ -170,8 +203,15 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     return;
   }
   introActive.value = false;
+  subtitleLines.value = [];
+  subtitleAlpha.value = 1;
   if (!canvasRef.value) return;
-  game = await startGame(canvasRef.value, config);
+  const startedGame = await startGame(canvasRef.value, config);
+  if (runId !== introRunId) {
+    startedGame.stop();
+    return;
+  }
+  game = startedGame;
   game.setDebug({
     showMask: showMask.value,
     maskOpacity: maskOpacity.value,
@@ -200,6 +240,7 @@ function handleIntroPanelMove(event: MouseEvent) {
 }
 
 function handleIntroPanelClick(event: MouseEvent) {
+  if (introPanelClosing.value) return;
   if (!showIntroPanel.value) return;
   if (!isIntroPanelHotspot(event.clientX, event.clientY)) return;
   introPanelHover.value = false;
@@ -219,14 +260,14 @@ function fadeOutIntroPanel(durationMs: number) {
     introPanelOpacity.value = Math.max(0, startPanel * next);
     introLogoOpacity.value = Math.max(0, startLogo * next);
     if (t < 1) {
-      requestAnimationFrame(step);
+      panelFadeFrame = requestAnimationFrame(step);
       return;
     }
     introPanelClosing.value = false;
     introPanelDismissed.value = true;
     intro?.exitDemoLoop();
   };
-  requestAnimationFrame(step);
+  panelFadeFrame = requestAnimationFrame(step);
 }
 
 function handleClick(event: MouseEvent) {
@@ -259,11 +300,18 @@ function handleLeave() {
 
 onMounted(() => {
   void boot();
+  subtitleResizeObserver = new ResizeObserver(updateSubtitleScale);
+  if (canvasRef.value) subtitleResizeObserver.observe(canvasRef.value);
+  window.addEventListener("resize", updateSubtitleScale);
 });
 
 onBeforeUnmount(() => {
+  introRunId++;
+  cancelAnimationFrame(panelFadeFrame);
+  subtitleResizeObserver?.disconnect();
   intro?.stop();
   game?.stop();
+  window.removeEventListener("resize", updateSubtitleScale);
 });
 
 watch([showMask, maskOpacity, showLayerInfo, walkSpeed, animStepInterval], () => {

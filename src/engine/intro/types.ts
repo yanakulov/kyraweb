@@ -11,9 +11,11 @@ export type IntroStep = {
   textLines?: string[];
   footerText?: string;
   footerTextY?: number;
+  subtitles?: IntroSubtitle[];
   frames?: {
     src: string[];
     frameDurationMs: number;
+    frameTimesMs?: number[];
     loop?: boolean;
     pos?: Vec2;
   };
@@ -26,6 +28,8 @@ export type IntroStep = {
   overlayFrames?: {
     src: string[];
     frameDurationMs: number;
+    frameTimesMs?: number[];
+    positions?: Vec2[];
     loop?: boolean;
     pos?: Vec2;
     holdLast?: boolean;
@@ -37,9 +41,9 @@ export type IntroStep = {
     animIndices?: number[];
   };
   demoLoopRange?: {
-    start: number;
-    end: number;
-    resumeIndex: number;
+    startMs: number;
+    endMs: number;
+    resumeMs: number;
   };
   scroll?: {
     topSrc: string;
@@ -70,4 +74,16 @@ export type IntroPlayback = {
   setDemoLoopStep: (id: string | null) => void;
   exitDemoLoop: () => void;
   done: Promise<void>;
+};
+
+export type IntroSubtitle = {
+  startMs: number;
+  endMs: number;
+  text: string;
+  x?: number;
+  y: number;
+  align?: CanvasTextAlign;
+  maxWidth?: number;
+  type?: "text" | "talk";
+  color?: string;
 };

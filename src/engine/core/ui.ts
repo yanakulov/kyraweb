@@ -59,7 +59,7 @@ export function drawLayerDebug(
   ctx.restore();
 }
 
-export function drawStatusLine(ctx: CanvasRenderingContext2D, text: string, y: number, width: number) {
+export function drawStatusLine(ctx: CanvasRenderingContext2D, text: string, y: number, _width: number) {
   ctx.save();
   ctx.font = "8px \"Kyrandia\", \"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif";
   ctx.textAlign = "left";
