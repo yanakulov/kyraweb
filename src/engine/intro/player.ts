@@ -1,8 +1,8 @@
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from "../core/constants";
-import { loadImage, loadSceneMeta, loadSceneShapes } from "../core/assets";
+import { loadIntroResources, type IntroResources } from "./resources";
+import { drawKallakAtmosphere } from "../rendering/kallakAtmosphere";
 import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
-import { buildSceneShapesCanvas, buildSpriteDefMap } from "../scene/sceneShapes";
-import type { SceneAnimState, SceneMeta, SceneShapesData, SceneSpriteDef } from "../core/types";
+import type { SceneAnimState, SceneSpriteDef } from "../core/types";
 import type { IntroPlayback, IntroStep, IntroSubtitle } from "./types";
 
 export function frameAtTime(times: number[], elapsedMs: number) {
@@ -18,7 +18,7 @@ export function frameAtTime(times: number[], elapsedMs: number) {
 export function playIntro(
   canvas: HTMLCanvasElement,
   steps: IntroStep[],
-  options?: { onStepChange?: (id: string) => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean }
+  options?: { onStepChange?: (id: string) => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean; atmosphere?: () => boolean; onLoadingChange?: (loading: boolean) => void }
 ): IntroPlayback {
   const ctx = canvas.getContext("2d");
   if (!ctx) {
@@ -45,70 +45,23 @@ export function playIntro(
     "shore_destruct"
   ]);
 
-  const sources = new Map<string, Promise<HTMLImageElement>>();
-  const sceneMetaSources = new Map<string, Promise<SceneMeta>>();
-  const sceneShapesSources = new Map<string, Promise<SceneShapesData>>();
-  for (const step of steps) {
-    if (step.bgSrc && !sources.has(step.bgSrc)) {
-      sources.set(step.bgSrc, loadImage(step.bgSrc));
+  const controller = new AbortController();
+  const cache = new Map<number, { promise: Promise<void>; value: IntroResources | null }>();
+  const reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
+  function prepare(index: number) {
+    let entry = cache.get(index);
+    if (!entry) {
+      entry = { promise: Promise.resolve(), value: null };
+      const target = entry;
+      entry.promise = loadIntroResources(steps[index], controller.signal).then(value => {
+        if (!running || cache.get(index) !== target) { value.dispose(); return; }
+        target.value = value;
+      }).catch(error => {
+        if (running) finish(error);
+      });
+      cache.set(index, entry);
     }
-    if (step.overlaySrc && !sources.has(step.overlaySrc)) {
-      sources.set(step.overlaySrc, loadImage(step.overlaySrc));
-    }
-    if (step.frames) {
-      for (const frameSrc of step.frames.src) {
-        if (!sources.has(frameSrc)) {
-          sources.set(frameSrc, loadImage(frameSrc));
-        }
-      }
-    }
-    if (step.bgFrames) {
-      for (const frameSrc of step.bgFrames.src) {
-        if (!sources.has(frameSrc)) {
-          sources.set(frameSrc, loadImage(frameSrc));
-        }
-      }
-    }
-    if (step.overlayFrames) {
-      for (const frameSrc of step.overlayFrames.src) {
-        if (!frameSrc) continue;
-        if (!sources.has(frameSrc)) {
-          sources.set(frameSrc, loadImage(frameSrc));
-        }
-      }
-    }
-    if (step.scroll) {
-      if (!sources.has(step.scroll.topSrc)) {
-        sources.set(step.scroll.topSrc, loadImage(step.scroll.topSrc));
-      }
-      if (!sources.has(step.scroll.bottomSrc)) {
-        sources.set(step.scroll.bottomSrc, loadImage(step.scroll.bottomSrc));
-      }
-    }
-    if (step.scrollIntro) {
-      if (!sources.has(step.scrollIntro.baseSrc)) {
-        sources.set(step.scrollIntro.baseSrc, loadImage(step.scrollIntro.baseSrc));
-      }
-      if (!sources.has(step.scrollIntro.bottomSrc)) {
-        sources.set(step.scrollIntro.bottomSrc, loadImage(step.scrollIntro.bottomSrc));
-      }
-    }
-    if (step.scrollSlices) {
-      if (!sources.has(step.scrollSlices.topSrc)) {
-        sources.set(step.scrollSlices.topSrc, loadImage(step.scrollSlices.topSrc));
-      }
-      if (!sources.has(step.scrollSlices.bottomSrc)) {
-        sources.set(step.scrollSlices.bottomSrc, loadImage(step.scrollSlices.bottomSrc));
-      }
-    }
-    if (step.sceneAnim) {
-      if (!sceneMetaSources.has(step.sceneAnim.metaSrc)) {
-        sceneMetaSources.set(step.sceneAnim.metaSrc, loadSceneMeta(step.sceneAnim.metaSrc));
-      }
-      if (!sceneShapesSources.has(step.sceneAnim.shapesSrc)) {
-        sceneShapesSources.set(step.sceneAnim.shapesSrc, loadSceneShapes(step.sceneAnim.shapesSrc));
-      }
-    }
+    return entry;
   }
 
   let running = true;
@@ -116,47 +69,31 @@ export function playIntro(
   let demoLoopStepId: string | null = null;
   let demoExitRequested = false;
   let resolveDone: (() => void) | null = null;
-  const done = new Promise<void>((resolve) => {
+  let rejectDone: ((error: unknown) => void) | null = null;
+  const done = new Promise<void>((resolve, reject) => {
     resolveDone = resolve;
+    rejectDone = reject;
   });
-  const finish = () => {
+  const finish = (error?: unknown) => {
     if (!running) return;
     running = false;
+    controller.abort();
+    for (const entry of cache.values()) entry.value?.dispose();
+    cache.clear();
+    options?.onLoadingChange?.(false);
     cancelAnimationFrame(animationFrame);
     options?.onSubtitleChange?.({ stepId: "", lines: [], alpha: 1 });
-    resolveDone?.();
+    if (error !== undefined) rejectDone?.(error);
+    else resolveDone?.();
   };
 
-  const imageKeys = Array.from(sources.keys());
-  const sceneMetaKeys = Array.from(sceneMetaSources.keys());
-  const sceneShapesKeys = Array.from(sceneShapesSources.keys());
-
-  Promise.all([
-    ...Array.from(sources.values()),
-    ...Array.from(sceneMetaSources.values()),
-    ...Array.from(sceneShapesSources.values())
-  ])
-    .then((images) => {
+  if (!steps.length) { finish(); }
+  else {
+    options?.onLoadingChange?.(true);
+    prepare(0).promise.then(() => {
       if (!running) return;
-      const imageMap = new Map<string, HTMLImageElement>();
-      let idx = 0;
-      for (const key of imageKeys) {
-        imageMap.set(key, images[idx++] as HTMLImageElement);
-      }
-      const sceneMetaMap = new Map<string, SceneMeta>();
-      for (const key of sceneMetaKeys) {
-        sceneMetaMap.set(key, images[idx++] as SceneMeta);
-      }
-      const sceneShapesMap = new Map<string, HTMLCanvasElement>();
-      for (const key of sceneShapesKeys) {
-        const data = images[idx++] as SceneShapesData;
-        sceneShapesMap.set(key, buildSceneShapesCanvas(data));
-      }
-      const spriteDefMapCache = new Map<string, Map<number, SceneSpriteDef>>();
-      for (const [key, meta] of sceneMetaMap) {
-        spriteDefMapCache.set(key, buildSpriteDefMap(meta.spriteDefs));
-      }
-
+      options?.onLoadingChange?.(false);
+      let loadingSince: number | null = null;
       let stepIndex = 0;
       let stepStart = performance.now();
       let activeSceneAnim: {
@@ -250,7 +187,7 @@ export function playIntro(
       const loop = (now: number) => {
         if (!running) return;
         // Keep the remainder instead of adding one display frame at every cut.
-        while (steps[stepIndex] && now - stepStart >= steps[stepIndex].durationMs) {
+        while (loadingSince === null && steps[stepIndex] && now - stepStart >= steps[stepIndex].durationMs) {
           if (steps[stepIndex].id === demoLoopStepId) break;
           stepStart += steps[stepIndex].durationMs;
           stepIndex++;
@@ -261,6 +198,20 @@ export function playIntro(
           return;
         }
 
+        const resources = prepare(stepIndex).value;
+        if (!resources) {
+          if (loadingSince === null) { loadingSince = now; options?.onLoadingChange?.(true); }
+          animationFrame = requestAnimationFrame(loop);
+          return;
+        }
+        if (loadingSince !== null) {
+          stepStart += now - loadingSince; loadingSince = null; options?.onLoadingChange?.(false);
+        }
+        const imageMap = resources.images;
+        // Bounded to current and next scene. Do not fetch the next scene while a menu loops.
+        for (const [index, entry] of cache) if (index !== stepIndex && index !== stepIndex + 1) {
+          entry.value?.dispose(); cache.delete(index);
+        }
         if (options?.onStepChange) {
           if (step.id !== activeSceneAnimStep) {
             options.onStepChange(step.id);
@@ -270,9 +221,9 @@ export function playIntro(
         if (step.id !== activeSceneAnimStep) {
           activeSceneAnimStep = step.id;
           if (step.sceneAnim) {
-            const meta = sceneMetaMap.get(step.sceneAnim.metaSrc);
-            const shapes = sceneShapesMap.get(step.sceneAnim.shapesSrc);
-            const spriteDefMap = spriteDefMapCache.get(step.sceneAnim.metaSrc);
+            const meta = resources.scene?.meta;
+            const shapes = resources.scene?.shapes;
+            const spriteDefMap = resources.scene?.sprites;
             if (meta && shapes && spriteDefMap) {
               const animDefs = step.sceneAnim.animIndices?.length
                 ? step.sceneAnim.animIndices
@@ -297,6 +248,8 @@ export function playIntro(
           demoExitRequested = false;
           demoLoopStepId = null;
         }
+
+        if (steps[stepIndex + 1] && step.id !== demoLoopStepId) prepare(stepIndex + 1);
 
         let elapsed = now - stepStart;
         const subtitleLoopRange =
@@ -378,6 +331,18 @@ export function playIntro(
           if (frameImg) ctx.drawImage(frameImg, pos.x, pos.y);
         }
 
+        if (step.indexedBgFrames && resources.indexedBg) {
+          const track = step.indexedBgFrames;
+          const time = track.loopMs ? elapsed % track.loopMs : elapsed;
+          const index = Math.min(track.indices.length - 1, frameAtTime(track.frameTimesMs, time));
+          ctx.drawImage(resources.indexedBg.render(track.indices[index]), track.pos.x, track.pos.y);
+        }
+        if (step.indexedFrames && resources.indexed) {
+          const track = step.indexedFrames;
+          const time = track.loopMs ? elapsed % track.loopMs : elapsed;
+          const index = Math.min(track.indices.length - 1, frameAtTime(track.frameTimesMs, time));
+          ctx.drawImage(resources.indexed.render(track.indices[index]), track.pos.x, track.pos.y);
+        }
         if (step.frames && step.frames.src.length) {
           let frameIdx = 0;
           if (step.frames.frameTimesMs) {
@@ -429,6 +394,10 @@ export function playIntro(
           if (overlay) ctx.drawImage(overlay, pos.x, pos.y);
         }
 
+        if (step.id === "kallak_writing" && options?.atmosphere?.() && !reducedMotion?.matches) {
+          drawKallakAtmosphere(ctx, elapsed, true);
+        }
+
         if (step.textLines && step.textLines.length) {
           drawText(step.textLines);
         }
@@ -455,9 +424,9 @@ export function playIntro(
       animationFrame = requestAnimationFrame(loop);
     })
     .catch((error) => {
-      console.error("Failed to play intro", error);
-      finish();
+      finish(error);
     });
+  }
 
   return {
     skip: finish,

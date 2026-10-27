@@ -129,6 +129,7 @@ export type DropAnim = {
 
 export type SceneConfig = {
   name: string;
+  indexedBackground?: { src: string; clip: string };
   bgSrc: string;
   brSrc: string;
   uiOverlaySrc?: string;

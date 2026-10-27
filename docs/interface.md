@@ -17,7 +17,9 @@ Clicking or tapping the scene skips the rest of the intro when the menu is absen
 
 Browser controls and settings sit below the scene. Settings exposes walk speed and replay; a collapsed **Developer tools** disclosure contains the walk mask, layer information, intro scene selector, walk animation interval and mask opacity. Keep these controls outside the scene rather than covering original artwork.
 
-Fullscreen is shown only when `document.fullscreenEnabled` is true. It targets the application container, follows `fullscreenchange`, and hides the control if a request fails. Fullscreen keeps controls available and hides the credits. A startup failure displays an alert and **Try again**, which restarts the intro.
+Settings also includes **Window dust**, a subtle optional pixel effect in Kallak's room and writing scene. Reduced motion disables it. While scene resources load, the hint reports loading and the intro timeline waits. Resource storage and renderer details are documented in [resources.md](resources.md).
+
+Fullscreen is shown only when `document.fullscreenEnabled` is true. It targets the application container, follows `fullscreenchange`, and hides the control if a request fails. Fullscreen keeps controls available and hides the credits. A resource-loading failure displays an alert and **Try again**, which restarts the intro; this also covers failures after playback has begun.
 
 ## Styling and accessibility
 
@@ -28,5 +30,7 @@ Buttons and selects have at least **44px** height. The start button scales its t
 ## Verification
 
 The interface refinement was checked with **14 passing automated tests**, `npm run typecheck`, `npm run build`, and browser viewport checks at 1280×900, 390×844, 319×720 and 844×390. These checks are a snapshot, not a guarantee for subsequent changes.
+
+The subsequent indexed-renderer update passed **21 automated tests**, typecheck and build. The implementing agent also verified the rendering browser fixture, the real application's HTTP 503/retry recovery, and updated viewport captures at widths of 1280, 390 and 319 pixels.
 
 For future interface edits, check desktop, narrow portrait and short landscape layouts; verify the y=136 menu boundary, logo placement, usable start button, settings outside the canvas, reduced-motion dismissal and fullscreen availability. Exercise intro replay, menu return and startup retry when changing their handlers.

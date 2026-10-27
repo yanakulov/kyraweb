@@ -11,6 +11,68 @@ import { buildDropPath, dropItemAt, updateDrops, findDropDestination } from "../
 import { startGame } from "../src/engine/gameplay/game";
 import type { SceneConfig, MaskData, DropAnim, SceneItem, Vec2 } from "../src/engine/core/types";
 import gemcutMask from "../public/assets/masks/GEMCUT.json";
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+import { createHash } from "node:crypto";
+import { IndexedClip, parseScenePack } from "../src/engine/resources/scenePack";
+import { expandIndexedPixels } from "../src/engine/rendering/indexedRenderer";
+import { encodeScenePack } from "../extractor/scene_pack.mjs";
+import { decodeFrame4, applyWestwoodDelta, readPak } from "../extractor/indexed_resources.mjs";
+import pixelFixtures from "./fixtures/intro-pixels.json";
+
+test("all 684 migrated intro frames exactly retain visible PNG pixels, including backwards seeks", () => {
+  let count = 0;
+  for (const [name, fixture] of Object.entries(pixelFixtures.clips)) {
+    const file = name === "writing" ? "kallak-writing" : name;
+    const pack = parseScenePack(gunzipSync(readFileSync(`public/assets/packs/${file}.kyr.gz`)));
+    const clip = new IndexedClip(pack, pack.clips[name]);
+    assert.equal(clip.info.width, fixture.width); assert.equal(clip.info.height, fixture.height);
+    assert.equal(clip.info.frames.length, fixture.hashes.length);
+    const rgba = new Uint8ClampedArray(clip.pixels.length * 4);
+    const check = (i: number) => {
+      expandIndexedPixels(clip.frame(i), clip.info.palette, clip.info.transparentIndex, rgba);
+      for (let p = 0; p < rgba.length; p += 4) if (!rgba[p + 3]) rgba.fill(0, p, p + 3);
+      assert.equal(createHash("sha256").update(rgba).digest("hex"), fixture.hashes[i], `${name}:${i}`);
+    };
+    for (let i = 0; i < fixture.hashes.length; i++) { check(i); count++; }
+    for (const i of [fixture.hashes.length - 1, 0, Math.floor(fixture.hashes.length / 2), 1, 0]) check(i);
+  }
+  assert.equal(count, 684);
+});
+
+test("scene packets round-trip XOR deltas, repeated frames and keyframe crossings", () => {
+  const frames = Array.from({ length: 145 }, (_, n) => Uint8Array.from({ length: 120 }, (_, i) => i % 17 === n % 17 ? n % 255 : 0));
+  const compressed = encodeScenePack({ test: { width: 12, height: 10, palette: new Array(768).fill(0), frames } });
+  const pack = parseScenePack(gunzipSync(compressed));
+  const clip = new IndexedClip(pack, pack.clips.test);
+  for (const n of [0, 1, 1, 63, 64, 65, 144, 0, 100, 62, 64]) assert.deepEqual(clip.frame(n), frames[n]);
+  assert.throws(() => clip.frame(-1)); assert.throws(() => clip.frame(145));
+});
+
+test("scene pack parser rejects truncated headers, invalid palettes and out-of-range runs", () => {
+  assert.throws(() => parseScenePack(new Uint8Array(8)));
+  const frame = new Uint8Array([1, 0, 0, 0]);
+  const badRun = parseScenePack(gunzipSync(encodeScenePack({ test: { width: 10, height: 10, palette: new Array(768).fill(0), frames: [new Uint8Array(100), Uint8Array.from({ length: 100 }, (_, i) => i === 0 ? 1 : 0)] } })));
+  const delta = badRun.clips.test.frames[1];
+  new DataView(badRun.payload.buffer, badRun.payload.byteOffset).setUint32(delta.offset, 100, true);
+  assert.throws(() => new IndexedClip(badRun, badRun.clips.test).frame(1), /delta run/);
+  const bytes = gunzipSync(encodeScenePack({ test: { width: 2, height: 2, palette: [1], frames: [frame] } }));
+  assert.throws(() => parseScenePack(bytes));
+  const truncated = gunzipSync(encodeScenePack({ test: { width: 2, height: 2, palette: new Array(768).fill(0), frames: [frame] } }));
+  assert.throws(() => parseScenePack(truncated.subarray(0, truncated.length - 1)));
+});
+
+test("Westwood decoding handles overlapping references and rejects corrupt inputs", () => {
+  assert.deepEqual(decodeFrame4(Uint8Array.from([0x83, 1, 2, 3, 0, 3, 0x80]), 6), Uint8Array.from([1, 2, 3, 1, 2, 3]));
+  assert.throws(() => decodeFrame4(Uint8Array.from([0, 5]), 4));
+  const pixels = Uint8Array.from([1, 2, 3, 4]);
+  applyWestwoodDelta(pixels, Uint8Array.from([0x81, 2, 8, 8, 0x80, 0, 0]));
+  assert.deepEqual(pixels, Uint8Array.from([1, 10, 11, 4]));
+  assert.throws(() => applyWestwoodDelta(pixels, Uint8Array.from([0x85])));
+  assert.throws(() => readPak(Uint8Array.from([255, 255, 255, 255, 0])));
+});
+
+const settleLoads = () => new Promise<void>(resolve => setImmediate(resolve));
 
 function introHarness() {
   let now = 0, id = 0;
@@ -40,7 +102,7 @@ test("intro masks sprite overflow from row 136, while full-screen logos remain u
     for (const id of ["kallak_writing", "kallak_malcolm", "tree_anim_1", "westwood", "shore_anim"]) {
       h.rectangles.length = 0;
       const playback = playIntro(h.canvas, [{ id, durationMs: 1000 }]);
-      await Promise.resolve(); h.tick(30);
+      await settleLoads(); h.tick(30); await settleLoads();
       const mask = h.rectangles.filter(r => r[1] !== 0);
       assert.deepEqual(mask, ["westwood", "shore_anim"].includes(id) ? [] : [[0, 136, 320, 64]], id);
       playback.stop(); await playback.done;
@@ -54,13 +116,13 @@ test("intro emits DOM subtitles, clears gaps and cuts, and respects canvas mode"
     const events: string[][] = [];
     const steps: IntroStep[] = [{ id: "talk", durationMs: 100, subtitles: [subtitle] }, { id: "silent", durationMs: 100 }];
     const playback = playIntro(h.canvas, steps, { onSubtitleChange: p => events.push(p.lines.map(l => l.text)) });
-    await Promise.resolve();
-    h.tick(30); assert.deepEqual(events.at(-1), ["Hello"]); assert.equal(h.textDraws(), 0);
-    h.tick(90); assert.deepEqual(events.at(-1), []);
-    h.tick(110); assert.deepEqual(events.at(-1), []);
-    h.tick(200); await playback.done; assert.equal(h.pending(), 0);
+    await settleLoads();
+    h.tick(30); await settleLoads(); assert.deepEqual(events.at(-1), ["Hello"]); assert.equal(h.textDraws(), 0);
+    h.tick(90); await settleLoads(); assert.deepEqual(events.at(-1), []);
+    h.tick(110); await settleLoads(); assert.deepEqual(events.at(-1), []);
+    h.tick(200); await settleLoads(); await playback.done; assert.equal(h.pending(), 0);
     const canvasPlayback = playIntro(h.canvas, steps, { renderSubtitlesOnCanvas: true });
-    await Promise.resolve(); h.tick(230); assert.equal(h.textDraws(), 1); canvasPlayback.stop();
+    await settleLoads(); h.tick(230); await settleLoads(); assert.equal(h.textDraws(), 1); canvasPlayback.stop();
   } finally { h.restore(); }
 });
 
@@ -69,10 +131,82 @@ test("stop and skip settle before asset loading and cannot revive playback", asy
   try {
     for (const method of ["stop", "skip"] as const) {
       const playback = playIntro(h.canvas, [{ id: "test", durationMs: 100 }]);
-      playback[method](); await playback.done; await Promise.resolve();
+      playback[method](); await playback.done; await settleLoads();
       assert.equal(h.pending(), 0);
     }
   } finally { h.restore(); }
+});
+
+test("intro streams current/next scenes, freezes loading time, and cancels pending work", async () => {
+  const h = introHarness();
+  const originalImage = globalThis.Image;
+  const requested: string[] = [], images = new Map<string, { onload: (() => void) | null }>();
+  class FakeImage {
+    onload: (() => void) | null = null; onerror: (() => void) | null = null;
+    set src(value: string) { if (value) { requested.push(value); images.set(value, this); } }
+  }
+  Object.assign(globalThis, { Image: FakeImage });
+  let playback: ReturnType<typeof playIntro> | null = null;
+  try {
+    const subtitles: string[][] = [];
+    playback = playIntro(h.canvas, [
+      { id: "first", durationMs: 100, bgSrc: "first" },
+      { id: "second", durationMs: 100, bgSrc: "second", subtitles: [{ ...subtitle, startMs: 40, endMs: 60 }] },
+      { id: "third", durationMs: 100, bgSrc: "third" }
+    ], { onSubtitleChange: e => subtitles.push(e.lines.map(l => l.text)) });
+    assert.deepEqual(requested, ["first"]);
+    images.get("first")!.onload!(); await settleLoads();
+    h.tick(0); await settleLoads(); assert.deepEqual(requested, ["first", "second"]);
+    h.tick(150); await settleLoads(); // Waiting halfway into scene two.
+    images.get("second")!.onload!(); await settleLoads();
+    h.tick(1000); await settleLoads();
+    assert.deepEqual(subtitles.at(-1), ["Hello"], "850ms spent loading must not advance dialogue");
+    assert.deepEqual(requested, ["first", "second", "third"]);
+    playback.stop(); await playback.done; await settleLoads();
+    assert.equal(images.get("third")!.onload, null);
+    assert.equal(h.pending(), 0);
+  } finally { playback?.stop(); await settleLoads(); globalThis.Image = originalImage; h.restore(); }
+});
+
+test("a looping menu does not preload the following cutscene", async () => {
+  const h = introHarness(), originalImage = globalThis.Image;
+  const requested: string[] = [];
+  class FakeImage {
+    onload: (() => void) | null = null; onerror: (() => void) | null = null;
+    set src(value: string) { if (value) { requested.push(value); queueMicrotask(() => this.onload?.()); } }
+  }
+  Object.assign(globalThis, { Image: FakeImage });
+  const playback = playIntro(h.canvas, [
+    { id: "menu", durationMs: 100, demoLoopRange: { startMs: 0, endMs: 40, resumeMs: 0 } },
+    { id: "next", durationMs: 100, bgSrc: "next" }
+  ]);
+  try {
+    playback.setDemoLoopStep("menu"); await settleLoads(); h.tick(500); await settleLoads();
+    assert.deepEqual(requested, []);
+    playback.exitDemoLoop(); h.tick(510); await settleLoads(); assert.deepEqual(requested, ["next"]);
+  } finally { playback.stop(); await settleLoads(); globalThis.Image = originalImage; h.restore(); }
+});
+
+test("current-scene and successor load failures reject completion instead of starting gameplay", async () => {
+  const h = introHarness(), originalImage = globalThis.Image;
+  const pending = new Map<string, { onerror: (() => void) | null }>();
+  class FakeImage {
+    onload: (() => void) | null = null; onerror: (() => void) | null = null;
+    set src(value: string) { if (value) pending.set(value, this); }
+  }
+  Object.assign(globalThis, { Image: FakeImage });
+  try {
+    for (const preload of [false, true]) {
+      const steps: IntroStep[] = [{ id: "broken", durationMs: 100, bgSrc: "broken" }];
+      if (preload) steps.unshift({ id: "current", durationMs: 100 });
+      const playback = playIntro(h.canvas, steps);
+      const rejected = assert.rejects(playback.done, /Failed to load image/);
+      await settleLoads(); if (preload) { h.tick(0); await settleLoads(); }
+      pending.get("broken")!.onerror!();
+      await rejected; await settleLoads();
+      assert.equal(h.pending(), 0);
+    }
+  } finally { await settleLoads(); globalThis.Image = originalImage; h.restore(); }
 });
 
 test("demo exit resumes the script clock and completion carries frame remainder", async () => {
@@ -83,11 +217,11 @@ test("demo exit resumes the script clock and completion carries frame remainder"
       { id: "demo", durationMs: 100, demoLoopRange: { startMs: 0, endMs: 40, resumeMs: 20 }, subtitles: [subtitle] },
       { id: "next", durationMs: 100 }
     ], { onStepChange: id => steps.push(id), onSubtitleChange: p => events.push(p.lines.map(l => l.text)) });
-    playback.setDemoLoopStep("demo"); await Promise.resolve();
-    h.tick(300); assert.deepEqual(events.at(-1), []);
-    playback.exitDemoLoop(); h.tick(310); assert.deepEqual(events.at(-1), ["Hello"]);
-    h.tick(399); assert.equal(steps.at(-1), "next");
-    h.tick(490); await playback.done; assert.equal(h.pending(), 0);
+    playback.setDemoLoopStep("demo"); await settleLoads();
+    h.tick(300); await settleLoads(); assert.deepEqual(events.at(-1), []);
+    playback.exitDemoLoop(); h.tick(310); await settleLoads(); assert.deepEqual(events.at(-1), ["Hello"]);
+    h.tick(399); await settleLoads(); assert.equal(steps.at(-1), "next");
+    h.tick(490); await settleLoads(); await playback.done; assert.equal(h.pending(), 0);
   } finally { h.restore(); }
 });
 

@@ -57,6 +57,7 @@
     </div>
     <section v-if="panelOpen" id="game-settings" class="settings" aria-label="Game settings">
       <div class="settings-main">
+        <label class="check-field"><input type="checkbox" v-model="atmosphere" /> Window dust</label>
         <label class="setting-field">
           <span>Walk speed</span>
           <select v-model="walkSpeed">
@@ -106,6 +107,8 @@ import { gemCutScene } from "./engine/scenes/gemCut";
 import SubtitleOverlay from "./components/SubtitleOverlay.vue";
 const appRef = ref<HTMLElement | null>(null);
 const gameError = ref("");
+const loading = ref(false);
+const atmosphere = ref(true);
 const fullscreenAvailable = ref(false);
 const isFullscreen = ref(false);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -176,6 +179,8 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   const steps = introSteps.slice(startIndex);
   intro = playIntro(canvasRef.value, steps, {
     renderSubtitlesOnCanvas: false,
+    atmosphere: () => atmosphere.value,
+    onLoadingChange: (value) => { loading.value = value; },
     onStepChange: (id) => {
       currentIntroStep.value = id;
       if (id === "kallak_writing" && autoStartGame) {
@@ -198,12 +203,15 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   subtitleLines.value = [];
   subtitleAlpha.value = 1;
   if (!canvasRef.value) return;
+  loading.value = true;
   const startedGame = await startGame(canvasRef.value, config);
   if (runId !== introRunId) {
     startedGame.stop();
     return;
   }
   game = startedGame;
+  loading.value = false;
+  game.setAtmosphere(atmosphere.value);
   game.setDebug({
     showMask: showMask.value,
     maskOpacity: maskOpacity.value,
@@ -215,17 +223,21 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
 
 const gameHint = computed(() => {
   if (gameError.value) return "The journey is paused.";
+  if (loading.value) return "Loading the scene…";
   if (introPanelVisible.value) return "Your journey begins here.";
   return introActive.value ? "Click or tap the scene to skip the intro." : "Click or tap to walk, pick up and place items.";
 });
 
 async function launchIntro(startIndex: number, autoStartGame: boolean) {
   gameError.value = "";
+  const request = introRunId + 1;
   try {
     await startIntro(startIndex, autoStartGame);
   } catch (error) {
+    if (request !== introRunId) return;
     console.error("Failed to start game", error);
     gameError.value = "The game could not load. Please try again.";
+    loading.value = false;
   }
 }
 
@@ -348,4 +360,6 @@ watch(introScene, (value) => {
   if (index < 0) return;
   void launchIntro(index, false);
 });
+
+watch(atmosphere, value => game?.setAtmosphere(value));
 </script>

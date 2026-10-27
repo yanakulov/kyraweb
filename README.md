@@ -18,6 +18,7 @@
 - Inventory, item pickup/drop with bounce
 - Debug panel (mask, layer, walk speed, animation steps)
 - Intro demo loop on the writing scene with interactive UI overlay
+- Compact indexed graphics, streamed intro scenes, WebGL2 palette rendering and Canvas fallback
 
 ## Planned
 
@@ -31,6 +32,7 @@
 **English (default):**
 - Scene animations: `docs/animations.md`
 - Movement & walkmask: `docs/movement.md`
+- Resources, import and size budget: `docs/resources.md`
 
 **Русская версия:**
 - Анимации сцены: `docs/animations.ru.md`

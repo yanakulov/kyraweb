@@ -18,6 +18,8 @@ Original game files are not committed to the repository (they live in ignored fo
 
 ## Scripts
 
+- `build_scene_packs.mjs` — import a local CD installation into compact indexed browser packs: `npm run assets:build -- "path/to/Kyrandia/DAT"`. See [resource architecture](../docs/resources.md).
+
 - `msc_unpack.py` — unpack `MSC.PAK` into individual `.MSC` files.
 - `msc_to_json.py` — decode a single `.MSC` to JSON (walkmask/screen).
 - `cps_to_json.py` — decode `.CPS` to JSON (pixels + palette).
@@ -73,4 +75,4 @@ python extractor\emc_text_to_json.py original_files\_NPC.EMC extracted_files\emc
 
 ## What can be committed
 
-Only decompiled artifacts (JSON). Original/raw binary game files and intermediate unpacked data stay local and are Git‑ignored.
+Decompiled JSON and generated, lossless browser packs may be committed. Original/raw binary game files and intermediate unpacked data stay local and are Git-ignored. The pack manifest records source hashes for reproducibility.

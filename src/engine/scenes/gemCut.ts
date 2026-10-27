@@ -15,13 +15,13 @@ const WALK_POLYGON: Vec2[] = [
 
 export const gemCutScene: SceneConfig = {
   name: "Kalak's Place",
+  indexedBackground: { src: withBase("assets/packs/kallak-room.kyr.gz"), clip: "room" },
   bgSrc: withBase("assets/backgrounds/kalaks_place/gemcut.png"),
   brSrc: withBase("assets/characters/brandon/brandon.png"),
   uiOverlaySrc: withBase("assets/interface/HUD/main15.png"),
   maskSrc: withBase("assets/masks/GEMCUT.json"),
   sceneMetaSrc: withBase("assets/scenes/dat/GEMCUT.json"),
   sceneEmcSrc: withBase("assets/scenes/emc/GEMCUT.json"),
-  sceneShapesSrc: withBase("assets/scenes/cps/GEMCUT.json"),
   uiMaskY: 136,
   walkPolygon: WALK_POLYGON,
   frames: BRANDON_FRAMES,

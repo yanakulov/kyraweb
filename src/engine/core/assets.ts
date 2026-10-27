@@ -6,11 +6,15 @@ export function withBase(path: string): string {
   return `${base}${clean}`;
 }
 
-export function loadImage(src: string): Promise<HTMLImageElement> {
+export function loadImage(src: string, signal?: AbortSignal): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(signal.reason); return; }
     const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+    const cleanup = () => signal?.removeEventListener("abort", abort);
+    const abort = () => { cleanup(); img.onload = null; img.onerror = null; img.src = ""; reject(signal?.reason); };
+    img.onload = () => { cleanup(); resolve(img); };
+    img.onerror = () => { cleanup(); reject(new Error(`Failed to load image: ${src}`)); };
+    signal?.addEventListener("abort", abort, { once: true });
     img.src = src;
   });
 }
