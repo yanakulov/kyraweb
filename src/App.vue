@@ -113,6 +113,7 @@ const fullscreenAvailable = ref(false);
 const isFullscreen = ref(false);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 let game: Awaited<ReturnType<typeof startGame>> | null = null;
+let gameLoadController: AbortController | null = null;
 const showMask = ref(false);
 const showLayerInfo = ref(false);
 const maskOpacity = ref(0.35);
@@ -140,11 +141,17 @@ const subtitleLines = ref([] as import('./engine/intro/types').IntroSubtitle[]);
 const subtitleAlpha = ref(1);
 const subtitleVisible = computed(() => subtitleLines.value.length > 0);
 const sequenceActive = ref(false);
+const locationName = ref("");
+const navigationError = ref("");
 const subtitleScale = ref(1);
 
 
 const config = {
   scene: gemCutScene,
+  world: import.meta.env.BASE_URL + "assets/world/world.json",
+  onLocationChange: (name: string) => { locationName.value = name; },
+  onLoadingChange: (value: boolean) => { loading.value = value; },
+  onNavigationError: (message: string) => { navigationError.value = message; },
   onSubtitleChange: (lines: import('./engine/intro/types').IntroSubtitle[]) => { subtitleLines.value = lines; },
   onSequenceChange: (active: boolean) => { sequenceActive.value = active; }
 };
@@ -166,6 +173,7 @@ function updateSubtitleScale() {
 async function startIntro(startIndex: number, autoStartGame: boolean) {
   if (!canvasRef.value) return;
   introRunId += 1;
+  gameLoadController?.abort();
   cancelAnimationFrame(panelFadeFrame);
   intro?.stop();
   if (game) {
@@ -178,6 +186,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   introPanelDismissed.value = false;
   introPanelOpacity.value = 1;
   sequenceActive.value = false;
+  navigationError.value = "";
   subtitleLines.value = [];
   const runId = introRunId;
   const steps = introSteps.slice(startIndex);
@@ -208,7 +217,12 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   subtitleAlpha.value = 1;
   if (!canvasRef.value) return;
   loading.value = true;
+  gameLoadController = new AbortController();
   const startedGame = await startGame(canvasRef.value, { ...config,
+    signal: gameLoadController.signal,
+    onLocationChange: name => { if (runId === introRunId) config.onLocationChange(name); },
+    onLoadingChange: value => { if (runId === introRunId) config.onLoadingChange(value); },
+    onNavigationError: message => { if (runId === introRunId) config.onNavigationError(message); },
     onSubtitleChange: lines => { if (runId === introRunId) config.onSubtitleChange(lines); },
     onSequenceChange: active => { if (runId === introRunId) config.onSequenceChange(active); }
   });
@@ -231,8 +245,9 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
 const gameHint = computed(() => {
   if (gameError.value) return "The journey is paused.";
   if (loading.value) return "Loading the scene…";
+  if (navigationError.value) return navigationError.value;
   if (introPanelVisible.value) return "Your journey begins here.";
-  return introActive.value || sequenceActive.value ? "The story is unfolding…" : "Click or tap to walk, pick up and place items.";
+  return introActive.value || sequenceActive.value ? "The story is unfolding…" : `${locationName.value} · Click or tap paths and exits to explore.`;
 });
 
 async function launchIntro(startIndex: number, autoStartGame: boolean) {
@@ -335,6 +350,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   introRunId++;
+  gameLoadController?.abort();
   cancelAnimationFrame(panelFadeFrame);
   subtitleResizeObserver?.disconnect();
   intro?.stop();

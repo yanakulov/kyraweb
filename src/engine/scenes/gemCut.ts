@@ -29,7 +29,7 @@ export const gemCutScene: SceneConfig = {
   debugWalkMask: false,
   overlays: [
     { id: "letter", shape: 10, x: 213, y: 81, replaceShape: 11 },
-    { id: "saw", shape: 5, x: 249, y: 93, replaceShape: 6 }
+    { id: "saw", shape: 5, x: 248, y: 93, replaceShape: 6 }
   ],
   items: [{ id: "ruby", x: 248, y: 86 }]
 };

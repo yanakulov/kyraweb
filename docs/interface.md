@@ -17,6 +17,8 @@ Clicking or tapping the scene does not skip the intro. After it finishes, the or
 
 During gameplay, a click interacts with an item or sets a walking target. **Menu** restarts at the Kallak writing menu; **Replay intro** restarts the intro from its beginning. Neither control is a pause/resume action.
 
+The first forest region supports walking through scene edges, doors and the lift. Hovering an exit changes the cursor direction; tapping the same region works on phones. The hint names the current location. Transitions wait until Brandon reaches the approach point, retain inventory and room state, and report loading/retry status outside the game image. See [world.md](world.md) for the current boundary at the broken bridge.
+
 Browser controls and settings sit below the scene. Settings exposes walk speed and replay; a collapsed **Developer tools** disclosure contains the walk mask, layer information, intro scene selector, walk animation interval and mask opacity. Keep these controls outside the scene rather than covering original artwork.
 
 Settings also includes **Window dust**, a subtle optional pixel effect in Kallak's room and writing scene. Reduced motion disables it. While scene resources load, the hint reports loading and the intro timeline waits. Resource storage and renderer details are documented in [resources.md](resources.md).

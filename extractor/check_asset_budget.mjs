@@ -10,9 +10,9 @@ async function size(dir) {
   }
   return { bytes, files };
 }
-// Regression cap for the current intro, tree lift and Kallak room, including code.
+// Regression cap for the intro and first 17-room region, including code.
 // Expand with measured content additions; this is not a full-game size target.
-const budget = 1_400_000;
+const budget = 2_000_000;
 const result = await size('dist');
 console.log(`Production build: ${result.bytes.toLocaleString('en-US')} bytes in ${result.files} files; budget ${budget.toLocaleString('en-US')} bytes.`);
 if (result.bytes > budget) throw new Error('Asset budget exceeded. Check duplicate exports and unused public resources before adding content.');

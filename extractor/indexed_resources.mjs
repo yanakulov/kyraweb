@@ -51,13 +51,31 @@ export function applyWestwoodDelta(dst, src) {
   }
 }
 
+export function decodeFrame3(source, size) {
+  const pixels = new Uint8Array(size);
+  let s = 0, d = 0;
+  while (d < size) {
+    if (s >= source.length) throw new Error('Truncated RLE image');
+    const code = (source[s++] << 24) >> 24;
+    let count = Math.abs(code);
+    if (!code) { if (s + 2 > source.length) throw new Error('Truncated RLE run'); count = source[s++] * 256 + source[s++]; }
+    if (!count || d + count > size) throw new Error('Invalid RLE run');
+    if (code > 0) {
+      if (s + count > source.length) throw new Error('Truncated RLE literal');
+      pixels.set(source.subarray(s, s + count), d); s += count;
+    } else { if (s >= source.length) throw new Error('Truncated RLE fill'); pixels.fill(source[s++], d, d + count); }
+    d += count;
+  }
+  return pixels;
+}
+
 export function decodeCps(data, externalPalette) {
   if (data.length < 10) throw new Error('Truncated CPS');
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const size = view.getUint32(4, true), paletteSize = view.getUint16(8, true);
-  if (size !== 64000 || ![0, 4].includes(view.getUint16(2, true))) throw new Error('Expected VGA 320x200 CPS (raw or LCW)');
+  if (size !== 64000 || ![0, 3, 4].includes(view.getUint16(2, true))) throw new Error('Expected VGA 320x200 CPS (raw, RLE or LCW)');
   const source = data.subarray(10 + paletteSize);
-  const pixels = data[2] === 4 ? decodeFrame4(source, size) : source.slice(0, size);
+  const pixels = data[2] === 4 ? decodeFrame4(source, size) : data[2] === 3 ? decodeFrame3(source, size) : source.slice(0, size);
   const palette = paletteSize ? data.slice(10, 10 + paletteSize) : externalPalette;
   if (pixels.length !== size || palette?.length !== 768) throw new Error('CPS pixels/palette missing');
   return { width: 320, height: 200, pixels, palette: expandVgaPalette(palette) };
