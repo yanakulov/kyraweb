@@ -12,7 +12,14 @@ export type Frame = {
 
 export const BRANDON_FRAMES: Frame[] = data.frames as Frame[];
 
-// Basic walk sequences from the sheet
-export const BRANDON_WALK_SIDE = [0, 1, 2, 3, 4, 5, 4, 3];
-export const BRANDON_WALK_UP = [23, 24, 25, 26, 27, 28, 27, 26];
-export const BRANDON_WALK_DOWN = [29, 30, 31, 32, 33, 34, 33, 32];
+// LoK shape numbers: side 8..14, north 35..40, south 29..34.
+// Resolve through metadata: atlas indices are not original shape numbers.
+const walkFrames = (first: number, last: number) =>
+  Array.from({ length: last - first + 1 }, (_, i) => {
+    const index = BRANDON_FRAMES.findIndex(frame => frame.shapeIndex === first + i);
+    if (index < 0) throw new Error(`Missing Brandon shape ${first + i}`);
+    return index;
+  });
+export const BRANDON_WALK_SIDE = walkFrames(8, 14);
+export const BRANDON_WALK_UP = walkFrames(35, 40);
+export const BRANDON_WALK_DOWN = walkFrames(29, 34);

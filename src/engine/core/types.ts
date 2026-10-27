@@ -121,12 +121,10 @@ export type DropAnim = {
   id: InventoryItemId;
   x: number;
   y: number;
-  vx: number;
-  vy: number;
   destX: number;
   destY: number;
-  bounces: number;
-  driftDir: number;
+  path: Vec2[];
+  elapsedMs: number;
 };
 
 export type SceneConfig = {
