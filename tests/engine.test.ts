@@ -19,6 +19,91 @@ import { expandIndexedPixels } from "../src/engine/rendering/indexedRenderer";
 import { encodeScenePack } from "../extractor/scene_pack.mjs";
 import { decodeFrame4, applyWestwoodDelta, readPak } from "../extractor/indexed_resources.mjs";
 import pixelFixtures from "./fixtures/intro-pixels.json";
+import { RoomScript, type RoomAction } from "../src/engine/gameplay/roomScript";
+import { brandonTalkHead } from "../src/engine/characters/brandonFrames";
+import { parseEmc, runEmc } from "../extractor/emc.mjs";
+import { vocDuration } from "../extractor/opening.mjs";
+import opening from "../public/assets/packs/opening.json";
+import openingPixels from "./fixtures/opening-pixels.json";
+
+test("all 77 opening/tree WSA frames and patched palettes retain the original CD pixels", () => {
+  const pack = parseScenePack(gunzipSync(readFileSync("public/assets/packs/opening.kyr.gz")));
+  let count = 0;
+  for (const [name, fixture] of Object.entries(openingPixels.clips)) {
+    const clip = new IndexedClip(pack, pack.clips[name]);
+    assert.equal(clip.info.width, fixture.width); assert.equal(clip.info.height, fixture.height);
+    assert.equal(clip.info.transparentIndex, -1);
+    assert.equal(createHash("sha256").update(new Uint8Array(clip.info.palette)).digest("hex"), fixture.paletteSha256);
+    for (let i = 0; i < fixture.hashes.length; i++) {
+      assert.equal(createHash("sha256").update(clip.frame(i)).digest("hex"), fixture.hashes[i], `${name}:${i}`); count++;
+    }
+  }
+  assert.equal(count, 77);
+});
+
+test("EMC calls return through the frame stack and retain signed 16-bit arithmetic", () => {
+  const s = (op: number, value: number) => 0x4000 | op << 8 | value & 255;
+  const program = { order: [0], code: [s(2, 1), 0x8008, s(2, 0), s(9, 0), s(8, 1), 0, 0, 0,
+    0x2300, 32767, s(4, 1), s(17, 8), s(8, 0), s(8, 1)], strings: [] };
+  assert.equal(runEmc(program, 0, () => 0).regs[0], -32768);
+  assert.throws(() => runEmc({ order: [0], code: [0x8000], strings: [] }, 0, () => 0, {}, 100), /limit/);
+  assert.throws(() => parseEmc(new Uint8Array(12)), /EMC2/);
+});
+
+test("CD voice duration includes continuation blocks without exporting audio", () => {
+  const bytes = Buffer.alloc(26 + 4 + 102 + 4 + 100 + 1);
+  bytes.write("Creative Voice File", 0, "ascii"); bytes.writeUInt16LE(26, 20);
+  bytes[26] = 1; bytes.writeUIntLE(102, 27, 3); bytes[30] = 156; // 10,000 Hz, PCM8
+  bytes[132] = 2; bytes.writeUIntLE(100, 133, 3);
+  assert.equal(vocDuration(bytes), 20);
+  assert.throws(() => vocDuration(bytes.subarray(0, 200)), /Truncated/);
+});
+
+test("room script shares one clock for voice, frames and walks, and cancellation is final", () => {
+  const applied: RoomAction[] = [];
+  let walking = false;
+  const say: RoomAction = { op: "say", text: "First", ms: 500, voiceId: 8, x: 154, y: 32, color: 34, blocking: false };
+  const script = new RoomScript([say, { op: "frame", clip: "face", index: 0, x: 104, y: 32, ms: 100 },
+    { ...say, text: "Second", blocking: true }, { op: "walk", x: 96, y: 116 }, { op: "message", text: "Arrived" }], {
+    apply: action => { applied.push(action); if (action.op === "walk") walking = true; }, walking: () => walking, frames: () => 1
+  });
+  script.update(0); script.update(100);
+  assert.equal(applied.filter(a => a.op === "say").length, 1);
+  script.update(399); assert.equal(applied.filter(a => a.op === "say").length, 1);
+  script.update(1); assert.equal(applied.filter(a => a.op === "say").length, 2);
+  script.update(500); assert.equal(walking, true); assert.equal(script.done, false);
+  script.update(2000); assert.equal(applied.some(a => a.op === "message"), false);
+  walking = false; script.update(0); assert.equal(script.done, true);
+  script.stop(); const count = applied.length; script.update(100000); assert.equal(applied.length, count);
+});
+
+test("original opening visits TRUNK, GEM and GEMCUT, with all 29 tree lines and valid WSA frames", () => {
+  const pack = parseScenePack(gunzipSync(readFileSync("public/assets/packs/opening.kyr.gz")));
+  const actions = [...opening.opening, ...opening.tree] as RoomAction[];
+  assert.deepEqual(actions.filter(a => a.op === "scene").map(a => a.op === "scene" && a.name), ["trunk", "gem", "room"]);
+  const lines = opening.tree.filter(a => a.op === "say");
+  assert.equal(lines.length, 29);
+  assert.equal(lines[0].text, "Brandon?");
+  assert.equal(lines.at(-1)!.text, "What happened to my Grandfather?");
+  assert.ok(actions.some(a => a.op === "movie" && a.clip === "dropup"));
+  assert.ok(actions.some(a => a.op === "movie" && a.clip === "liftup"));
+  for (const action of actions) {
+    if (action.op === "frame" || action.op === "movie") {
+      const clip = pack.clips[action.clip]; assert.ok(clip, action.clip);
+      if (action.op === "frame") assert.ok(action.index >= 0 && action.index < clip.frames.length, `${action.clip}:${action.index}`);
+    }
+  }
+  for (const info of Object.values(pack.clips)) {
+    const clip = new IndexedClip(pack, info);
+    for (let i = 0; i < info.frames.length; i++) assert.equal(clip.frame(i).length, info.width * info.height);
+  }
+  const body = BRANDON_FRAMES.find(f => f.shapeIndex === 16)!;
+  assert.equal(body.h, 48, "talking uses a full body, not a head as a replacement");
+  for (const time of [0, 184, 1000, 3400]) {
+    const head = BRANDON_FRAMES.find(f => f.shapeIndex === brandonTalkHead(time))!;
+    assert.ok(head.h <= 11 && head.w <= body.w);
+  }
+});
 
 test("all 684 migrated intro frames exactly retain visible PNG pixels, including backwards seeks", () => {
   let count = 0;

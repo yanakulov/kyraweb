@@ -23,3 +23,7 @@ const walkFrames = (first: number, last: number) =>
 export const BRANDON_WALK_SIDE = walkFrames(8, 14);
 export const BRANDON_WALK_UP = walkFrames(35, 40);
 export const BRANDON_WALK_DOWN = walkFrames(29, 34);
+
+// ScummVM timerUpdateHeadAnims: the head is a separate layer over body 16.
+const TALK_HEADS = [4, 5, 4, 5, 4, 5, 0, 1, 4, 5, 4, 4, 6, 4, 8, 1, 9, 4];
+export const brandonTalkHead = (elapsedMs: number) => 17 + TALK_HEADS[Math.floor(elapsedMs / (11 * 1000 / 60)) % TALK_HEADS.length];

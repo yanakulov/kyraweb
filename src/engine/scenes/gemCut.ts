@@ -15,6 +15,7 @@ const WALK_POLYGON: Vec2[] = [
 
 export const gemCutScene: SceneConfig = {
   name: "Kalak's Place",
+  opening: { pack: withBase("assets/packs/opening.kyr.gz"), script: withBase("assets/packs/opening.json") },
   indexedBackground: { src: withBase("assets/packs/kallak-room.kyr.gz"), clip: "room" },
   bgSrc: withBase("assets/backgrounds/kalaks_place/gemcut.png"),
   brSrc: withBase("assets/characters/brandon/brandon.png"),
@@ -30,5 +31,5 @@ export const gemCutScene: SceneConfig = {
     { id: "letter", shape: 10, x: 213, y: 81, replaceShape: 11 },
     { id: "saw", shape: 5, x: 249, y: 93, replaceShape: 6 }
   ],
-  items: [{ id: "ruby", x: 245, y: 85 }]
+  items: [{ id: "ruby", x: 248, y: 86 }]
 };

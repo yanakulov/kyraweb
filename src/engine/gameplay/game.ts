@@ -20,8 +20,10 @@ import { buildSceneShapesCanvas, buildSpriteDefMap, drawSceneAnimShapes } from "
 import { buildUiOverlay, drawLayerDebug, drawStatusLine } from "../core/ui";
 import { loadPackedAnimation } from "../resources/packedAnimation";
 import { drawKallakAtmosphere } from "../rendering/kallakAtmosphere";
-import { buildIndexedCanvas } from "../rendering/indexedRenderer";
-import { IndexedClip } from "../resources/scenePack";
+import { buildIndexedCanvas, IndexedRenderer } from "../rendering/indexedRenderer";
+import { IndexedClip, loadScenePack } from "../resources/scenePack";
+import { RoomScript, type OpeningScript, type RoomAction } from "./roomScript";
+import { brandonTalkHead } from "../characters/brandonFrames";
 import type { DropAnim, GameConfig, InventoryItemId, SceneItem, SceneOverlayState, Vec2 } from "../core/types";
 
 export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
@@ -37,6 +39,7 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
   const packedBackground = scene.indexedBackground
     ? await loadPackedAnimation(scene.indexedBackground.src, scene.indexedBackground.clip)
     : null;
+  const scriptRenderers = new Map<string, { clip: IndexedClip; renderer: IndexedRenderer }>();
   // Keep an exact, unmodified source for foreground occlusion masks.
   try {
     const packedBase = packedBackground ? buildIndexedCanvas(packedBackground.clip.info, packedBackground.clip.frame(0)) : null;
@@ -74,6 +77,24 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
       palette: packedBackground.clip.info.palette, rawBase64: "",
     }, packedBackground.clip.frame(0)) : sceneShapesData ? buildSceneShapesCanvas(sceneShapesData) : null;
     const sceneShapesImage = sceneShapesCanvas ?? bg;
+    const [openingPack, openingScript] = scene.opening ? await Promise.all([
+      loadScenePack(scene.opening.pack),
+      fetch(scene.opening.script).then(async response => {
+        if (!response.ok) throw new Error(`Failed to load opening script (${response.status})`);
+        return await response.json() as OpeningScript;
+      })
+    ]) : [null, null];
+    if (openingPack) for (const [name, info] of Object.entries(openingPack.clips)) {
+      scriptRenderers.set(name, { clip: new IndexedClip(openingPack, info), renderer: new IndexedRenderer(info, false) });
+    }
+    const scriptLayers = new Map<string, { image: HTMLCanvasElement; x: number; y: number }>();
+    let backgroundName = "room";
+    let actorVisible = true;
+    let actorShape: number | null = null;
+    let speechRemaining = 0;
+    let speechAge = 0;
+    let sequence: RoomScript | null = null;
+    let treeSpoken = false;
     const debug = {
       showMask: false,
       maskOpacity: 0.35,
@@ -109,6 +130,8 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
     const reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
 
     function update(dt: number, nowMs: number) {
+      speechRemaining = Math.max(0, speechRemaining - dt * 1000);
+      if (speechRemaining > 0) speechAge += dt * 1000;
       if (state.statusMessage && nowMs >= state.statusMessageUntil) {
         state.statusMessage = null;
       }
@@ -119,13 +142,12 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
         updateDrops(state.drops, state.sceneItems, dt * 1000);
       }
 
-      if (!state.target) return;
       const stepInterval = state.walkDelayTicks * TICK_MS;
-      state.stepAccumulatorMs += dt * 1000;
+      if (state.target) state.stepAccumulatorMs += dt * 1000;
       while (state.target && state.stepAccumulatorMs + 1e-7 >= stepInterval) {
         state.stepAccumulatorMs = Math.max(0, state.stepAccumulatorMs - stepInterval);
         const next = state.path[state.pathIndex++];
-        if (!next || !isWalkable(next, scene, mask)) {
+        if (!next || (!sequence && !isWalkable(next, scene, mask))) {
           stopWalking();
           break;
         }
@@ -142,6 +164,12 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
         state.moving = true;
         if (state.pathIndex >= state.path.length) stopWalking();
       }
+      sequence?.update(dt * 1000);
+      if (sequence?.done) {
+        sequence = null;
+        config.onSubtitleChange?.([]);
+        config.onSequenceChange?.(false);
+      }
     }
 
     function stopWalking() {
@@ -156,43 +184,59 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function render() {
       ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-      ctx.drawImage(packedBackground ? packedBackground.render(0) : bg, 0, 0);
-      if (spriteDefMap && filteredSceneAnimShapes.length) {
+      const outside = scriptRenderers.get(backgroundName);
+      ctx.drawImage(outside ? outside.renderer.render(outside.clip.frame(0)) : packedBackground ? packedBackground.render(0) : bg, 0, 0);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(8, 8, 304, scene.uiMaskY - 8); ctx.clip();
+      if (backgroundName === "room" && spriteDefMap && filteredSceneAnimShapes.length) {
         drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, filteredSceneAnimShapes);
       }
-      if (spriteDefMap && state.overlays.length) {
+      if (backgroundName === "room" && spriteDefMap && state.overlays.length) {
         drawSceneOverlays(ctx, sceneShapesImage, spriteDefMap, state.overlays);
       }
-      if (spriteDefMap && sceneAnims.length) {
+      if (backgroundName === "room" && spriteDefMap && sceneAnims.length) {
         drawSceneAnims(ctx, sceneShapesImage, spriteDefMap, sceneAnims);
       }
       const actorLayerPre = mask ? resolveActorLayer(state.pos, drawLayerTable, mask) : 1;
-      drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayerPre, "behind");
+      if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayerPre, "behind");
       if (state.drops.length) {
         drawDropAnims(ctx, itemsSheet, inventoryItems, state.drops);
       }
 
       const sequence = getSequence(state.dir);
-      const frameIndex = state.moving ? sequence[state.frame] : getIdleFrame(state.dir);
+      const talkingFrame = speechRemaining > 0 ? frames.findIndex(frame => frame.shapeIndex === 16) : -1;
+      const frameIndex = state.moving ? sequence[state.frame] : talkingFrame >= 0 ? talkingFrame : actorShape !== null ? frames.findIndex(frame => frame.shapeIndex === actorShape) : getIdleFrame(state.dir);
       const frame = frames[Math.min(frames.length - 1, frameIndex)];
       if (!frame) {
+        ctx.restore();
         return;
       }
       const drawX = Math.round(state.pos.x + frame.xOffset);
       const drawY = Math.round(state.pos.y + frame.yOffset);
 
-      if (state.dir === "right") {
+      if (actorVisible && talkingFrame >= 0) {
+        const head = frames.find(frame => frame.shapeIndex === brandonTalkHead(speechAge));
+        if (head) {
+          const headX = drawX + (state.dir === "right" ? 2 : 6);
+          if (state.dir === "right") {
+            ctx.save(); ctx.translate(headX + head.w, 0); ctx.scale(-1, 1);
+            ctx.drawImage(br, head.x, head.y, head.w, head.h, 0, drawY, head.w, head.h); ctx.restore();
+          } else ctx.drawImage(br, head.x, head.y, head.w, head.h, headX, drawY, head.w, head.h);
+        }
+      }
+
+      if (actorVisible && state.dir === "right") {
         ctx.save();
         ctx.translate(drawX + frame.w, 0);
         ctx.scale(-1, 1);
         ctx.drawImage(br, frame.x, frame.y, frame.w, frame.h, 0, drawY, frame.w, frame.h);
         ctx.restore();
-      } else {
+      } else if (actorVisible) {
         ctx.drawImage(br, frame.x, frame.y, frame.w, frame.h, drawX, drawY, frame.w, frame.h);
       }
 
       let actorLayer = 1;
-      if (mask) {
+      if (backgroundName === "room" && mask) {
         actorLayer = resolveActorLayer(state.pos, drawLayerTable, mask);
         let fg = foregroundFrames.get(actorLayer);
         if (!fg) {
@@ -203,9 +247,11 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
         }
         if (fg) ctx.drawImage(fg, 0, 0);
       }
-      drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
+      if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
+      for (const layer of scriptLayers.values()) ctx.drawImage(layer.image, layer.x, layer.y);
 
-      if (packedBackground && atmosphere && !reducedMotion?.matches) drawKallakAtmosphere(ctx, lastTime);
+      if (backgroundName === "room" && packedBackground && atmosphere && !reducedMotion?.matches) drawKallakAtmosphere(ctx, lastTime);
+      ctx.restore();
 
       if (scene.uiMaskY < LOGICAL_HEIGHT) {
         ctx.fillStyle = "#000000";
@@ -268,17 +314,19 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function loop(now: number) {
       if (!running) return;
-      const dt = Math.max(0, (now - lastTime) / 1000);
+      // A hidden tab must not consume unseen cutscenes on its next animation frame.
+      const dt = Math.min(0.1, Math.max(0, (now - lastTime) / 1000));
       lastTime = now;
       update(dt, now);
       render();
-      requestAnimationFrame(loop);
+      animationFrame = requestAnimationFrame(loop);
     }
 
-    requestAnimationFrame(loop);
+    let animationFrame = requestAnimationFrame(loop);
 
     function setTarget(point: Vec2) {
-      if (point.y >= scene.uiMaskY || state.drops.length) return;
+      if (sequence || point.y >= scene.uiMaskY || state.drops.length) return;
+      actorShape = null;
       const path = findWalkPath(state.pos, point, p => isWalkable(p, scene, mask));
       stopWalking();
       if (!path.length) return;
@@ -291,6 +339,10 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function stop() {
       running = false;
+      cancelAnimationFrame(animationFrame);
+      sequence?.stop();
+      config.onSequenceChange?.(false);
+      for (const value of scriptRenderers.values()) value.renderer.dispose();
       packedBackground?.dispose();
     }
 
@@ -321,7 +373,17 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function handleClick(point: Vec2) {
+      if (sequence) return true;
       if (state.drops.length) return true;
+      // The original first conversation intercepts the south exit. Also let a
+      // direct click on the trunk initiate it, which works well with touch input.
+      if (openingScript && !treeSpoken && !state.itemInHand &&
+          ((point.x >= 104 && point.x < 192 && point.y >= 32 && point.y < 68) ||
+           (point.x >= 144 && point.x <= 176 && point.y >= 128 && point.y < scene.uiMaskY))) {
+        treeSpoken = true;
+        playScript(openingScript.tree);
+        return true;
+      }
       stopWalking();
       const sceneItemIndex = point.y < scene.uiMaskY ? findSceneItemAt(point, state.sceneItems) : -1;
       if (sceneItemIndex === -1 && !state.itemInHand && point.y < scene.uiMaskY && isPointOnBrandon(point)) {
@@ -429,9 +491,75 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
       state.statusMessageUntil = performance.now() + 2400;
     }
 
+    function face(facing: number) {
+      state.dir = facing >= 1 && facing <= 3 ? "right" : facing >= 5 ? "left" : facing === 0 ? "up" : "down";
+    }
+
+    function applyScript(action: RoomAction) {
+      switch (action.op) {
+        case "scene":
+          backgroundName = action.name;
+          scriptLayers.clear(); stopWalking();
+          state.pos = { x: action.x, y: action.y }; face(action.facing);
+          actorVisible = action.visible; actorShape = null; break;
+        case "actor":
+          state.pos = { x: action.x, y: action.y }; face(action.facing);
+          actorVisible = action.visible; actorShape = null; break;
+        case "visible": actorVisible = action.visible; break;
+        case "walk": {
+          actorVisible = true; actorShape = null; speechRemaining = 0;
+          for (const name of ["brantree", "touch"]) scriptLayers.delete(name);
+          stopWalking();
+          // Opening scripts deliberately walk through scene entrances. The
+          // regular click pathfinder still uses the room's collision mask.
+          state.path = findWalkPath(state.pos, action, p => sequence && backgroundName !== "room" ? true : isWalkable(p, scene, mask));
+          state.target = state.path.at(-1) ?? null;
+          state.moving = !!state.target;
+          state.stepAccumulatorMs = state.walkDelayTicks * TICK_MS;
+          break;
+        }
+        case "face": face(action.facing); actorShape = action.shape < 0 ? null : action.shape; break;
+        case "frame": {
+          const animation = scriptRenderers.get(action.clip);
+          if (!animation) throw new Error(`Missing script animation ${action.clip}`);
+          scriptLayers.delete(action.clip);
+          scriptLayers.set(action.clip, { image: animation.renderer.render(animation.clip.frame(action.index)), x: action.x, y: action.y });
+          if (["brantree", "touch"].includes(action.clip)) actorVisible = false;
+          break;
+        }
+        case "close":
+          scriptLayers.delete(action.clip);
+          if (["brantree", "touch"].includes(action.clip)) actorVisible = true;
+          break;
+        case "say": {
+          const palette = packedBackground?.clip.info.palette;
+          const color = palette ? `rgb(${palette.slice(action.color * 3, action.color * 3 + 3).join(",")})` : "#f2f2f2";
+          config.onSubtitleChange?.([{ startMs: 0, endMs: action.ms, text: action.text, x: action.x, y: action.y,
+            type: "talk", align: "center", maxWidth: 220, color }]);
+          speechRemaining = action.blocking ? action.ms : 0;
+          speechAge = 0;
+          break;
+        }
+        case "clearText": config.onSubtitleChange?.([]); speechRemaining = 0; break;
+        case "ambient": if (sceneAnims[action.index]) sceneAnims[action.index].play = action.enabled; break;
+        case "message": setStatusMessage(action.text); break;
+      }
+    }
+
+    function playScript(actions: RoomAction[]) {
+      stopWalking();
+      config.onSequenceChange?.(true);
+      sequence = new RoomScript(actions, { apply: applyScript, walking: () => state.moving,
+        frames: name => scriptRenderers.get(name)?.clip.info.frames.length ?? 0 });
+      sequence.update(0);
+    }
+
+    if (openingScript) playScript(openingScript.opening);
+
     return { setTarget, stop, setDebug, setPointer, setWalkSpeed, setAnimStepInterval, handleClick,
       setAtmosphere: (enabled: boolean) => { atmosphere = enabled; } };
   } catch (error) {
+    for (const value of scriptRenderers.values()) value.renderer.dispose();
     packedBackground?.dispose();
     throw error;
   }

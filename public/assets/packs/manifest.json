@@ -18,6 +18,66 @@
       "bytes": 768,
       "sha256": "b6011f1bef19b8129ca09c458f6f9af2eb3069d092eab3ee03138f42fe5ffe59"
     },
+    "TRUNK.CPS": {
+      "bytes": 13611,
+      "sha256": "45f02f162fbeea7f9165d89ad336232aff9db345bbc83db7eec3b26169091f6d"
+    },
+    "TRUNK.DAT": {
+      "bytes": 169,
+      "sha256": "690d0cf211bc957cbda1cd81637607f98cca885a69495af7adae23b2e10c702a"
+    },
+    "TRUNK.EMC": {
+      "bytes": 982,
+      "sha256": "acc131974b5a712dc7bd9f7dd1c036011412dbd1af759c67147e3beb6c328f7b"
+    },
+    "GEM.CPS": {
+      "bytes": 15265,
+      "sha256": "45d6b76f3cb89bace94b0dfbbe3d482857ca3d9e907dce40b5de16711dbf4ac7"
+    },
+    "GEM.DAT": {
+      "bytes": 123,
+      "sha256": "1ab5065e4831972d4cb778fb1ded88069104d4a90cfff4949ea2f4b592d2ab39"
+    },
+    "GEM.EMC": {
+      "bytes": 1506,
+      "sha256": "7ff38390c764d7ae6bcc8994197a97912ef5a2b3f6bd1c4155a39b24057d8c3c"
+    },
+    "GEMCUT.EMC": {
+      "bytes": 11150,
+      "sha256": "decb8e7034ad2a08cc1f8b10e9e50e62c60fef481535b0f7a94e7be3b7e9df9e"
+    },
+    "GEM.VRM": {
+      "bytes": 452083,
+      "sha256": "7c7b3ffe914d2f53846d4b0be41999b32f69238392161be4b57c5019b19f6d70"
+    },
+    "GEMCUT.VRM": {
+      "bytes": 3227187,
+      "sha256": "b509a8de67356b48b39bc424786ab7ab4d33a8b40985d6659961051ab7713ebc"
+    },
+    "DROPUP.WSA": {
+      "bytes": 31877,
+      "sha256": "690be7c6f5127477c80999ea44cd30874e1b502904b8e1c8fc2a7f1328e48efa"
+    },
+    "LIFTUP.WSA": {
+      "bytes": 30225,
+      "sha256": "9f3c082e6ec740bd8e9e61f459c7e6be9c59250786e2d29febe30a3e7dfb4da4"
+    },
+    "BRANTREE.WSA": {
+      "bytes": 1134,
+      "sha256": "ac9a4b2f78c71dabcf966c88f766b95aaceb93d7052ab4e8d4ee6d761d4d4ae0"
+    },
+    "FACE.WSA": {
+      "bytes": 19634,
+      "sha256": "07171dbb0428112d18b47c30a2f96dfff7e9b72bc43e09b0bf1928ef0ce489d4"
+    },
+    "FACE2.WSA": {
+      "bytes": 14689,
+      "sha256": "1877f714359cd82128e932ae0f3df22bd5355de664b2b8cfceafc2fc990aa425"
+    },
+    "TOUCH.WSA": {
+      "bytes": 4170,
+      "sha256": "c5a820de1f01ba5fb4efd3b4029eef6c402b3250d25e0292909d5a495fcd349a"
+    },
     "KALLAK.WSA": {
       "bytes": 159398,
       "sha256": "1f963d60da8ca4fa8974e17fa9bb55b5e4de3fc90e4e1307ab7c75fc5fd1af40"
@@ -68,6 +128,10 @@
       "bytes": 25318,
       "sha256": "8e3242d42308215f6336e5e398955fb184e123eadb44b19639d4770a0a62b3d6"
     },
+    "opening.kyr.gz": {
+      "bytes": 92995,
+      "sha256": "ad5ac481843b205c72cb99ba3ab590ed9a2314716ce660435a759f5d3b5867ba"
+    },
     "kallak-writing.kyr.gz": {
       "bytes": 124236,
       "sha256": "94f49d1fa234c01439a0c9f2a8d20d02b17b364d79109f9d914ac599684d2728"
@@ -98,6 +162,54 @@
     }
   },
   "clips": {
+    "trunk": {
+      "frames": 1,
+      "width": 320,
+      "height": 200,
+      "currentFrameBytes": 64000
+    },
+    "gem": {
+      "frames": 1,
+      "width": 320,
+      "height": 200,
+      "currentFrameBytes": 64000
+    },
+    "dropup": {
+      "frames": 21,
+      "width": 72,
+      "height": 120,
+      "currentFrameBytes": 8640
+    },
+    "liftup": {
+      "frames": 30,
+      "width": 80,
+      "height": 80,
+      "currentFrameBytes": 6400
+    },
+    "brantree": {
+      "frames": 2,
+      "width": 32,
+      "height": 48,
+      "currentFrameBytes": 1536
+    },
+    "face": {
+      "frames": 6,
+      "width": 88,
+      "height": 72,
+      "currentFrameBytes": 6336
+    },
+    "face2": {
+      "frames": 7,
+      "width": 80,
+      "height": 72,
+      "currentFrameBytes": 5760
+    },
+    "touch": {
+      "frames": 11,
+      "width": 40,
+      "height": 56,
+      "currentFrameBytes": 2240
+    },
     "writing": {
       "frames": 75,
       "width": 320,

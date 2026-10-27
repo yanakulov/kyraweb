@@ -130,7 +130,7 @@ export async function readGameResources(root, requested) {
       if (entry.isDirectory()) { await walk(path); continue; }
       const name = entry.name.toUpperCase();
       if (wanted.has(name)) result.set(name, new Uint8Array(await readFile(path)));
-      if (name.endsWith('.PAK')) {
+      if (name.endsWith('.PAK') || name.endsWith('.APK')) {
         const pak = readPak(new Uint8Array(await readFile(path)));
         for (const key of wanted) if (pak.has(key) && !result.has(key)) result.set(key, pak.get(key));
       }
