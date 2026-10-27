@@ -1,4 +1,4 @@
-import { LOGICAL_HEIGHT, LOGICAL_WIDTH, WALK_PAD_X, WALK_PAD_Y } from "../core/constants";
+import { LOGICAL_WIDTH, WALK_PAD_X } from "../core/constants";
 import type { MaskData, SceneConfig, Vec2 } from "../core/types";
 
 export function buildMaskCanvas(mask: MaskData): HTMLCanvasElement {
@@ -112,43 +112,18 @@ export function buildForegroundFrame(bg: HTMLImageElement, mask: MaskData, actor
 
 export function isWalkable(point: Vec2, scene: SceneConfig, mask: MaskData | null) {
   if (point.x < WALK_PAD_X || point.x > LOGICAL_WIDTH - 1 - WALK_PAD_X) return false;
-  if (point.y < WALK_PAD_Y || point.y >= scene.uiMaskY - WALK_PAD_Y) return false;
+  if (point.y < 0 || point.y >= scene.uiMaskY) return false;
   if (mask) {
-    const x = Math.max(WALK_PAD_X, Math.min(mask.width - 1 - WALK_PAD_X, Math.floor(point.x)));
-    const y = Math.max(WALK_PAD_Y, Math.min(mask.height - 1 - WALK_PAD_Y, Math.floor(point.y)));
-    if (y >= mask.height) return false;
-    const value = mask.pixels[y * mask.width + x] ?? 0;
-    return (value & 0x80) === 0;
+    const x = Math.floor(point.x), y = Math.floor(point.y);
+    if (y >= mask.height || x - 4 < 0 || x + 2 >= mask.width) return false;
+    // LoK lineIsPassable checks the foot span, not only its centre.
+    for (let px = x - 4; px < x + 3; px++) {
+      if (((mask.pixels[y * mask.width + px] ?? 0x80) & 0x80) !== 0) return false;
+    }
+    return true;
   }
   if (!scene.walkPolygon) return true;
   return pointInPolygon(point, scene.walkPolygon);
-}
-
-export function clampTarget(from: Vec2, to: Vec2, scene: SceneConfig, mask: MaskData | null): Vec2 | null {
-  const dest = {
-    x: Math.max(0, Math.min(LOGICAL_WIDTH - 1, to.x)),
-    y: Math.max(0, Math.min(LOGICAL_HEIGHT - 1, to.y))
-  };
-
-  if (isWalkable(dest, scene, mask)) return dest;
-
-  const dx = dest.x - from.x;
-  const dy = dest.y - from.y;
-  const dist = Math.hypot(dx, dy);
-  if (dist < 1) return null;
-
-  const steps = Math.ceil(dist);
-  let last = { ...from };
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    const p = { x: from.x + dx * t, y: from.y + dy * t };
-    if (isWalkable(p, scene, mask)) {
-      last = p;
-    } else {
-      break;
-    }
-  }
-  return isWalkable(last, scene, mask) ? last : null;
 }
 
 function pointInPolygon(point: Vec2, polygon: Vec2[]) {

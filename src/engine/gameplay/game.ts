@@ -11,7 +11,8 @@ import {
   getTileRect,
   initInventory
 } from "./inventory";
-import { buildMaskCanvas, buildForegroundFrame, clampTarget, isWalkable, resolveActorLayer } from "../scene/masks";
+import { buildMaskCanvas, buildForegroundFrame, isWalkable, resolveActorLayer } from "../scene/masks";
+import { findWalkPath } from "./pathfinding";
 import { getIdleFrame, getSequence, pickDirection } from "./movement";
 import { filterSceneAnimShapes, findOverlayAt, initSceneOverlays, drawSceneOverlays } from "../scene/overlays";
 import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
@@ -45,6 +46,7 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
   const frames = scene.frames;
   const uiOverlay = ui ? buildUiOverlay(ui) : null;
   const maskCanvas = mask ? buildMaskCanvas(mask) : null;
+  const foregroundFrames = new Map<number, HTMLCanvasElement>();
   const drawLayerTable = scene.drawLayerTable ?? sceneMeta?.drawLayerTable ?? null;
   const spriteDefs = sceneMeta?.spriteDefs ?? [];
   const anims = sceneMeta?.anims ?? [];
@@ -66,13 +68,14 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
   const state = {
     pos: { x: 160, y: 120 } as Vec2,
     target: null as Vec2 | null,
+    path: [] as Vec2[],
+    pathIndex: 0,
     pointer: null as Vec2 | null,
     walkDelayTicks: 6,
     stepAccumulatorMs: 0,
     stepIndex: 0,
     animStepInterval: DEFAULT_ANIM_STEP_INTERVAL,
     dir: "right" as "left" | "right" | "up" | "down",
-    lockedDir: null as null | "left" | "right" | "up" | "down",
     frame: 0,
     moving: false,
     inventorySlots: initInventory(),
@@ -96,77 +99,42 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
       updateSceneAnims(sceneAnims, nowMs);
     }
     if (state.drops.length) {
-      updateDrops(state.drops, state.sceneItems, scene, mask);
+      updateDrops(state.drops, state.sceneItems, dt * 1000);
     }
 
-    if (!state.target) {
-      state.moving = false;
-      state.frame = 0;
-      state.stepAccumulatorMs = 0;
-      state.stepIndex = 0;
-      state.lockedDir = null;
-      return;
-    }
-
+    if (!state.target) return;
     const stepInterval = state.walkDelayTicks * TICK_MS;
     state.stepAccumulatorMs += dt * 1000;
-    let moved = false;
-
-    while (state.stepAccumulatorMs >= stepInterval) {
-      state.stepAccumulatorMs -= stepInterval;
-
-      const dx = state.target.x - state.pos.x;
-      const dy = state.target.y - state.pos.y;
-      const dist = Math.hypot(dx, dy);
-
-      if (dist < 0.5) {
-        state.pos = { ...state.target };
-        state.target = null;
-        state.moving = false;
+    while (state.target && state.stepAccumulatorMs + 1e-7 >= stepInterval) {
+      state.stepAccumulatorMs = Math.max(0, state.stepAccumulatorMs - stepInterval);
+      const next = state.path[state.pathIndex++];
+      if (!next || !isWalkable(next, scene, mask)) {
+        stopWalking();
+        break;
+      }
+      const dir = pickDirection(next.x - state.pos.x, next.y - state.pos.y, state.dir);
+      if (dir !== state.dir) {
         state.frame = 0;
         state.stepIndex = 0;
-        state.lockedDir = null;
-        return;
       }
-
-      if (!state.lockedDir && (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5)) {
-        state.lockedDir = pickDirection(dx, dy, state.dir);
-      }
-      if (state.lockedDir) state.dir = state.lockedDir;
-
-      const stepX = Math.abs(dx) > 0.5 ? (dx >= 0 ? 4 : -4) : 0;
-      const stepY = Math.abs(dy) > 0.5 ? (dy >= 0 ? 2 : -2) : 0;
-      const stepLen = Math.hypot(stepX, stepY);
-      let nextPos: Vec2;
-      if (dist <= stepLen) {
-        nextPos = { ...state.target };
-      } else {
-        nextPos = {
-          x: state.pos.x + stepX,
-          y: state.pos.y + stepY
-        };
-      }
-
-      if (!isWalkable(nextPos, scene, mask)) {
-        state.target = null;
-        state.moving = false;
-        state.frame = 0;
-        state.stepIndex = 0;
-        return;
-      }
-
-      state.pos = nextPos;
-      moved = true;
-      state.stepIndex += 1;
-      if (state.stepIndex % state.animStepInterval === 0) {
+      state.dir = dir;
+      state.pos = next;
+      if (state.stepIndex++ > 0 && state.stepIndex % state.animStepInterval === 0) {
         state.frame = (state.frame + 1) % getSequence(state.dir).length;
       }
-    }
-
-    state.moving = moved;
-    if (state.target) {
       state.moving = true;
+      if (state.pathIndex >= state.path.length) stopWalking();
     }
+  }
+
+  function stopWalking() {
+    state.target = null;
+    state.path = [];
+    state.pathIndex = 0;
+    state.moving = false;
+    state.frame = 0;
+    state.stepIndex = 0;
+    state.stepAccumulatorMs = 0;
   }
 
   function render() {
@@ -209,7 +177,11 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
     let actorLayer = 1;
     if (mask) {
       actorLayer = resolveActorLayer(state.pos, drawLayerTable, mask);
-      const fg = buildForegroundFrame(bg, mask, actorLayer);
+      let fg = foregroundFrames.get(actorLayer);
+      if (!fg) {
+        fg = buildForegroundFrame(bg, mask, actorLayer);
+        foregroundFrames.set(actorLayer, fg);
+      }
       if (fg) ctx.drawImage(fg, 0, 0);
     }
     drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
@@ -275,7 +247,7 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
 
   function loop(now: number) {
     if (!running) return;
-    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    const dt = Math.max(0, (now - lastTime) / 1000);
     lastTime = now;
     update(dt, now);
     render();
@@ -285,16 +257,15 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
   requestAnimationFrame(loop);
 
   function setTarget(point: Vec2) {
-    const clamped = clampTarget(state.pos, point, scene, mask);
-    if (!clamped) return;
-    state.target = clamped;
-    state.lockedDir = null;
-    state.frame = 0;
-    state.stepIndex = 0;
-    const dx = state.target.x - state.pos.x;
-    const dy = state.target.y - state.pos.y;
-    state.lockedDir = pickDirection(dx, dy, state.dir);
-    if (state.lockedDir) state.dir = state.lockedDir;
+    if (point.y >= scene.uiMaskY || state.drops.length) return;
+    const path = findWalkPath(state.pos, point, p => isWalkable(p, scene, mask));
+    stopWalking();
+    if (!path.length) return;
+    state.path = path;
+    state.target = path[path.length - 1];
+    state.moving = true;
+    // LoK takes its first step before waiting for timer 5.
+    state.stepAccumulatorMs = state.walkDelayTicks * TICK_MS;
   }
 
   function stop() {
@@ -328,14 +299,17 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
   }
 
   function handleClick(point: Vec2) {
-    if (point.y < scene.uiMaskY && isPointOnBrandon(point)) {
+    if (state.drops.length) return true;
+    stopWalking();
+    const sceneItemIndex = point.y < scene.uiMaskY ? findSceneItemAt(point, state.sceneItems) : -1;
+    if (sceneItemIndex === -1 && !state.itemInHand && point.y < scene.uiMaskY && isPointOnBrandon(point)) {
       const line = getNpcTextLine(100, "Why do I have to do everything?");
       setStatusMessage(line);
       return true;
     }
     if (point.y < scene.uiMaskY) {
       const overlay = findOverlayAt(point, state.overlays, spriteDefMap);
-      if (overlay && !state.itemInHand) {
+      if (overlay && !state.itemInHand && sceneItemIndex === -1) {
         pickOverlayItem(overlay);
         return true;
       }
@@ -345,26 +319,32 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
       exchangeInventorySlot(slot);
       return true;
     }
-    if (state.itemInHand) {
-      const droppedItem = state.itemInHand;
-      const dropped = dropItemAt(point, state.pos, state.itemInHand, state.drops, scene, mask);
-      if (dropped) {
-        setStatusMessage(`Положил ${getItemStatusName(droppedItem)}`);
-        state.itemInHand = null;
+    if (point.y < scene.uiMaskY) {
+      const itemIndex = sceneItemIndex;
+      if (itemIndex !== -1) {
+        const item = state.sceneItems[itemIndex];
+        if (state.itemInHand) {
+          const heldItem = state.itemInHand;
+          state.itemInHand = item.id;
+          item.id = heldItem;
+        } else {
+          state.itemInHand = item.id;
+          state.sceneItems.splice(itemIndex, 1);
+        }
+        setStatusMessage(`Взял ${getItemStatusName(state.itemInHand)}`);
         return true;
       }
     }
-    if (point.y < scene.uiMaskY) {
-      const itemIndex = findSceneItemAt(point, state.sceneItems);
-      if (itemIndex !== -1) {
-        const item = state.sceneItems.splice(itemIndex, 1)[0];
-        if (item) {
-          state.itemInHand = item.id;
-          setStatusMessage(`Взял ${getItemStatusName(item.id)}`);
-          return true;
-        }
+    if (state.itemInHand) {
+      const droppedItem = state.itemInHand;
+      if (dropItemAt(point, state.itemInHand, state.drops, state.sceneItems, scene, mask)) {
+        setStatusMessage(`Положил ${getItemStatusName(droppedItem)}`);
+        state.itemInHand = null;
       }
+      // A failed drop keeps the item in hand and must not trigger walking/pickup.
+      return true;
     }
+    if (point.y >= scene.uiMaskY) return true;
     return false;
   }
 
