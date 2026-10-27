@@ -19,6 +19,7 @@
 - Debug panel (mask, layer, walk speed, animation steps)
 - Intro demo loop on the writing scene with interactive UI overlay
 - Compact indexed graphics, streamed intro scenes, WebGL2 palette rendering and Canvas fallback
+- Original tree-lift opening and discovery of Kallak, followed by the complete 29-line tree conversation with original animations and text (without CD audio)
 
 ## Planned
 

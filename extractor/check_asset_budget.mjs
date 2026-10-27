@@ -10,7 +10,8 @@ async function size(dir) {
   }
   return { bytes, files };
 }
-// Current intro + Kallak room, including JS, styles and all shipped resources.
+// Regression cap for the current intro, tree lift and Kallak room, including code.
+// Expand with measured content additions; this is not a full-game size target.
 const budget = 1_400_000;
 const result = await size('dist');
 console.log(`Production build: ${result.bytes.toLocaleString('en-US')} bytes in ${result.files} files; budget ${budget.toLocaleString('en-US')} bytes.`);

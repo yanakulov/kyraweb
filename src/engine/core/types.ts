@@ -4,6 +4,8 @@ export type Vec2 = { x: number; y: number };
 
 export type GameConfig = {
   scene: SceneConfig;
+  onSubtitleChange?: (lines: import("../intro/types").IntroSubtitle[]) => void;
+  onSequenceChange?: (active: boolean) => void;
 };
 
 export type MaskData = {
@@ -129,6 +131,7 @@ export type DropAnim = {
 
 export type SceneConfig = {
   name: string;
+  opening?: { pack: string; script: string };
   indexedBackground?: { src: string; clip: string };
   bgSrc: string;
   brSrc: string;

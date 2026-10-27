@@ -11,9 +11,11 @@ KyraWeb preserves the original Kyrandia scenes, logo and pixel font. The browser
 
 ## Controls and states
 
-The Kallak writing scene loops while its menu is displayed. **Start demo** dismisses the menu and exits that loop so the intro can continue. The button is disabled during dismissal. The logo and menu fade together over **400ms**, quantized into 12 steps; `prefers-reduced-motion: reduce` makes that dismissal immediate. This preference applies to the menu dismissal, not the original game's entire animation timeline.
+The Kallak writing scene loops while its menu is displayed. **Start game** dismisses the menu and exits that loop so the intro can continue. The button is disabled during dismissal. The logo and menu fade together over **400ms**, quantized into 12 steps; `prefers-reduced-motion: reduce` makes that dismissal immediate. This preference applies to the menu dismissal, not the original game's entire animation timeline.
 
-Clicking or tapping the scene skips the rest of the intro when the menu is absent. During gameplay, a click interacts with an item or sets a walking target. **Menu** restarts at the Kallak writing menu; **Replay intro** restarts the intro from its beginning. Neither control is a pause/resume action.
+Clicking or tapping the scene does not skip the intro. After it finishes, the original TRUNK → GEM → GEMCUT opening plays: Brandon uses the lift, enters his home and discovers Kallak. Movement and item input are locked during these sequences. The upper trunk can be tapped to start the original tree conversation; the first south-exit attempt also starts it. All 29 lines and original WSA animation commands finish before control returns. Dialogue appears through the same pixel-font subtitle overlay used by the intro.
+
+During gameplay, a click interacts with an item or sets a walking target. **Menu** restarts at the Kallak writing menu; **Replay intro** restarts the intro from its beginning. Neither control is a pause/resume action.
 
 Browser controls and settings sit below the scene. Settings exposes walk speed and replay; a collapsed **Developer tools** disclosure contains the walk mask, layer information, intro scene selector, walk animation interval and mask opacity. Keep these controls outside the scene rather than covering original artwork.
 

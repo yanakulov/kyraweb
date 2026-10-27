@@ -47,7 +47,7 @@ async function run() {
   const gameCanvas = document.createElement("canvas"); document.body.append(gameCanvas);
   CanvasRenderingContext2D.prototype.getImageData = () => { throw new Error("Canvas readback forbidden in this regression test"); };
   try {
-    const game = await startGame(gameCanvas, { scene: gemCutScene });
+    const game = await startGame(gameCanvas, { scene: { ...gemCutScene, opening: undefined } });
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     game.setTarget({ x: 120, y: 100 });
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));

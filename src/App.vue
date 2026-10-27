@@ -34,7 +34,7 @@
               type="button"
               :disabled="introPanelClosing"
               @click="handleIntroPanelClick"
-            >Start demo</button>
+            >Start game</button>
           </div>
         </template>
         <div v-if="gameError" class="game-error" role="alert">
@@ -138,12 +138,15 @@ const showIntroPanel = computed(
 const introPanelVisible = computed(() => showIntroPanel.value || introPanelClosing.value);
 const subtitleLines = ref([] as import('./engine/intro/types').IntroSubtitle[]);
 const subtitleAlpha = ref(1);
-const subtitleVisible = computed(() => introActive.value && subtitleLines.value.length > 0);
+const subtitleVisible = computed(() => subtitleLines.value.length > 0);
+const sequenceActive = ref(false);
 const subtitleScale = ref(1);
 
 
 const config = {
-  scene: gemCutScene
+  scene: gemCutScene,
+  onSubtitleChange: (lines: import('./engine/intro/types').IntroSubtitle[]) => { subtitleLines.value = lines; },
+  onSequenceChange: (active: boolean) => { sequenceActive.value = active; }
 };
 
 async function boot() {
@@ -174,6 +177,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   introPanelClosing.value = false;
   introPanelDismissed.value = false;
   introPanelOpacity.value = 1;
+  sequenceActive.value = false;
   subtitleLines.value = [];
   const runId = introRunId;
   const steps = introSteps.slice(startIndex);
@@ -204,7 +208,10 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   subtitleAlpha.value = 1;
   if (!canvasRef.value) return;
   loading.value = true;
-  const startedGame = await startGame(canvasRef.value, config);
+  const startedGame = await startGame(canvasRef.value, { ...config,
+    onSubtitleChange: lines => { if (runId === introRunId) config.onSubtitleChange(lines); },
+    onSequenceChange: active => { if (runId === introRunId) config.onSequenceChange(active); }
+  });
   if (runId !== introRunId) {
     startedGame.stop();
     return;
@@ -225,7 +232,7 @@ const gameHint = computed(() => {
   if (gameError.value) return "The journey is paused.";
   if (loading.value) return "Loading the scene…";
   if (introPanelVisible.value) return "Your journey begins here.";
-  return introActive.value ? "Click or tap the scene to skip the intro." : "Click or tap to walk, pick up and place items.";
+  return introActive.value || sequenceActive.value ? "The story is unfolding…" : "Click or tap to walk, pick up and place items.";
 });
 
 async function launchIntro(startIndex: number, autoStartGame: boolean) {
@@ -293,9 +300,6 @@ function fadeOutIntroPanel(durationMs: number) {
 
 function handleClick(event: MouseEvent) {
   if (introActive.value) {
-    if (!introPanelVisible.value) {
-      intro?.skip();
-    }
     return;
   }
   if (!canvasRef.value || !game) return;

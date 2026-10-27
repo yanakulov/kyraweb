@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { decodeCps, decodeWsa, expandVgaPalette, readGameResources } from './indexed_resources.mjs';
 import { encodeScenePack } from './scene_pack.mjs';
+import { buildOpening } from './opening.mjs';
 
 export async function buildScenePacks(gameDir, outputDir) {
   const movies = {
@@ -12,7 +13,10 @@ export async function buildScenePacks(gameDir, outputDir) {
     tree1: ['TREE1.WSA', 'TREE_EXP.COL'], tree2: ['TREE2.WSA', 'TREE_EXP.COL'],
     'mal-kal': ['MAL-KAL.WSA', 'MAL-KAL.COL']
   };
-  const names = [...new Set(['GEMCUT.CPS', 'GEMCUT.DAT', 'MAIN_ENG.CPS', 'PALETTE.COL', ...Object.values(movies).flat()])];
+  const openingMovies = ['DROPUP', 'LIFTUP', 'BRANTREE', 'FACE', 'FACE2', 'TOUCH'];
+  const names = [...new Set(['GEMCUT.CPS', 'GEMCUT.DAT', 'MAIN_ENG.CPS', 'PALETTE.COL',
+    'TRUNK.CPS', 'TRUNK.DAT', 'TRUNK.EMC', 'GEM.CPS', 'GEM.DAT', 'GEM.EMC', 'GEMCUT.EMC', 'GEM.VRM', 'GEMCUT.VRM',
+    ...openingMovies.map(n => `${n}.WSA`), ...Object.values(movies).flat()])];
   const resources = await readGameResources(gameDir, names);
   const get = name => { const data = resources.get(name); if (!data) throw new Error(`Missing original resource: ${name}`); return data; };
   const room = decodeCps(get('GEMCUT.CPS'), get('PALETTE.COL'));
@@ -28,6 +32,24 @@ export async function buildScenePacks(gameDir, outputDir) {
     })
   };
   const clips = {};
+  const openingClips = {};
+  for (const name of ['TRUNK', 'GEM']) {
+    const image = decodeCps(get(`${name}.CPS`), get('PALETTE.COL'));
+    const dat = get(`${name}.DAT`);
+    image.palette.splice(228 * 3, 60, ...Array.from(dat.subarray(0x17, 0x17 + 60), x => x * 4));
+    openingClips[name.toLowerCase()] = { ...image, frames: [image.pixels], transparentIndex: -1 };
+  }
+  for (const name of openingMovies) {
+    const movie = decodeWsa(get(`${name}.WSA`));
+    const palette = name === 'DROPUP' ? openingClips.trunk.palette : name === 'LIFTUP' ? openingClips.gem.palette : room.palette;
+    openingClips[name.toLowerCase()] = { ...movie, palette, transparentIndex: -1 };
+  }
+  packs['opening.kyr.gz'] = encodeScenePack(openingClips);
+  for (const [name, clip] of Object.entries(openingClips)) {
+    clips[name] = { frames: clip.frames.length, width: clip.width, height: clip.height, currentFrameBytes: clip.width * clip.height };
+  }
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(join(outputDir, 'opening.json'), JSON.stringify(buildOpening(resources)) + '\n');
   for (const [name, [wsa, col]] of Object.entries(movies)) {
     const movie = decodeWsa(get(wsa));
     movie.palette = expandVgaPalette(get(col));

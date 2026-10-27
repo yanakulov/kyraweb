@@ -19,6 +19,7 @@ Original game files are not committed to the repository (they live in ignored fo
 ## Scripts
 
 - `build_scene_packs.mjs` — import a local CD installation into compact indexed browser packs: `npm run assets:build -- "path/to/Kyrandia/DAT"`. See [resource architecture](../docs/resources.md).
+- `emc.mjs` / `opening.mjs` — trace the original opening/tree EMC paths into browser scene actions; read CD speech durations without copying voice audio. Both PAK and APK graphics archives are supported.
 
 - `msc_unpack.py` — unpack `MSC.PAK` into individual `.MSC` files.
 - `msc_to_json.py` — decode a single `.MSC` to JSON (walkmask/screen).
