@@ -440,7 +440,7 @@ export function playIntro(
         // Mask the UI area like the original intro (black bar at the bottom).
         if (!NO_UI_OVERLAY.has(step.id)) {
           ctx.fillStyle = "#000000";
-          ctx.fillRect(0, 144, LOGICAL_WIDTH, LOGICAL_HEIGHT - 144);
+          ctx.fillRect(0, 136, LOGICAL_WIDTH, LOGICAL_HEIGHT - 136);
         }
 
         // Emit empty lists too: cuts and gaps must clear the DOM overlay.
