@@ -4,9 +4,26 @@ export type Vec2 = { x: number; y: number };
 
 export type GameConfig = {
   scene: SceneConfig;
+  world?: string;
+  signal?: AbortSignal;
+  backgroundPack?: import("../resources/scenePack").ScenePack;
+  entry?: Vec2 & { facing: number };
+  resume?: RoomSnapshot;
+  playOpening?: boolean;
+  entryActions?: import("../gameplay/roomScript").RoomAction[];
+  portals?: RoomPortal[];
+  onExit?: (portal: RoomPortal) => void;
+  onLoadingChange?: (loading: boolean) => void;
+  onLocationChange?: (name: string, id?: number) => void;
+  onNavigationError?: (message: string) => void;
   onSubtitleChange?: (lines: import("../intro/types").IntroSubtitle[]) => void;
   onSequenceChange?: (active: boolean) => void;
 };
+
+export type RoomPortal = { id: string; target: number; side: "north" | "east" | "south" | "west";
+  rect: { x: number; y: number; w: number; h: number }; point: Vec2; entry?: Vec2 | null };
+export type RoomSnapshot = { pos: Vec2; inventorySlots: (InventoryItemId | null)[]; itemInHand: InventoryItemId | null;
+  sceneItems: SceneItem[]; overlays: SceneOverlayState[]; treeSpoken: boolean };
 
 export type MaskData = {
   width: number;
@@ -131,8 +148,13 @@ export type DropAnim = {
 
 export type SceneConfig = {
   name: string;
+  actorScale?: { fromY: number; fromScale: number; toY: number; toScale: number };
   opening?: { pack: string; script: string };
   indexedBackground?: { src: string; clip: string };
+  indexedUi?: { src: string; clip: string };
+  maskClip?: string;
+  meta?: SceneMeta;
+  emc?: SceneEmc;
   bgSrc: string;
   brSrc: string;
   uiOverlaySrc?: string;

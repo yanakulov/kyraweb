@@ -18,15 +18,22 @@ import { filterSceneAnimShapes, findOverlayAt, initSceneOverlays, drawSceneOverl
 import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
 import { buildSceneShapesCanvas, buildSpriteDefMap, drawSceneAnimShapes } from "../scene/sceneShapes";
 import { buildUiOverlay, drawLayerDebug, drawStatusLine } from "../core/ui";
-import { loadPackedAnimation } from "../resources/packedAnimation";
+import { loadPackedAnimation, createPackedAnimation } from "../resources/packedAnimation";
 import { drawKallakAtmosphere } from "../rendering/kallakAtmosphere";
 import { buildIndexedCanvas, IndexedRenderer } from "../rendering/indexedRenderer";
 import { IndexedClip, loadScenePack } from "../resources/scenePack";
 import { RoomScript, type OpeningScript, type RoomAction } from "./roomScript";
-import { brandonTalkHead } from "../characters/brandonFrames";
+import { brandonTalkHead, actorScaleAt } from "../characters/brandonFrames";
+import { startWorldGame } from "./world";
 import type { DropAnim, GameConfig, InventoryItemId, SceneItem, SceneOverlayState, Vec2 } from "../core/types";
 
-export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
+export type RoomGame = Awaited<ReturnType<typeof startRoom>>;
+export async function startGame(canvas: HTMLCanvasElement, config: GameConfig): Promise<RoomGame> {
+  return config.world ? startWorldGame(canvas, config) : startRoom(canvas, config);
+}
+
+export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
+  config.signal?.throwIfAborted();
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Canvas 2D context not available");
   const ctx = context;
@@ -37,24 +44,27 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
   const scene = config.scene;
 
   const packedBackground = scene.indexedBackground
-    ? await loadPackedAnimation(scene.indexedBackground.src, scene.indexedBackground.clip)
+    ? config.backgroundPack ? createPackedAnimation(config.backgroundPack, scene.indexedBackground.clip) : await loadPackedAnimation(scene.indexedBackground.src, scene.indexedBackground.clip, config.signal)
     : null;
   const scriptRenderers = new Map<string, { clip: IndexedClip; renderer: IndexedRenderer }>();
   // Keep an exact, unmodified source for foreground occlusion masks.
   try {
     const packedBase = packedBackground ? buildIndexedCanvas(packedBackground.clip.info, packedBackground.clip.frame(0)) : null;
-    const hudInfo = packedBackground?.clip.pack.clips.hud;
-    const packedHud = packedBackground && hudInfo ? new IndexedClip(packedBackground.clip.pack, hudInfo) : null;
+    const hudPack = scene.indexedUi ? await loadScenePack(scene.indexedUi.src, config.signal) : packedBackground?.clip.pack;
+    const hudInfo = hudPack?.clips[scene.indexedUi?.clip ?? "hud"];
+    const packedHud = hudPack && hudInfo ? new IndexedClip(hudPack, hudInfo) : null;
+    const maskInfo = scene.maskClip && packedBackground?.clip.pack.clips[scene.maskClip];
+    const packedMask = packedBackground && maskInfo ? new IndexedClip(packedBackground.clip.pack, maskInfo) : null;
     const [bg, br, ui, mask, itemsSheet, npcText] = await Promise.all([
       packedBase ? Promise.resolve(packedBase) : loadImage(scene.bgSrc),
       loadImage(scene.brSrc),
       !packedHud && scene.uiOverlaySrc ? loadImage(scene.uiOverlaySrc) : Promise.resolve(null),
-      scene.maskSrc ? loadMask(scene.maskSrc) : Promise.resolve(null),
+      packedMask ? Promise.resolve({ width: packedMask.info.width, height: packedMask.info.height, pixels: Array.from(packedMask.frame(0)) }) : scene.maskSrc ? loadMask(scene.maskSrc) : Promise.resolve(null),
       loadImage(withBase("assets/inventory/items.png")),
       loadNpcTextJson(withBase("assets/text/npc_text.json")).catch(() => null)
     ]);
-    const sceneMeta = scene.sceneMetaSrc ? await loadSceneMeta(scene.sceneMetaSrc) : null;
-    const sceneEmc = scene.sceneEmcSrc ? await loadSceneEmc(scene.sceneEmcSrc) : null;
+    const sceneMeta = scene.meta ?? (scene.sceneMetaSrc ? await loadSceneMeta(scene.sceneMetaSrc) : null);
+    const sceneEmc = scene.emc ?? (scene.sceneEmcSrc ? await loadSceneEmc(scene.sceneEmcSrc) : null);
     const sceneShapesData = !packedBackground && scene.sceneShapesSrc ? await loadSceneShapes(scene.sceneShapesSrc) : null;
     const inventoryItems = buildInventoryItems();
 
@@ -68,9 +78,10 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
     const spriteDefMap = spriteDefs.length ? buildSpriteDefMap(spriteDefs) : null;
     const sceneAnims = anims.length ? buildSceneAnimStates(anims) : [];
     const sceneAnimShapes = sceneEmc?.sceneAnimShapes ?? [];
-    const sceneOverlays = initSceneOverlays(scene.overlays);
-    const filteredSceneAnimShapes = sceneOverlays.length
-      ? filterSceneAnimShapes(sceneAnimShapes, sceneOverlays)
+    const overlayDefinitions = initSceneOverlays(scene.overlays);
+    const sceneOverlays = config.resume?.overlays ?? overlayDefinitions;
+    const filteredSceneAnimShapes = overlayDefinitions.length
+      ? filterSceneAnimShapes(sceneAnimShapes, overlayDefinitions)
       : sceneAnimShapes;
     const sceneShapesCanvas = packedBackground ? buildSceneShapesCanvas({
       width: packedBackground.clip.info.width, height: packedBackground.clip.info.height,
@@ -78,23 +89,31 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
     }, packedBackground.clip.frame(0)) : sceneShapesData ? buildSceneShapesCanvas(sceneShapesData) : null;
     const sceneShapesImage = sceneShapesCanvas ?? bg;
     const [openingPack, openingScript] = scene.opening ? await Promise.all([
-      loadScenePack(scene.opening.pack),
-      fetch(scene.opening.script).then(async response => {
+      loadScenePack(scene.opening.pack, config.signal),
+      fetch(scene.opening.script, { signal: config.signal }).then(async response => {
         if (!response.ok) throw new Error(`Failed to load opening script (${response.status})`);
         return await response.json() as OpeningScript;
       })
     ]) : [null, null];
+    config.signal?.throwIfAborted();
     if (openingPack) for (const [name, info] of Object.entries(openingPack.clips)) {
       scriptRenderers.set(name, { clip: new IndexedClip(openingPack, info), renderer: new IndexedRenderer(info, false) });
     }
     const scriptLayers = new Map<string, { image: HTMLCanvasElement; x: number; y: number }>();
+    if (packedBackground) for (const [name, info] of Object.entries(packedBackground.clip.pack.clips)) {
+      if (!["room", "mask", "hud"].includes(name)) scriptRenderers.set(name, {
+        clip: new IndexedClip(packedBackground.clip.pack, info), renderer: new IndexedRenderer(info, false)
+      });
+    }
     let backgroundName = "room";
     let actorVisible = true;
     let actorShape: number | null = null;
     let speechRemaining = 0;
     let speechAge = 0;
     let sequence: RoomScript | null = null;
-    let treeSpoken = false;
+    let treeSpoken = config.resume?.treeSpoken ?? false;
+    let pendingPortal: NonNullable<GameConfig["portals"]>[number] | null = null;
+    let sequenceDone: (() => void) | null = null;
     const debug = {
       showMask: false,
       maskOpacity: 0.35,
@@ -102,7 +121,7 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
     };
 
     const state = {
-      pos: { x: 160, y: 120 } as Vec2,
+      pos: { ...(config.entry ?? config.resume?.pos ?? { x: 160, y: 120 }) } as Vec2,
       target: null as Vec2 | null,
       path: [] as Vec2[],
       pathIndex: 0,
@@ -114,9 +133,9 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
       dir: "right" as "left" | "right" | "up" | "down",
       frame: 0,
       moving: false,
-      inventorySlots: initInventory(),
-      itemInHand: null as InventoryItemId | null,
-      sceneItems: initSceneItems(scene),
+      inventorySlots: config.resume?.inventorySlots ?? initInventory(),
+      itemInHand: config.resume?.itemInHand ?? null as InventoryItemId | null,
+      sceneItems: config.resume?.sceneItems ?? initSceneItems(scene),
       overlays: sceneOverlays,
       drops: [] as DropAnim[],
       statusMessage: null as string | null,
@@ -164,11 +183,16 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
         state.moving = true;
         if (state.pathIndex >= state.path.length) stopWalking();
       }
+      if (!state.moving && pendingPortal) {
+        const portal = pendingPortal; pendingPortal = null;
+        if (Math.abs(state.pos.x - portal.point.x) <= 4 && Math.abs(state.pos.y - portal.point.y) <= 2) config.onExit?.(portal);
+      }
       sequence?.update(dt * 1000);
       if (sequence?.done) {
         sequence = null;
         config.onSubtitleChange?.([]);
         config.onSequenceChange?.(false);
+        const done = sequenceDone; sequenceDone = null; done?.();
       }
     }
 
@@ -211,28 +235,32 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
         ctx.restore();
         return;
       }
-      const drawX = Math.round(state.pos.x + frame.xOffset);
-      const drawY = Math.round(state.pos.y + frame.yOffset);
+      const scale = actorScaleAt(state.pos.y, scene.actorScale);
+      const drawX = state.pos.x + Math.trunc(frame.xOffset * scale);
+      const drawY = state.pos.y + Math.trunc(frame.yOffset * scale);
+      const drawW = Math.max(1, Math.trunc(frame.w * scale)), drawH = Math.max(1, Math.trunc(frame.h * scale));
+      ctx.imageSmoothingEnabled = false;
 
       if (actorVisible && talkingFrame >= 0) {
         const head = frames.find(frame => frame.shapeIndex === brandonTalkHead(speechAge));
         if (head) {
-          const headX = drawX + (state.dir === "right" ? 2 : 6);
+          const headX = drawX + Math.trunc((state.dir === "right" ? 2 : 6) * scale);
+          const headW = Math.max(1, Math.trunc(head.w * scale)), headH = Math.max(1, Math.trunc(head.h * scale));
           if (state.dir === "right") {
-            ctx.save(); ctx.translate(headX + head.w, 0); ctx.scale(-1, 1);
-            ctx.drawImage(br, head.x, head.y, head.w, head.h, 0, drawY, head.w, head.h); ctx.restore();
-          } else ctx.drawImage(br, head.x, head.y, head.w, head.h, headX, drawY, head.w, head.h);
+            ctx.save(); ctx.translate(headX + headW, 0); ctx.scale(-1, 1);
+            ctx.drawImage(br, head.x, head.y, head.w, head.h, 0, drawY, headW, headH); ctx.restore();
+          } else ctx.drawImage(br, head.x, head.y, head.w, head.h, headX, drawY, headW, headH);
         }
       }
 
       if (actorVisible && state.dir === "right") {
         ctx.save();
-        ctx.translate(drawX + frame.w, 0);
+        ctx.translate(drawX + drawW, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(br, frame.x, frame.y, frame.w, frame.h, 0, drawY, frame.w, frame.h);
+        ctx.drawImage(br, frame.x, frame.y, frame.w, frame.h, 0, drawY, drawW, drawH);
         ctx.restore();
       } else if (actorVisible) {
-        ctx.drawImage(br, frame.x, frame.y, frame.w, frame.h, drawX, drawY, frame.w, frame.h);
+        ctx.drawImage(br, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
       }
 
       let actorLayer = 1;
@@ -326,6 +354,7 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function setTarget(point: Vec2) {
       if (sequence || point.y >= scene.uiMaskY || state.drops.length) return;
+      pendingPortal = null;
       actorShape = null;
       const path = findWalkPath(state.pos, point, p => isWalkable(p, scene, mask));
       stopWalking();
@@ -339,6 +368,7 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function stop() {
       running = false;
+      if (canvas.style) canvas.style.cursor = "";
       cancelAnimationFrame(animationFrame);
       sequence?.stop();
       config.onSequenceChange?.(false);
@@ -370,6 +400,8 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function setPointer(point: Vec2 | null) {
       state.pointer = point;
+      const portal = !sequence && point && config.portals?.find(p => point.x >= p.rect.x && point.x < p.rect.x + p.rect.w && point.y >= p.rect.y && point.y < p.rect.y + p.rect.h);
+      if (canvas.style) canvas.style.cursor = portal ? `${portal.side[0]}-resize` : "default";
     }
 
     function handleClick(point: Vec2) {
@@ -377,11 +409,17 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
       if (state.drops.length) return true;
       // The original first conversation intercepts the south exit. Also let a
       // direct click on the trunk initiate it, which works well with touch input.
-      if (openingScript && !treeSpoken && !state.itemInHand &&
-          ((point.x >= 104 && point.x < 192 && point.y >= 32 && point.y < 68) ||
+      if (openingScript && !treeSpoken &&
+          ((!state.itemInHand && point.x >= 104 && point.x < 192 && point.y >= 32 && point.y < 68) ||
            (point.x >= 144 && point.x <= 176 && point.y >= 128 && point.y < scene.uiMaskY))) {
         treeSpoken = true;
         playScript(openingScript.tree);
+        return true;
+      }
+      const portal = config.portals?.find(p => point.x >= p.rect.x && point.x < p.rect.x + p.rect.w && point.y >= p.rect.y && point.y < p.rect.y + p.rect.h);
+      if (portal) {
+        setTarget(portal.point);
+        if (state.target || (Math.abs(state.pos.x - portal.point.x) <= 4 && Math.abs(state.pos.y - portal.point.y) <= 2)) pendingPortal = portal;
         return true;
       }
       stopWalking();
@@ -476,13 +514,14 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
       const frameIndex = state.moving ? sequence[state.frame] : getIdleFrame(state.dir);
       const frame = frames[Math.min(frames.length - 1, frameIndex)];
       if (!frame) return false;
-      const drawX = Math.round(state.pos.x + frame.xOffset);
-      const drawY = Math.round(state.pos.y + frame.yOffset);
+      const scale = actorScaleAt(state.pos.y, scene.actorScale);
+      const drawX = state.pos.x + Math.trunc(frame.xOffset * scale);
+      const drawY = state.pos.y + Math.trunc(frame.yOffset * scale);
       return (
         point.x >= drawX &&
-        point.x <= drawX + frame.w &&
+        point.x <= drawX + Math.trunc(frame.w * scale) &&
         point.y >= drawY &&
-        point.y <= drawY + frame.h
+        point.y <= drawY + Math.trunc(frame.h * scale)
       );
     }
 
@@ -546,18 +585,25 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig) {
       }
     }
 
-    function playScript(actions: RoomAction[]) {
+    function playScript(actions: RoomAction[], done?: () => void) {
       stopWalking();
+      pendingPortal = null;
+      sequenceDone = done ?? null;
       config.onSequenceChange?.(true);
       sequence = new RoomScript(actions, { apply: applyScript, walking: () => state.moving,
         frames: name => scriptRenderers.get(name)?.clip.info.frames.length ?? 0 });
       sequence.update(0);
     }
 
-    if (openingScript) playScript(openingScript.opening);
+    if (config.entry) face(config.entry.facing);
+    if (openingScript && config.playOpening !== false) playScript(openingScript.opening);
+    else if (config.entryActions?.length) playScript(config.entryActions);
 
     return { setTarget, stop, setDebug, setPointer, setWalkSpeed, setAnimStepInterval, handleClick,
-      setAtmosphere: (enabled: boolean) => { atmosphere = enabled; } };
+      setAtmosphere: (enabled: boolean) => { atmosphere = enabled; },
+      runSequence: playScript,
+      getSnapshot: () => ({ pos: { ...state.pos }, inventorySlots: state.inventorySlots, itemInHand: state.itemInHand,
+        sceneItems: state.sceneItems, overlays: state.overlays, treeSpoken }) };
   } catch (error) {
     for (const value of scriptRenderers.values()) value.renderer.dispose();
     packedBackground?.dispose();

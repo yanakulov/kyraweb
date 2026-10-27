@@ -17,14 +17,52 @@ import { createHash } from "node:crypto";
 import { IndexedClip, parseScenePack } from "../src/engine/resources/scenePack";
 import { expandIndexedPixels } from "../src/engine/rendering/indexedRenderer";
 import { encodeScenePack } from "../extractor/scene_pack.mjs";
-import { decodeFrame4, applyWestwoodDelta, readPak } from "../extractor/indexed_resources.mjs";
+import { decodeFrame3, decodeFrame4, applyWestwoodDelta, readPak } from "../extractor/indexed_resources.mjs";
 import pixelFixtures from "./fixtures/intro-pixels.json";
 import { RoomScript, type RoomAction } from "../src/engine/gameplay/roomScript";
-import { brandonTalkHead } from "../src/engine/characters/brandonFrames";
+import { brandonTalkHead, actorScaleAt } from "../src/engine/characters/brandonFrames";
 import { parseEmc, runEmc } from "../extractor/emc.mjs";
 import { vocDuration } from "../extractor/opening.mjs";
 import opening from "../public/assets/packs/opening.json";
 import openingPixels from "./fixtures/opening-pixels.json";
+import { roomPortals, nearestFloor, type WorldRoom } from "../src/engine/gameplay/world";
+import worldData from "../public/assets/world/world.json";
+
+test("Westwood RLE decodes forest literals, short fills and big-endian long fills", () => {
+  const bytes = new Uint8Array([3, 1, 2, 3, 253, 9, 0, 1, 0, 7]);
+  const decoded = decodeFrame3(bytes, 262);
+  assert.deepEqual([...decoded.subarray(0, 6)], [1, 2, 3, 9, 9, 9]);
+  assert.ok(decoded.subarray(6).every((v: number) => v === 7));
+  assert.throws(() => decodeFrame3(bytes.subarray(0, 9), 262), /Truncated/);
+  assert.throws(() => decodeFrame3(bytes, 10), /Invalid/);
+  const scale = { fromY: 56, fromScale: 192, toY: 92, toScale: 256 };
+  assert.equal(actorScaleAt(40, scale), 0.75); assert.equal(actorScaleAt(100, scale), 1);
+  assert.equal(actorScaleAt(74, scale), 224 / 256);
+});
+
+test("all forest exits have reachable approaches from every arrival, and the broken bridge stays closed", () => {
+  const rooms = worldData.rooms as WorldRoom[];
+  for (const room of rooms) {
+    const bytes = readFileSync(`public/assets/world/${room.id}.kyr.gz`);
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), worldData.rooms[room.id].sha256);
+    const pack = parseScenePack(gunzipSync(bytes));
+    const clip = new IndexedClip(pack, pack.clips.mask);
+    const mask = { width: 320, height: 144, pixels: Array.from(clip.frame(0)) };
+    const scene = { uiMaskY: 136 } as SceneConfig;
+    const portals = roomPortals(room, mask);
+    for (const from of portals) for (const to of portals) {
+      const arrival = nearestFloor(mask, from.point);
+      const path = findWalkPath(arrival, to.point, p => isWalkable(p, scene, mask));
+      assert.deepEqual(path.at(-1) ?? arrival, to.point, `${room.id} ${room.name}: ${from.id} -> ${to.id}`);
+      assert.ok(rooms.some(r => r.id === to.target));
+    }
+    if (room.id === 7) {
+      assert.equal(portals.some(p => p.side === "west"), false);
+      const path = findWalkPath(nearestFloor(mask, { x: 280, y: 116 }), { x: 40, y: 116 }, p => isWalkable(p, scene, mask));
+      assert.ok(!path.length || path.at(-1)!.x > 150, "Brandon cannot walk through the broken bridge's gap");
+    }
+  }
+});
 
 test("all 77 opening/tree WSA frames and patched palettes retain the original CD pixels", () => {
   const pack = parseScenePack(gunzipSync(readFileSync("public/assets/packs/opening.kyr.gz")));
