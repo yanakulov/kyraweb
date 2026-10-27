@@ -23,15 +23,30 @@ function introHarness() {
   });
   let textDraws = 0;
   const draws: unknown[][] = [];
-  const ctx = new Proxy({}, { get: (_, key) => key === "drawImage" ? (...args: unknown[]) => draws.push(args) : key === "fillText" ? () => textDraws++ : key === "measureText" ? (s: string) => ({ width: s.length * 6 }) : () => {} });
+  const rectangles: unknown[][] = [];
+  const ctx = new Proxy({}, { get: (_, key) => key === "drawImage" ? (...args: unknown[]) => draws.push(args) : key === "fillRect" ? (...args: unknown[]) => rectangles.push(args) : key === "fillText" ? () => textDraws++ : key === "measureText" ? (s: string) => ({ width: s.length * 6 }) : () => {} });
   const canvas = { getContext: () => ctx } as unknown as HTMLCanvasElement;
-  return { canvas, draws, textDraws: () => textDraws,
+  return { canvas, draws, rectangles, textDraws: () => textDraws,
     tick(ms: number) { now = ms; const pending = [...frames.values()]; frames.clear(); pending.forEach(cb => cb(now)); },
     pending: () => frames.size,
     restore() { Object.assign(globalThis, original); }
   };
 }
 const subtitle = { text: "Hello", startMs: 20, endMs: 80, y: 180 };
+
+test("intro masks sprite overflow from row 136, while full-screen logos remain uncovered", async () => {
+  const h = introHarness();
+  try {
+    for (const id of ["kallak_writing", "kallak_malcolm", "tree_anim_1", "westwood", "shore_anim"]) {
+      h.rectangles.length = 0;
+      const playback = playIntro(h.canvas, [{ id, durationMs: 1000 }]);
+      await Promise.resolve(); h.tick(30);
+      const mask = h.rectangles.filter(r => r[1] !== 0);
+      assert.deepEqual(mask, ["westwood", "shore_anim"].includes(id) ? [] : [[0, 136, 320, 64]], id);
+      playback.stop(); await playback.done;
+    }
+  } finally { h.restore(); }
+});
 
 test("intro emits DOM subtitles, clears gaps and cuts, and respects canvas mode", async () => {
   const h = introHarness();
