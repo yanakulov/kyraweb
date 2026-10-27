@@ -124,16 +124,19 @@ const panelOpen = ref(false);
 const introSteps = buildIntroSteps();
 const introScene = ref(introSteps[0]?.id ?? "");
 let introRunId = 0;
+let subtitleResizeObserver: ResizeObserver | null = null;
+let panelFadeFrame = 0;
 const currentIntroStep = ref(introSteps[0]?.id ?? "");
 const introPanelRef = ref<HTMLDivElement | null>(null);
 const introPanelHover = ref(false);
 const introPanelClosing = ref(false);
 const introPanelDismissed = ref(false);
+const introMenuEnabled = ref(true);
 const introPanelOpacity = ref(1);
 const introLogoOpacity = ref(1);
 const showIntroPanel = computed(
   () =>
-    introActive.value && currentIntroStep.value === "kallak_writing" && !introPanelDismissed.value
+    introActive.value && introMenuEnabled.value && currentIntroStep.value === "kallak_writing" && !introPanelDismissed.value
 );
 const introPanelVisible = computed(() => showIntroPanel.value || introPanelClosing.value);
 const subtitleLines = ref([] as import('./engine/intro/types').IntroSubtitle[]);
@@ -156,32 +159,34 @@ function updateSubtitleScale() {
   if (!canvasRef.value) return;
   const rect = canvasRef.value.getBoundingClientRect();
   if (rect.width > 0) {
-    const raw = rect.width / LOGICAL_WIDTH;
-    const snapped = Math.max(1, Math.round(raw));
-    subtitleScale.value = Math.abs(raw - snapped) < 0.15 ? snapped : raw;
+    subtitleScale.value = rect.width / LOGICAL_WIDTH;
   }
 }
 
 async function startIntro(startIndex: number, autoStartGame: boolean) {
   if (!canvasRef.value) return;
+  introRunId += 1;
+  cancelAnimationFrame(panelFadeFrame);
   intro?.stop();
   if (game) {
     game.stop();
     game = null;
   }
   introActive.value = true;
+  introMenuEnabled.value = autoStartGame;
   introPanelHover.value = false;
+  introPanelClosing.value = false;
   introPanelDismissed.value = false;
   introPanelOpacity.value = 1;
   introLogoOpacity.value = 1;
-  introRunId += 1;
+  subtitleLines.value = [];
   const runId = introRunId;
   const steps = introSteps.slice(startIndex);
   intro = playIntro(canvasRef.value, steps, {
     renderSubtitlesOnCanvas: false,
     onStepChange: (id) => {
       currentIntroStep.value = id;
-      if (id === "kallak_writing") {
+      if (id === "kallak_writing" && autoStartGame) {
         intro?.setDemoLoopStep("kallak_writing");
       }
     },
@@ -201,7 +206,12 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   subtitleLines.value = [];
   subtitleAlpha.value = 1;
   if (!canvasRef.value) return;
-  game = await startGame(canvasRef.value, config);
+  const startedGame = await startGame(canvasRef.value, config);
+  if (runId !== introRunId) {
+    startedGame.stop();
+    return;
+  }
+  game = startedGame;
   game.setDebug({
     showMask: showMask.value,
     maskOpacity: maskOpacity.value,
@@ -230,6 +240,7 @@ function handleIntroPanelMove(event: MouseEvent) {
 }
 
 function handleIntroPanelClick(event: MouseEvent) {
+  if (introPanelClosing.value) return;
   if (!showIntroPanel.value) return;
   if (!isIntroPanelHotspot(event.clientX, event.clientY)) return;
   introPanelHover.value = false;
@@ -249,14 +260,14 @@ function fadeOutIntroPanel(durationMs: number) {
     introPanelOpacity.value = Math.max(0, startPanel * next);
     introLogoOpacity.value = Math.max(0, startLogo * next);
     if (t < 1) {
-      requestAnimationFrame(step);
+      panelFadeFrame = requestAnimationFrame(step);
       return;
     }
     introPanelClosing.value = false;
     introPanelDismissed.value = true;
     intro?.exitDemoLoop();
   };
-  requestAnimationFrame(step);
+  panelFadeFrame = requestAnimationFrame(step);
 }
 
 function handleClick(event: MouseEvent) {
@@ -289,10 +300,15 @@ function handleLeave() {
 
 onMounted(() => {
   void boot();
+  subtitleResizeObserver = new ResizeObserver(updateSubtitleScale);
+  if (canvasRef.value) subtitleResizeObserver.observe(canvasRef.value);
   window.addEventListener("resize", updateSubtitleScale);
 });
 
 onBeforeUnmount(() => {
+  introRunId++;
+  cancelAnimationFrame(panelFadeFrame);
+  subtitleResizeObserver?.disconnect();
   intro?.stop();
   game?.stop();
   window.removeEventListener("resize", updateSubtitleScale);

@@ -32,30 +32,26 @@ const props = withDefaults(
 
 const layerStyle = computed(() => ({
   opacity: props.alpha,
-  pointerEvents: "none"
+  pointerEvents: "none" as const,
+  transform: `scale(${props.scale})`,
+  transformOrigin: "top left"
 }));
 
 const lineStyle = (line: IntroSubtitle) => {
   const align = line.align ?? "center";
-  const scale = props.scale || 1;
   const x = line.x ?? 160;
-  const y = line.y ?? 180;
-  const maxWidth = line.maxWidth ?? 300;
-  const fontSize = Math.max(10, Math.round(12 * scale));
-  const lineHeight = Math.max(12, Math.round(14 * scale));
-  let translateX = "-50%";
-  if (align === "left") translateX = "0%";
-  if (align === "right") translateX = "-100%";
-  const translateY = line.type === "talk" ? "-100%" : "0%";
+  const maxWidth = Math.min(300, line.maxWidth ?? 300);
+  const left = Math.max(10, Math.min(310 - maxWidth, x - (align === "left" ? 0 : align === "right" ? maxWidth : maxWidth / 2)));
   return {
-    left: `${Math.round(x * scale)}px`,
-    top: `${Math.round(y * scale)}px`,
-    width: `${Math.round(maxWidth * scale)}px`,
-    transform: `translate(${translateX}, ${translateY})`,
+    left: `${left}px`,
+    top: line.type === "talk" ? undefined : `${line.y}px`,
+    bottom: line.type === "talk" ? `${200 - line.y}px` : undefined,
+    maxHeight: `${line.type === "talk" ? line.y : 200 - line.y}px`,
+    width: `${maxWidth}px`,
     textAlign: align,
     color: line.color ?? "#f2f2f2",
-    fontSize: `${fontSize}px`,
-    lineHeight: `${lineHeight}px`
+    fontSize: "8px",
+    lineHeight: "10px"
   } as const;
 };
 </script>
@@ -64,8 +60,8 @@ const lineStyle = (line: IntroSubtitle) => {
 .subtitle-layer {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
+  width: 320px;
+  height: 200px;
   z-index: 4;
 }
 
@@ -73,6 +69,8 @@ const lineStyle = (line: IntroSubtitle) => {
   position: absolute;
   font-family: "Kyrandia", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: hidden;
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: none;
   image-rendering: pixelated;

@@ -18,7 +18,7 @@ export function initSceneOverlays(overlays?: SceneOverlayConfig[]): SceneOverlay
   }));
 }
 
-export function filterSceneAnimShapes(shapes: { shape: number; x: number; y: number }[], overlays: SceneOverlayState[]) {
+export function filterSceneAnimShapes<T extends { shape: number; x: number; y: number }>(shapes: T[], overlays: SceneOverlayState[]): T[] {
   if (!overlays.length) return shapes;
   return shapes.filter(
     (shape) =>

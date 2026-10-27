@@ -6,7 +6,7 @@ export function getSequence(dir: "left" | "right" | "up" | "down") {
   return BRANDON_WALK_SIDE;
 }
 
-export function getIdleFrame(dir: "left" | "right" | "up" | "down") {
+export function getIdleFrame(_dir: "left" | "right" | "up" | "down") {
   return BRANDON_WALK_SIDE[0];
 }
 

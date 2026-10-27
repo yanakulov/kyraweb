@@ -15,6 +15,7 @@ export type IntroStep = {
   frames?: {
     src: string[];
     frameDurationMs: number;
+    frameTimesMs?: number[];
     loop?: boolean;
     pos?: Vec2;
   };
@@ -27,6 +28,8 @@ export type IntroStep = {
   overlayFrames?: {
     src: string[];
     frameDurationMs: number;
+    frameTimesMs?: number[];
+    positions?: Vec2[];
     loop?: boolean;
     pos?: Vec2;
     holdLast?: boolean;
@@ -38,9 +41,9 @@ export type IntroStep = {
     animIndices?: number[];
   };
   demoLoopRange?: {
-    start: number;
-    end: number;
-    resumeIndex: number;
+    startMs: number;
+    endMs: number;
+    resumeMs: number;
   };
   scroll?: {
     topSrc: string;
