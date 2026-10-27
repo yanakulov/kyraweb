@@ -1,0 +1,32 @@
+# Browser interface
+
+KyraWeb preserves the original Kyrandia scenes, logo and pixel font. The browser controls support the existing Vue canvas game; they are not a replacement visual identity. Keep original game assets authoritative when extending the interface.
+
+## Scene geometry
+
+- The canvas has a logical resolution of **320 × 200**. Its responsive stage keeps an **8:5** aspect ratio and uses pixelated rendering. Pointer coordinates and subtitles scale against this logical space.
+- In `src/engine/intro/player.ts`, eligible intro steps mask the bottom UI area from **y = 136** through the bottom of the canvas. Keep the existing `NO_UI_OVERLAY` exceptions. The Kallak menu starts at **68%** of the stage height, matching `136 / 200`; changing either value independently creates a visible seam.
+- The original logo at `/assets/interface/HUD/game-logo.png` uses stage-relative positioning: **left 6.25%, top 26%, width 50%**. Preserve these proportions across viewport sizes.
+- The main container is at most **976px** wide. Below **600px**, frame padding shrinks, toolbar actions occupy their own row, and settings fields stack. Short landscape viewports (height at most **500px**) hide the masthead, credits and hint to give the scene room.
+
+## Controls and states
+
+The Kallak writing scene loops while its menu is displayed. **Start demo** dismisses the menu and exits that loop so the intro can continue. The button is disabled during dismissal. The logo and menu fade together over **400ms**, quantized into 12 steps; `prefers-reduced-motion: reduce` makes that dismissal immediate. This preference applies to the menu dismissal, not the original game's entire animation timeline.
+
+Clicking or tapping the scene skips the rest of the intro when the menu is absent. During gameplay, a click interacts with an item or sets a walking target. **Menu** restarts at the Kallak writing menu; **Replay intro** restarts the intro from its beginning. Neither control is a pause/resume action.
+
+Browser controls and settings sit below the scene. Settings exposes walk speed and replay; a collapsed **Developer tools** disclosure contains the walk mask, layer information, intro scene selector, walk animation interval and mask opacity. Keep these controls outside the scene rather than covering original artwork.
+
+Fullscreen is shown only when `document.fullscreenEnabled` is true. It targets the application container, follows `fullscreenchange`, and hides the control if a request fails. Fullscreen keeps controls available and hides the credits. A startup failure displays an alert and **Try again**, which restarts the intro.
+
+## Styling and accessibility
+
+`src/styles.css` owns the shared palette: dark ink and stone surfaces, muted purple edges, gold controls and pale text. The bundled `/assets/font/kyrandia.otf` is the primary typeface. Retain square corners, pixel imagery and beveled button borders; use the existing CSS variables instead of introducing another palette.
+
+Buttons and selects have at least **44px** height. The start button scales its type and height with the stage, with a 44px minimum. Keyboard focus has a visible outline; hover styling is limited to hover-capable devices. Settings reports its expanded state, the game hint uses a polite live region, and load errors use an alert. Preserve safe-area padding and the `viewport-fit=cover` viewport setting.
+
+## Verification
+
+The interface refinement was checked with **14 passing automated tests**, `npm run typecheck`, `npm run build`, and browser viewport checks at 1280×900, 390×844, 319×720 and 844×390. These checks are a snapshot, not a guarantee for subsequent changes.
+
+For future interface edits, check desktop, narrow portrait and short landscape layouts; verify the y=136 menu boundary, logo placement, usable start button, settings outside the canvas, reduced-motion dismissal and fullscreen availability. Exercise intro replay, menu return and startup retry when changing their handlers.
