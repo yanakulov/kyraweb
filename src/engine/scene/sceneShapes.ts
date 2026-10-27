@@ -1,13 +1,13 @@
 import { decodeBase64Bytes } from "../core/assets";
 import type { SceneShapesData, SceneSpriteDef } from "../core/types";
 
-export function buildSceneShapesCanvas(data: SceneShapesData): HTMLCanvasElement {
+export function buildSceneShapesCanvas(data: SceneShapesData, indexedPixels?: Uint8Array): HTMLCanvasElement {
   const width = data.width;
   const height = data.height;
-  if (!width || !height || !data.rawBase64) {
+  if (!width || !height || (!data.rawBase64 && !indexedPixels)) {
     throw new Error("Scene shapes data is invalid");
   }
-  const pixels = decodeBase64Bytes(data.rawBase64);
+  const pixels = indexedPixels ?? decodeBase64Bytes(data.rawBase64);
   const palette = data.palette;
   const canvas = document.createElement("canvas");
   canvas.width = width;

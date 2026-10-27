@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "assets:build": "node extractor/build_scene_packs.mjs",
+    "check:size": "node extractor/check_asset_budget.mjs",
     "dev": "vite",
     "test": "node tests/run.mjs",
     "typecheck": "vue-tsc --noEmit",

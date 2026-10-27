@@ -1,5 +1,9 @@
 import type { Vec2 } from "../core/types";
 
+export type IndexedIntroTrack = {
+  src: string; clip: string; indices: number[]; frameTimesMs: number[];
+  pos: Vec2; loopMs?: number;
+};
 export type IntroStep = {
   id: string;
   durationMs: number;
@@ -19,6 +23,8 @@ export type IntroStep = {
     loop?: boolean;
     pos?: Vec2;
   };
+  indexedFrames?: IndexedIntroTrack;
+  indexedBgFrames?: IndexedIntroTrack;
   bgFrames?: {
     src: string[];
     frameDurationMs: number;
@@ -37,7 +43,8 @@ export type IntroStep = {
   };
   sceneAnim?: {
     metaSrc: string;
-    shapesSrc: string;
+    shapesSrc?: string;
+    shapesPack?: { src: string; clip: string };
     animIndices?: number[];
   };
   demoLoopRange?: {

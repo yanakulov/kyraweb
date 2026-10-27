@@ -74,9 +74,9 @@ export function getDrawLayerFromTable(y: number, table: number[]) {
   return returnValue;
 }
 
-export function buildForegroundFrame(bg: HTMLImageElement, mask: MaskData, actorLayer: number): HTMLCanvasElement {
-  const bgData = getImageData(bg);
-  const bgPixels = bgData.data;
+export function buildForegroundFrame(bg: HTMLImageElement | HTMLCanvasElement, mask: MaskData, actorLayer: number, indexed?: { pixels: Uint8Array; palette: readonly number[] }): HTMLCanvasElement {
+  const bgData = indexed ? null : getImageData(bg);
+  const bgPixels = bgData?.data;
 
   const canvas = document.createElement("canvas");
   canvas.width = bg.width;
@@ -96,9 +96,10 @@ export function buildForegroundFrame(bg: HTMLImageElement, mask: MaskData, actor
       const layer = maskValue & 0x07;
       const idx = (y * bg.width + x) * 4;
       if (layer > actorLayer) {
-        data[idx] = bgPixels[idx];
-        data[idx + 1] = bgPixels[idx + 1];
-        data[idx + 2] = bgPixels[idx + 2];
+        const color = indexed ? indexed.pixels[y * bg.width + x] * 3 : 0;
+        data[idx] = indexed ? indexed.palette[color] : bgPixels![idx];
+        data[idx + 1] = indexed ? indexed.palette[color + 1] : bgPixels![idx + 1];
+        data[idx + 2] = indexed ? indexed.palette[color + 2] : bgPixels![idx + 2];
         data[idx + 3] = 255;
       } else {
         data[idx + 3] = 0;
@@ -141,7 +142,7 @@ function pointInPolygon(point: Vec2, polygon: Vec2[]) {
   return inside;
 }
 
-function getImageData(image: HTMLImageElement) {
+function getImageData(image: HTMLImageElement | HTMLCanvasElement) {
   const temp = document.createElement("canvas");
   temp.width = image.width;
   temp.height = image.height;
