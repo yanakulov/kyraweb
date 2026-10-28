@@ -7,6 +7,10 @@ const INVENTORY_ITEM_DEFS: Record<InventoryItemId, InventoryItem> = {
   letter: { id: "letter", name: "Letter", statusName: "письмо", tileIndex: 42 },
   ruby: { id: "ruby", name: "Ruby", statusName: "рубин", tileIndex: 0 },
   saw: { id: "saw", name: "Saw", statusName: "пила", tileIndex: 44 },
+  rose: { id: "rose", name: "Lavender rose", tileIndex: 16 },
+  silverRose: { id: "silverRose", name: "Silver rose", tileIndex: 19 },
+  marble: { id: "marble", name: "Marble", tileIndex: 43 },
+  teardrop: { id: "teardrop", name: "Teardrop", tileIndex: 52 },
   apple: { id: "apple", name: "Apple", statusName: "яблоко", tileIndex: 19 },
   appleEaten: { id: "appleEaten", name: "Apple (eaten)", statusName: "огрызок", tileIndex: 20 }
 };
@@ -25,11 +29,9 @@ const INVENTORY_SLOTS: InventorySlot[] = [
 ];
 
 export function buildInventoryItems(): Map<InventoryItemId, InventoryItem> {
-  return new Map<InventoryItemId, InventoryItem>([
-    ["letter", { ...INVENTORY_ITEM_DEFS.letter }],
-    ["ruby", { ...INVENTORY_ITEM_DEFS.ruby }],
-    ["saw", { ...INVENTORY_ITEM_DEFS.saw }]
-  ]);
+  const items = new Map<InventoryItemId, InventoryItem>(Object.values(INVENTORY_ITEM_DEFS).map(item => [item.id, { ...item }]));
+  for (let tileIndex=0;tileIndex<107;tileIndex++) { const id=`item-${tileIndex}` as InventoryItemId; items.set(id,{id,name:'Item',tileIndex}); }
+  return items;
 }
 
 export function initInventory(): (InventoryItemId | null)[] {

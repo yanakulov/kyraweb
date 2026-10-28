@@ -1,6 +1,6 @@
 # First forest region
 
-The first 17 DOS rooms are connected for exploration, up to the ruined bridge. This is navigation and persistent room state; the remaining NPC conversations, quests, bridge repair and areas beyond the bridge are not implemented here.
+The first forest region supports the original CD quest chain through the repaired bridge: Brynn’s note and enchanted rose, healing the willow, Merith’s chase and marble, the altar and amulet, and Herman’s saw and bridge repair. Room 24, CAVEB, is the landing beyond the bridge; its later-world west exit remains unavailable. Save files, later regions and audio are still outside this slice.
 
 | ID | Original resource | Location |
 | --- | --- | --- |
@@ -8,19 +8,20 @@ The first 17 DOS rooms are connected for exploration, up to the ruined bridge. T
 | 1 | GEM | Outside the home / upper lift |
 | 2 | HEALER | Inside the Temple |
 | 3 | EXTHEAL | Temple exterior |
-| 4 | SICKWIL | Rotting tree |
+| 4 | SICKWIL / WILLOW | Rotting / healed tree |
 | 5 | TRUNK | Lower lift |
 | 6 | ALTAR | Forest altar |
-| 7 | BROKEN | Ruined bridge in the cavern |
+| 7 | BROKEN / BRIDGE | Broken / repaired bridge |
 | 8 | SORROW | Pool of Sorrow |
 | 9 | CAVE | Cavern entrance |
-| 10 | XEDGEC | Rocky outcropping |
+| 10 | FNORTH | Dark forest |
 | 11 | FORESTB | Dark forest |
 | 12 | FORESTA | Dark forest |
-| 13 | XEDGE | Rocky outcropping |
+| 13 | XEDGE / XEDGEC | Herman’s work site |
 | 14 | ZROCK | Southern cliff |
 | 15 | NWCLIFB | Tall cliff |
-| 16 | FSOUTH | Dark forest |
+| 16 | FGOWEST | Dark forest |
+| 24 | CAVEB | Beyond the repaired bridge |
 
 Click the scene edges, doorways or lift to leave. An exit changes the desktop cursor's direction. Brandon walks to a reachable approach before the scene changes. The first attempt to leave home plays the original tree conversation, including when carrying an item. Returning home preserves its completion state.
 
@@ -34,7 +35,7 @@ npm run assets:world -- "C:\path\to\Legend of Kyrandia\DAT"
 
 Every room has a gzip indexed pack with its background and mask. Lift rooms also include DROPUP/DROPDOWN or LIFTUP/LIFTDOWN, using the original positions, frame order and 5/6-tick waits. `world.json` stores room metadata and source/output hashes. No raw PAK, APK, CPS, MSC, DAT, EMC or speech archives are published.
 
-The broken bridge's original west connection leads to room 24. This connection stays unavailable in this stage; no repaired bridge or invented crossing is introduced. Brandon's depth scale at the bridge follows the original integer 192→256 interpolation between y=56 and y=92.
+The original west connection to room 24 opens only after the quest scripts select BRIDGE. Giving Herman the saw alone is insufficient; obtaining the amulet and his progress at the work site determine when repair completes. Brandon's depth scale at the bridge follows the original integer 192→256 interpolation between y=56 and y=92.
 
 ## State and loading
 
@@ -46,4 +47,12 @@ Failed transitions keep the current room and inventory and allow another click t
 
 Node tests check approach routes across all room exits, RLE decoding and depth scale. `tests/browser/world.html` drives the actual renderer through all 17 rooms and back, including both lift directions. It checks held items, inventory, picked overlays, dropped items, tree completion, the closed bridge, a deliberately failed transition/retry and cancellation during loading. Its gallery captures the original scenes for visual inspection.
 
-The current complete build is about 1.67 MB. CI's 2,000,000-byte cap is a regression budget for this slice, not a size limit for the complete game.
+The complete build is about 2.6 MB. The 2,700,000-byte CI cap is a regression budget for this slice, not a full-game size target.
+
+## Quest scripts
+
+Run `npm run assets:world -- "C:\path\to\DAT"` followed by `npm run assets:forest -- "C:\path\to\DAT"` to rebuild the original data. The forest importer retains EMC code and strings, WSA frames, DAT sprites and VOC-derived durations. Runtime conditions read the current inventory and flags; playback applies changes at the corresponding action, so inspecting a script cannot prematurely consume an item.
+
+Brynn displays the original NOTEENG bitmap and waits for Continue. The home vase can store and return an item. Clicking the gap in the broken bridge plays Herman’s warning and waits for another scene click: retreat avoids the crossing; insisting plays the original fatal animation and offers a new game. No save or resurrection mechanic is invented.
+
+`tests/browser/forest.html` traverses the full quest with actual input, captures key scenes, and crosses the repaired bridge in both directions. A separate button tests the warning, retreat and fatal crossing on a fresh game. Node tests cover both quest orders, the original frame/palette hashes, all 14,144 sampled hotspot/item combinations, DAT operand lengths/loops, and confirmation cancellation.

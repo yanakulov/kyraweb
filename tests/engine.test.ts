@@ -1,4 +1,5 @@
 import test from "node:test";
+import './forest.test';
 import assert from "node:assert/strict";
 import { playIntro, frameAtTime } from "../src/engine/intro/player";
 import { buildIntroSteps } from "../src/engine/intro/steps";

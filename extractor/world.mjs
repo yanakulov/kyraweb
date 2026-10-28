@@ -14,12 +14,21 @@ export const REGION = [
   ['SICKWIL', null, 5, null, 14], ['TRUNK', null, 10, null, 4],
   ['ALTAR', null, 15, null, 11], ['BROKEN', null, 9, null, null],
   ['SORROW', null, 12, null, 10], ['CAVE', 13, null, null, 7],
-  ['XEDGEC', null, 8, null, 5], ['FORESTB', null, 6, 12, 16],
-  ['FORESTA', 11, 13, null, 8], ['XEDGE', 12, null, 9, null],
+  ['FNORTH', null, 8, null, 5], ['FORESTB', null, 6, 12, 16],
+  ['FORESTA', 11, null, 13, 8], ['XEDGE', 12, null, 9, null],
   ['ZROCK', 3, 4, null, null], ['NWCLIFB', null, null, null, 6],
-  ['FSOUTH', null, 11, null, null]
+  ['FGOWEST', null, 11, null, null]
 ];
 
+// ScummVM copyBackgroundBlock: restore the interleaved forest backdrop columns.
+export function restoreBackgroundColumns(pixels, blocks, height=128) {
+  if(blocks<1)return;
+  if(!(blocks&1))blocks++;
+  if(blocks===19)blocks=17;
+  const copy=pixels.slice();
+  for(let column=0;column<38;column++)for(let y=8;y<8+height;y++)
+    pixels.set(copy.subarray(y*320+8+column*8,y*320+16+column*8),y*320+8+((column+blocks)%38)*8);
+}
 export function decodeMask(bytes) {
   const b = Buffer.from(bytes), size = b.readUInt32LE(4), type = b.readUInt16LE(2), start = 10 + b.readUInt16LE(8);
   if (size !== 320 * 144 || ![0, 4].includes(type)) throw new Error('Expected DOS MSC mask');
@@ -71,8 +80,10 @@ export async function buildWorld(gameDir, outputDir = 'public/assets/world') {
   for (const [id, [name, ...exits]] of REGION.entries()) {
     const dat = decodeDat(get(`${name}.DAT`)), program = parseEmc(get(`${name}.EMC`));
     const shapes = [], regions = [], portals = [];
+    let scroll=0;
     let title = name;
     const host = (op, a, text) => {
+      if (op === 0x5b) scroll=a[0];
       if (op === 0x28) dat.actorScale = { fromY: a[0], fromScale: a[1], toY: a[2], toScale: a[3] };
       if (op === 4) return +[55, 57, 172, 243, 253].includes(a[0]);
       if (op === 0x3d) return Math.floor((a[0] + a[1]) / 2);
@@ -90,6 +101,7 @@ export async function buildWorld(gameDir, outputDir = 'public/assets/world') {
     const image = decodeCps(get(`${name}.CPS`), get('PALETTE.COL'));
     image.palette.splice(228 * 3, 60, ...Array.from(get(`${name}.DAT`).subarray(0x17, 0x17 + 60), x => x * 4));
     const mask = decodeMask(get(`${name}.MSC`));
+    restoreBackgroundColumns(image.pixels,scroll);restoreBackgroundColumns(mask.pixels,scroll,136);
     for (const r of regions) for (let y = Math.max(0, r.y); y < Math.min(mask.height, r.y + r.h); y++) for (let x = Math.max(0, r.x); x < Math.min(320, r.x + r.w); x++) {
       if (r.blocked) mask.pixels[y * 320 + x] |= 128; else mask.pixels[y * 320 + x] &= 127;
     }

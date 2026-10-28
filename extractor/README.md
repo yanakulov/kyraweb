@@ -78,3 +78,7 @@ python extractor\emc_text_to_json.py original_files\_NPC.EMC extracted_files\emc
 ## What can be committed
 
 Decompiled JSON and generated, lossless browser packs may be committed. Original/raw binary game files and intermediate unpacked data stay local and are Git-ignored. The pack manifest records source hashes for reproducibility.
+
+## Forest quests
+
+After assets:world, run `npm run assets:forest -- "C:\path\to\DAT"`. This imports original quest EMC, WSA, DAT/CPS/MSC and VOC-derived timing into indexed browser packs and a compact runtime manifest. Verification hashes are written to `tests/fixtures/forest-pixels.json.gz`, outside the public build. Raw game archives stay local.

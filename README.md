@@ -20,6 +20,8 @@
 - Intro demo loop on the writing scene with interactive UI overlay
 - Compact indexed graphics, streamed intro scenes, WebGL2 palette rendering and Canvas fallback
 - Original tree-lift opening and discovery of Kallak, followed by the complete 29-line tree conversation with original animations and text (without CD audio)
+- Original forest quests with Brynn, Merith and Herman: enchanted rose, healed willow, amulet and bridge repair
+- Restrained pixel stone interface with touch-sized controls
 - Exploration of the first 17-room forest region, including the cavern entrance and ruined bridge, with original masks, lift travel and persistent room/inventory state
 
 ## Planned

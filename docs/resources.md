@@ -32,7 +32,7 @@ The optional **Window dust** effect draws twelve faint logical-pixel motes. It d
 
 `tests/fixtures/intro-pixels.json` records visible RGBA hashes from the previous lossless PNG exports. Tests check every migrated frame and backwards seeks against those hashes, plus malformed packs, original compression operations and asynchronous playback. Browser checks at `tests/browser/rendering.html` compare GPU/2D pixels, palette replacement, context loss and room rendering with Canvas readback forbidden, then load all nine intro steps. `tests/browser/recovery.html` deliberately fails the first pack request with HTTP 503 so the real application's error and **Try again** recovery can be checked.
 
-The production build currently has a **2,000,000-byte regression budget**, including code and all public resources. CI checks it after building. This budget covers the intro, opening and first 17-room forest region; it is not a limit for the complete game. Expand it with measured content additions. Source/decompiler metadata for unimplemented rooms stays under `extracted_files/`, outside the published build. Sound and voice will need their own budgets.
+The production build currently has a **2,700,000-byte regression budget**, including code and all public resources. CI checks it after building. This budget covers the intro, opening and first-forest quest chain through bridge repair; it is not a limit for the complete game. Expand it with measured content additions. Source/decompiler metadata for unimplemented rooms stays under `extracted_files/`, outside the published build. Sound and voice will need their own budgets.
 
 ## Original game opening
 

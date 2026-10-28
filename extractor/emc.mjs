@@ -60,7 +60,7 @@ export function runEmc(program, fn, syscall, registers = {}, limit = 100000) {
       case 11: { const v = pop(); stack[bp + p - 1] = v; break; }
       case 12: sp += p; break;
       case 13: sp -= p; break;
-      case 14: ret = int16(syscall(p & 255, Array.from(stack.subarray(sp)), program.strings) ?? 0); break;
+      case 14: ret = int16(syscall(p & 255, Array.from(stack.subarray(sp)), program.strings, regs) ?? 0); break;
       case 15: if (!pop()) ip = p & 0x7fff; break;
       case 16: stack[sp] = p === 0 ? +!read(sp) : p === 1 ? -read(sp) : ~read(sp); break;
       case 17: {

@@ -4,6 +4,7 @@ import { IndexedClip, loadScenePack } from "../resources/scenePack";
 import { isWalkable } from "../scene/masks";
 import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneMeta, Vec2 } from "../core/types";
 import type { RoomAction } from "./roomScript";
+import { createForestState, traceForest, applyForestState, loadForestData } from './forest';
 
 export const SIDES = ["north", "east", "south", "west"] as const;
 export type WorldRoom = SceneMeta & { id: number; name: string; title: string; exits: (number | null)[];
@@ -38,7 +39,7 @@ export function roomPortals(room: WorldRoom, mask: MaskData): RoomPortal[] {
   }
   if (room.id === 5) portals.unshift({ id: "lift", target: 1, side: "north", rect: { x: 235, y: 8, w: 66, h: 107 }, point: nearestFloor(mask, { x: 264, y: 108 }) });
   if (room.id === 1) portals.unshift({ id: "lift", target: 5, side: "south", rect: { x: 232, y: 96, w: 40, h: 40 }, point: nearestFloor(mask, { x: 216, y: 106 }) });
-  return portals.filter(p => p.target !== null && p.target >= 0 && p.target < 17);
+  return portals.filter(p => p.target !== null && p.target >= 0 && (p.target < 17 || p.target === 24));
 }
 
 const lift = (clip: string, x: number, y: number, ticks: number): RoomAction[] => [
@@ -54,6 +55,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   const response = await fetch(config.world!, { signal: config.signal });
   if (!response.ok) throw new Error(`Failed to load world (${response.status})`);
   const { rooms } = await response.json() as { rooms: WorldRoom[] };
+  const forest=await loadForestData(withBase('assets/forest/forest.json.gz'),config.signal);
+  const quest=createForestState();
   let active = true, busy = false, currentId = 0, current: RoomGame;
   let tokenCounter = 0, callbackOwner = 0;
   const saved = new Map<number, RoomSnapshot>();
@@ -61,21 +64,43 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     debug: {} as Parameters<RoomGame["setDebug"]>[0] };
 
   async function load(id: number, from?: RoomPortal, previous?: number) {
-    const meta = rooms.find(r => r.id === id);
+    const original=rooms.find(r=>r.id===id);
+    const questRoom=forest.rooms[quest.files[id]??(id===24?'CAVEB':original?.name??'')];
+    const meta = questRoom ?? original;
     if (!meta) throw new Error(`Unknown room ${id}`);
-    const src = withBase(`assets/world/${id}.kyr.gz`), pack = await loadScenePack(src, config.signal);
+    const src = withBase(questRoom?`assets/forest/${questRoom.name.toLowerCase()}.kyr.gz`:`assets/world/${id}.kyr.gz`), pack = await loadScenePack(src, config.signal);
     config.signal?.throwIfAborted();
     const clip = new IndexedClip(pack, pack.clips.mask);
     const mask = { width: clip.info.width, height: clip.info.height, pixels: Array.from(clip.frame(0)) };
     const opposite = from ? SIDES[(SIDES.indexOf(from.side) + 2) % 4] : "south";
-    const arrival = nearestFloor(mask, from?.entry ?? meta.entrances[opposite]);
+    let arrival = nearestFloor(mask, from?.entry ?? meta.entrances[opposite]);
     const state = saved.get(id), shared = current?.getSnapshot();
     const resume = state ?? { pos: arrival, inventorySlots: [], itemInHand: null, sceneItems: [], overlays: [], treeSpoken: false };
     // Keep room props local, and carry the same inventory and held item through every exit.
     const continued = shared ? { ...resume, inventorySlots: shared.inventorySlots, itemInHand: shared.itemInHand } : state;
+    const planned={flags:new Set(quest.flags),files:{...quest.files},herman:{...quest.herman},merith:{...quest.merith},phasing:quest.phasing,vase:quest.vase};
+    let setupActions:RoomAction[]=[];
+    const facing=from?({north:0,east:3,south:4,west:5}[from.side]):5;
+    const snapshot={...resume,...continued,pos:arrival,facing};
+    if(questRoom){
+      setupActions=traceForest(questRoom,0,planned,snapshot).actions;
+      for(const action of setupActions){
+        applyForestState(planned,action);
+        if(action.op==='mask')for(let y=Math.max(0,action.y);y<Math.min(mask.height,action.y+action.h);y++)for(let x=Math.max(0,action.x);x<Math.min(mask.width,action.x+action.w);x++){
+          const i=y*mask.width+x;mask.pixels[i]=action.blocked?mask.pixels[i]|128:mask.pixels[i]&127;
+        }
+      }
+      arrival=nearestFloor(mask,from?.entry??meta.entrances[opposite]);snapshot.pos=arrival;
+      setupActions.unshift({op:'npc',character:2,...quest.herman,visible:quest.herman.room===id},{op:'npc',character:1,...quest.merith,visible:quest.merith.room===id});
+    }
     let entryActions: RoomAction[] | undefined;
     if (previous === 1 && id === 5) entryActions = [...lift("dropdown", 232, 8, 6), { op: "actor", x: 280, y: 116, facing: 3, visible: true }];
     if (previous === 5 && id === 1) entryActions = [...lift("liftup", 192, 56, 5), { op: "actor", x: 208, y: 110, facing: 5, visible: true }];
+    if(questRoom && id!==0){
+      const announce=traceForest(questRoom,2,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions;
+      for(const action of announce)applyForestState(planned,action);
+      entryActions=[...(entryActions??[]),...announce,...traceForest(questRoom,3,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions];
+    }
     const token = ++tokenCounter, oldOwner = callbackOwner;
     callbackOwner = token;
     let game: RoomGame;
@@ -83,11 +108,25 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       scene: { ...config.scene, name: meta.title, indexedBackground: { src, clip: "room" }, maskClip: "mask",
         indexedUi: { src: withBase("assets/packs/kallak-room.kyr.gz"), clip: "hud" }, meta, emc: { sceneAnimShapes: meta.shapes }, actorScale: meta.actorScale,
         opening: id === 0 ? config.scene.opening : undefined, items: id === 0 ? config.scene.items : [],
-        overlays: id === 0 ? config.scene.overlays : [], sceneMetaSrc: undefined, sceneEmcSrc: undefined, maskSrc: undefined },
-      resume: continued, entry: from ? { ...arrival, facing: SIDES.indexOf(from.side) * 2 } : undefined,
-      playOpening: !from && config.playOpening !== false, entryActions, portals: roomPortals(meta, mask),
+        overlays: id === 0 && !questRoom ? config.scene.overlays : [], sceneMetaSrc: undefined, sceneEmcSrc: undefined, maskSrc: undefined },
+      resume: continued, entry: from ? { ...arrival, facing } : undefined,
+      playOpening: !from && config.playOpening !== false, entryActions, setupActions, amulet:quest.flags.has(45), npcFrames:questRoom?.npcFrames, portals: roomPortals(meta, mask),
+      onScriptAction: action=>applyForestState(quest,action),
+      onInteract: questRoom?(point,snapshot)=>{
+        if(snapshot.treeSpoken)quest.flags.add(53);
+        const result=traceForest(questRoom,1,quest,snapshot,point,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask));
+        return result.handled?result.actions:null;
+      }:undefined,
+      onDeath:()=>{if(active&&callbackOwner===token)config.onDeath?.();},
+      onContinueChange:value=>{if(active&&callbackOwner===token)config.onContinueChange?.(value);},
       onExit: portal => void exit(portal),
-      onSequenceChange: value => { if (active && callbackOwner === token) config.onSequenceChange?.(value); },
+      onSequenceChange: value => { if (active && callbackOwner === token) {
+        config.onSequenceChange?.(value);
+        if(!value && current && quest.files[id] && quest.files[id]!==meta.name) {
+          const pos=current.getSnapshot().pos;
+          queueMicrotask(()=>{if(active&&!busy)exit({id:'phase',target:id,side:'south',rect:{x:0,y:0,w:0,h:0},point:pos,entry:pos});});
+        }
+      } },
       onSubtitleChange: lines => { if (active && callbackOwner === token) config.onSubtitleChange?.(lines); }
     }); } catch (error) { callbackOwner = oldOwner; throw error; }
     game.setAtmosphere(settings.atmosphere); game.setWalkSpeed(settings.walkSpeed);
@@ -115,7 +154,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   function exit(portal: RoomPortal) {
     if (busy || !active) return;
     busy = true;
-    if (currentId === 1 && portal.target === 5) current.runSequence(lift("liftdown", 192, 56, 5), () => void navigate(portal));
+    if(portal.id==='script')void navigate(portal);
+    else if (currentId === 1 && portal.target === 5) current.runSequence(lift("liftdown", 192, 56, 5), () => void navigate(portal));
     else if (currentId === 5 && portal.target === 1) current.runSequence(lift("dropup", 232, 8, 6), () => void navigate(portal));
     else void navigate(portal);
   }
