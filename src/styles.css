@@ -21,6 +21,8 @@
 }
 
 * { box-sizing: border-box; }
+html { overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+button, canvas { -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 
 body {
   margin: 0;
@@ -86,7 +88,8 @@ body {
   height: 100%;
   display: block;
   image-rendering: pixelated;
-  touch-action: manipulation;
+  /* A finger aims inside the scene; two fingers can still zoom the page. */
+  touch-action: pinch-zoom;
 }
 
 .intro-logo {
@@ -154,7 +157,7 @@ button, select, summary { cursor: pointer; }
 }
 .continue-button { position:absolute; z-index:4; bottom:4%; left:50%; transform:translateX(-50%); }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .pixel-button:hover { background: #514365; color: #fff3d2; }
   .text-button:hover { background: var(--stone); color: #fff3d2; }
   a:hover { color: #fff3d2; }
@@ -193,6 +196,28 @@ button:disabled { cursor: default; }
 }
 
 .text-button[aria-expanded="true"] { background: var(--stone); color: var(--paper); }
+.text-button[aria-pressed="true"] { color: var(--paper); border-color: var(--gold); }
+
+.exit-markers { position: absolute; inset: 0; pointer-events: none; }
+.exit-marker {
+  position: absolute; transform: translate(-50%, -50%); width: 44px; height: 44px;
+  display: grid; place-items: center; padding: 9px; border: 0; background: transparent;
+  opacity: 0; pointer-events: none;
+}
+.exit-marker svg { width: 26px; height: 26px; fill: #ffe39a; stroke: #211823; stroke-width: 0.8; paint-order: stroke; shape-rendering: crispEdges; }
+.exit-marker.hovered, .exit-marker:focus-visible, .show-exits .exit-marker { opacity: 1; }
+.show-exits .exit-marker, .exit-marker:focus-visible { pointer-events: auto; }
+.exit-marker:active svg { fill: #fff; }
+.touch-inventory { margin-top: 8px; padding: 10px; background: #242337 url('/assets/interface/stone.svg'); border: 2px ridge #756c86; }
+.touch-inventory p { font-size: 11px; line-height: 1.6; margin: 0 0 8px; }
+.inventory-grid { display: grid; grid-template-columns: repeat(5, minmax(44px, 1fr)); gap: 6px; }
+.inventory-slot { min-height: 48px; display: grid; place-items: center; border: 2px ridge #756c86; background: #0c1114; }
+.inventory-slot:active { border-color: #f5d88f; }
+.inventory-slot:disabled { opacity: .5; }
+.item-icon { width: 32px; height: 32px; background-image: url('/assets/inventory/items.png'); background-size: 640px auto; image-rendering: pixelated; pointer-events: none; }
+@media (any-pointer: coarse) {
+  .setting-field select { font-size: 16px; }
+}
 
 .settings {
   margin-top: 10px;

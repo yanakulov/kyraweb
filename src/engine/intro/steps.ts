@@ -96,7 +96,8 @@ export function buildIntroSteps(): IntroStep[] {
       overlayFrames: {
         src: writing.tracks.kallak.hand.map(([, frame]) => frame < 0 ? "" : withBase(`assets/intro/hand${frame}.png`)),
         frameTimesMs: writing.tracks.kallak.hand.map(([ms]) => ms),
-        positions: writing.tracks.kallak.hand.map(([, , x, y]) => ({ x: 92 + x - 149, y: 20 + y - 32 })),
+        // Original sequence places the movie at y=16; our intro viewport starts at 8.
+        positions: writing.tracks.kallak.hand.map(([, , x, y]) => ({ x, y: y - 8 })),
         frameDurationMs: 1000 / 60
       },
       subtitles: timelineSubtitles(writing.subtitles)

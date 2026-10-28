@@ -25,6 +25,7 @@ import { IndexedClip, loadScenePack } from "../resources/scenePack";
 import { RoomScript, type OpeningScript, type RoomAction } from "./roomScript";
 import { brandonTalkHead, actorScaleAt } from "../characters/brandonFrames";
 import { startWorldGame } from "./world";
+import { portalAtPoint } from "./navigation";
 import type { DropAnim, GameConfig, InventoryItemId, SceneItem, SceneOverlayState, Vec2 } from "../core/types";
 
 export type RoomGame = Awaited<ReturnType<typeof startRoom>>;
@@ -255,7 +256,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (backgroundName === "room" && spriteDefMap && sceneAnims.length) {
         drawSceneAnims(ctx, sceneShapesImage, spriteDefMap, sceneAnims);
       }
-      if (spriteDefMap) drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, questShapes);
+      if (backgroundName === "room" && spriteDefMap) drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, questShapes);
+      // FACE movies contain an opaque rectangle of the room, not just the mouth.
+      // Composite them behind Brandon while he approaches the speaking tree.
+      for (const [name, layer] of scriptLayers) if (name === "face" || name === "face2") ctx.drawImage(layer.image, layer.x, layer.y);
 
       for (const npc of npcs.values()) { if (!npc.visible || npc.character===2&&(scriptLayers.has("advice")||scriptLayers.has("balance2"))) continue;
         const scale=actorScaleAt(npc.y,scene.actorScale);
@@ -322,12 +326,24 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           fg = buildForegroundFrame(bg, mask, actorLayer, packedBackground ? {
             pixels: packedBackground.clip.frame(0), palette: roomPalette!
           } : undefined);
+          // Occlusion restores the current decorated background, not the bare CPS.
+          // Otherwise a high-priority table erases the note and saw drawn on it.
+          const foregroundContext = fg.getContext('2d')!;
+          foregroundContext.globalCompositeOperation = 'source-atop';
+          if (spriteDefMap) {
+            drawSceneAnimShapes(foregroundContext, sceneShapesImage, spriteDefMap, filteredSceneAnimShapes);
+            drawSceneOverlays(foregroundContext, sceneShapesImage, spriteDefMap, state.overlays);
+          }
+          for (const layer of permanentLayers.values()) foregroundContext.drawImage(layer.image, layer.x, layer.y);
+          if (spriteDefMap) drawSceneAnimShapes(foregroundContext, sceneShapesImage, spriteDefMap, questShapes);
+          for (const [name, layer] of scriptLayers) if (name === 'face' || name === 'face2') foregroundContext.drawImage(layer.image, layer.x, layer.y);
+          foregroundContext.globalCompositeOperation = 'source-over';
           foregroundFrames.set(actorLayer, fg);
         }
         if (fg) ctx.drawImage(fg, 0, 0);
       }
       if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
-      for (const layer of scriptLayers.values()) ctx.drawImage(layer.image, layer.x, layer.y);
+      for (const [name, layer] of scriptLayers) if (name !== "face" && name !== "face2") ctx.drawImage(layer.image, layer.x, layer.y);
 
       if (scene.opening && backgroundName === "room" && packedBackground && atmosphere && !reducedMotion?.matches) drawKallakAtmosphere(ctx, lastTime);
       ctx.restore();
@@ -456,13 +472,14 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function setPointer(point: Vec2 | null) {
       state.pointer = point;
-      const portal = !sequence && point && config.portals?.find(p => point.x >= p.rect.x && point.x < p.rect.x + p.rect.w && point.y >= p.rect.y && point.y < p.rect.y + p.rect.h);
-      if (canvas.style) canvas.style.cursor = portal ? `${portal.side[0]}-resize` : "default";
+      const portal = !sequence && portalAtPoint(config.portals ?? [], point);
+      if (canvas.style) canvas.style.cursor = portal ? "pointer" : "default";
     }
 
     function handleClick(point: Vec2) {
       if (sequence?.awaiting) { sequence.confirm(point); config.onContinueChange?.(false); return true; }
-      if (sequence || dead) return true;
+      if (sequence) { sequence.skipLine(); return true; }
+      if (dead) return true;
       if (state.drops.length) return true;
       // The original first conversation intercepts the south exit. Also let a
       // direct click on the trunk initiate it, which works well with touch input.
@@ -473,7 +490,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         playScript(openingScript.tree);
         return true;
       }
-      const portal = config.portals?.find(p => point.x >= p.rect.x && point.x < p.rect.x + p.rect.w && point.y >= p.rect.y && point.y < p.rect.y + p.rect.h);
+      const portal = portalAtPoint(config.portals ?? [], point);
       if (portal) {
         setTarget(portal.point);
         if (state.target || (Math.abs(state.pos.x - portal.point.x) <= 4 && Math.abs(state.pos.y - portal.point.y) <= 2)) pendingPortal = portal;
@@ -552,6 +569,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function pickOverlayItem(overlay: SceneOverlayState) {
       if (!overlay.active) return;
+      foregroundFrames.clear();
       state.itemInHand = overlay.id;
       setStatusMessage(`Взял ${getItemStatusName(overlay.id)}`);
       if (overlay.replaceShape !== undefined) {
@@ -609,9 +627,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         case 'npc':npcs.set(action.character,action);break;
         case 'hand':state.itemInHand=action.item;break;
         case 'item':state.sceneItems.push({id:action.item,x:action.x,y:action.y});break;
-        case 'shape':questShapes.push(action);break;
+        case 'shape':questShapes.push(action);foregroundFrames.clear();break;
         case 'noDrop':noDropRegions.push(action);break;
         case 'mask':
+          foregroundFrames.clear();
           if(mask)for(let y=Math.max(0,action.y);y<Math.min(mask.height,action.y+action.h);y++)for(let x=Math.max(0,action.x);x<Math.min(mask.width,action.x+action.w);x++){
             const i=y*mask.width+x;mask.pixels[i]=action.blocked?mask.pixels[i]|128:mask.pixels[i]&127;
           }break;
@@ -643,6 +662,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           const animation = scriptRenderers.get(action.clip);
           if (!animation) throw new Error(`Missing script animation ${action.clip}`);
           const pixels=animation.clip.frame(action.index);
+          if(action.permanent || action.clip === 'face' || action.clip === 'face2') foregroundFrames.clear();
           if(action.permanent)permanentLayers.set(action.clip,{image:buildIndexedCanvas(animation.clip.info,pixels),x:action.x,y:action.y});
           else {scriptLayers.delete(action.clip);scriptLayers.set(action.clip, { image: animation.renderer.render(pixels), x: action.x, y: action.y });}
           if (["brantree", "touch", "brynn1", "brynn2", "brynn3", "raindrop", "wow", "tag", "agile", "balance2"].includes(action.clip)) actorVisible = false;
@@ -650,6 +670,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         }
         case "close":
           scriptLayers.delete(action.clip);
+          if(action.clip === 'face' || action.clip === 'face2') foregroundFrames.clear();
           if (["brantree", "touch", "brynn1", "brynn2", "brynn3", "raindrop", "wow", "tag", "agile", "balance2"].includes(action.clip)) actorVisible = true;
           break;
         case "say": {
@@ -693,7 +714,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     return { setTarget, stop, setDebug, setPointer, setWalkSpeed, setAnimStepInterval, handleClick,
       setAtmosphere: (enabled: boolean) => { atmosphere = enabled; },
       runSequence: playScript,
-      getSnapshot };
+      getSnapshot, getPortals: () => !sequence && !dead && backgroundName === "room" ? config.portals ?? [] : [] };
   } catch (error) {
     for (const value of scriptRenderers.values()) value.renderer.dispose();
     packedBackground?.dispose();

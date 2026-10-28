@@ -171,6 +171,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     setDebug: debug => { settings.debug = debug; current.setDebug(debug); },
     runSequence: (actions, done) => current.runSequence(actions, done),
     getSnapshot: () => current.getSnapshot(),
+    getPortals: () => busy ? [] : current.getPortals(),
     stop: () => { active = false; external?.removeEventListener("abort", abort); controller.abort(); current.stop(); }
   };
 }

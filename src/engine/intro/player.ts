@@ -23,6 +23,7 @@ export function playIntro(
   const ctx = canvas.getContext("2d");
   if (!ctx) {
     return {
+      skipLine: () => {},
       skip: () => {},
       stop: () => {},
       setDemoLoopStep: () => {},
@@ -68,6 +69,7 @@ export function playIntro(
   let animationFrame = 0;
   let demoLoopStepId: string | null = null;
   let demoExitRequested = false;
+  let skipLine = () => {};
   let resolveDone: (() => void) | null = null;
   let rejectDone: ((error: unknown) => void) | null = null;
   const done = new Promise<void>((resolve, reject) => {
@@ -96,6 +98,12 @@ export function playIntro(
       let loadingSince: number | null = null;
       let stepIndex = 0;
       let stepStart = performance.now();
+      skipLine = () => {
+        if (!running || loadingSince !== null || steps[stepIndex]?.id === demoLoopStepId) return;
+        const elapsed = performance.now() - stepStart;
+        const line = steps[stepIndex]?.subtitles?.find(line => elapsed >= line.startMs && elapsed < line.endMs);
+        if (line) stepStart -= line.endMs - elapsed;
+      };
       let activeSceneAnim: {
         anims: SceneAnimState[];
         spriteDefMap: Map<number, SceneSpriteDef>;
@@ -429,6 +437,7 @@ export function playIntro(
   }
 
   return {
+    skipLine: () => skipLine(),
     skip: finish,
     stop: finish,
     setDemoLoopStep: (id: string | null) => {

@@ -56,3 +56,11 @@ Run `npm run assets:world -- "C:\path\to\DAT"` followed by `npm run assets:fores
 Brynn displays the original NOTEENG bitmap and waits for Continue. The home vase can store and return an item. Clicking the gap in the broken bridge plays Herman’s warning and waits for another scene click: retreat avoids the crossing; insisting plays the original fatal animation and offers a new game. No save or resurrection mechanic is invented.
 
 `tests/browser/forest.html` traverses the full quest with actual input, captures key scenes, and crosses the repaired bridge in both directions. A separate button tests the warning, retreat and fatal crossing on a fresh game. Node tests cover both quest orders, the original frame/palette hashes, all 14,144 sampled hotspot/item combinations, DAT operand lengths/loops, and confirmation cancellation.
+
+## Pointer and touch controls
+
+Hover over an exit to see its directional arrow. Exits keeps all available arrows visible; this starts enabled on a coarse-pointer device. Arrow buttons trigger the same doorway/edge action as clicking the scene, including the first tree conversation before leaving home.
+
+Inventory opens a larger five-by-two grid that shares the original HUD slots. Select a carried item, tap its destination in the scene, or tap an empty slot to put it away. Clicking during dialogue dismisses only the current line's speech wait; scripted animation and walking continue, and confirmation choices remain explicit. In the intro, a click advances to the end of the current subtitle without skipping the rest of the cutscene.
+
+`tests/browser/controls.html` runs the actual Vue application with visible clock controls for repeatable UI checks. `tests/browser/opening.html` checks the home prop pixels and the tree/actor draw order as well as the full conversation. Touch-specific browser gestures still require verification on physical hardware.
