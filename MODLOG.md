@@ -36,3 +36,16 @@ Runtime `RoomScript` holds input until scripted walks and frame/text waits finis
 - FORESTA.CPS uses compression 3; all region MSCs are LCW 320×144 masks. Each background's local colors still come from DAT `0x17`.
 - BROKEN requests scale `(56,192,92,256)` and its initial NEEDSAW1 frame at `(200,47)`. HEALER requests BRINENTR frame 0 at `(8,56)`. Initial stills are retained; NPC quest logic is not fabricated.
 - Room snapshots preserve inventory, held/loose items, letter/saw overlays and tree completion through navigation. See [world documentation](docs/world.md) for scope, importer and browser verification.
+
+# First forest quests — 2026-10-29
+
+- Runtime EMC host operations play the first-forest CD scripts against shared flags, inventory and NPC state. Text, voice lengths and WSA frame commands come from the installed GOG resources; speech audio remains unshipped.
+- Home note pickup must set flag 242 before Brynn accepts it. Brynn’s note is the original NOTEENG bitmap. Rose 16 becomes silver rose 19; teardrop 52 heals room 4 to WILLOW; WILLOW function 2 launches Merith’s chase.
+- Corrected room-table mistakes from the navigation slice: room 10 uses FNORTH (filename 84), room 16 uses FGOWEST (86), and FORESTA’s path to room 13 is south. FORESTB uses the original 17-column background/mask restoration. These are required for flags 66 → 67 → 68 → 69 → 83 and the marble scene.
+- Merith leaves marble 43. The altar consumes it, then silver rose 19, and plays AMULET.WSA. Herman accepts saw 44, sets flag 56 and leaves; XEDGE sets 8. The altar or FORESTA applies the original repair conditions (amulet 45 plus saw/work progress), selects BRIDGE and XEDGEC, and sets flag 7. The bridge opens room 24 and permits a return trip.
+- DAT state distinguishes stopping the script from hiding its last sprite. Fixed FF90/FF91 operand length, coordinate updates, loops, random delays, actor commands, and internal visibility. Permanent WSA backgrounds draw before active sprites, preserving Brynn’s head and Herman’s sawing animation.
+- Palette effects use the DOS special palette tables from ScummVM lok_dos.h (GPL-3.0-or-later); the pixel path remains indexed. NPC walking uses the existing LoK pathfinder and original movement delays.
+- The bridge warning suspends at the original input instruction. Confirmation replays only VM computation from an isolated snapshot, discards already-played actions, and branches on the real click. The fatal BALANCE2 sequence stops input and allows a new game. AGILE requests frame 17 despite having 17 frames; like [ScummVM displayFrame](https://github.com/scummvm/scummvm/blob/master/engines/kyra/graphics/wsamovie.cpp), this retains the prior image and advances only the requested wait.
+- Source and frame hashes live in tests/fixtures/forest-pixels.json.gz, outside the published build. forest.json.gz contains only runtime metadata. The loader accepts compressed bytes and transparent HTTP decompression.
+- UI uses a quiet pixel stone border, small gems, original logo and touch-sized controls. No image smoothing or generated replacement art is applied to the game.
+- This is a bounded first-region implementation, not a complete Kyra engine. Later quest opcodes, full audio, later-world navigation and saves are not covered.

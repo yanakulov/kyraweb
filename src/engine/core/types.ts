@@ -11,6 +11,13 @@ export type GameConfig = {
   resume?: RoomSnapshot;
   playOpening?: boolean;
   entryActions?: import("../gameplay/roomScript").RoomAction[];
+  setupActions?: import("../gameplay/roomScript").RoomAction[];
+  onInteract?: (point: Vec2, snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[] | null;
+  onScriptAction?: (action: import("../gameplay/roomScript").RoomAction) => void;
+  onDeath?:()=>void;
+  onContinueChange?: (waiting: boolean) => void;
+  npcFrames?: Record<number, { xOffset: number; yOffset: number }>;
+  amulet?: boolean;
   portals?: RoomPortal[];
   onExit?: (portal: RoomPortal) => void;
   onLoadingChange?: (loading: boolean) => void;
@@ -22,7 +29,7 @@ export type GameConfig = {
 
 export type RoomPortal = { id: string; target: number; side: "north" | "east" | "south" | "west";
   rect: { x: number; y: number; w: number; h: number }; point: Vec2; entry?: Vec2 | null };
-export type RoomSnapshot = { pos: Vec2; inventorySlots: (InventoryItemId | null)[]; itemInHand: InventoryItemId | null;
+export type RoomSnapshot = { pos: Vec2; facing?: number; inventorySlots: (InventoryItemId | null)[]; itemInHand: InventoryItemId | null;
   sceneItems: SceneItem[]; overlays: SceneOverlayState[]; treeSpoken: boolean };
 
 export type MaskData = {
@@ -104,6 +111,7 @@ export type SceneOverlayState = {
 };
 
 export type SceneAnimState = {
+  visible: boolean;
   sprite: number;
   x: number;
   y: number;
@@ -114,9 +122,12 @@ export type SceneAnimState = {
   script: number[];
   ip: number;
   nextRun: number;
+  lastRefresh: number;
+  loopsLeft: number;
+  loopStart: number;
 };
 
-export type InventoryItemId = "letter" | "ruby" | "saw" | "apple" | "appleEaten";
+export type InventoryItemId = "letter" | "ruby" | "saw" | "apple" | "appleEaten" | "rose" | "silverRose" | "marble" | "teardrop" | `item-${number}`;
 
 export type InventoryItem = {
   id: InventoryItemId;

@@ -1,7 +1,7 @@
 <template>
   <main class="app" ref="appRef">
     <header class="masthead">
-      <h1>Kyrandia</h1>
+      <h1><img src="/assets/interface/HUD/game-logo.png" alt="The Legend of Kyrandia" width="582" height="148" /></h1>
       <span>Book One · Web remake</span>
     </header>
     <div class="game-frame">
@@ -21,6 +21,7 @@
           @mousemove="handleMove"
           @mouseleave="handleLeave"
         ></canvas>
+        <button v-if="awaitingContinue" class="pixel-button continue-button" type="button" @click="game?.handleClick({ x: 160, y: 100 })">Continue</button>
         <template v-if="introPanelVisible">
           <img
             class="intro-logo"
@@ -141,12 +142,15 @@ const subtitleLines = ref([] as import('./engine/intro/types').IntroSubtitle[]);
 const subtitleAlpha = ref(1);
 const subtitleVisible = computed(() => subtitleLines.value.length > 0);
 const sequenceActive = ref(false);
+const awaitingContinue = ref(false);
 const locationName = ref("");
 const navigationError = ref("");
 const subtitleScale = ref(1);
 
 
 const config = {
+  onDeath: () => { gameError.value = "Brandon has died. Start a new journey."; },
+  onContinueChange: (waiting: boolean) => { awaitingContinue.value = waiting; },
   scene: gemCutScene,
   world: import.meta.env.BASE_URL + "assets/world/world.json",
   onLocationChange: (name: string) => { locationName.value = name; },

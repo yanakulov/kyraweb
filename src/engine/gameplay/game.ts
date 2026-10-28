@@ -100,10 +100,37 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       scriptRenderers.set(name, { clip: new IndexedClip(openingPack, info), renderer: new IndexedRenderer(info, false) });
     }
     const scriptLayers = new Map<string, { image: HTMLCanvasElement; x: number; y: number }>();
+    const permanentLayers = new Map<string, { image: HTMLCanvasElement; x: number; y: number }>();
+    const questShapes: {shape:number;x:number;y:number;flags:number}[] = [];
+    const noDropRegions: {x:number;y:number;w:number;h:number}[] = [];
+    const npcs = new Map<number,Extract<RoomAction,{op:'npc'}>>();
+    let speaker = 0;
+    let hasAmulet=config.amulet??false;
+    let dead=false;
+    const roomPalette=packedBackground?.clip.info.palette.slice();
+    let paletteFade:{from:number[];to:number[];ms:number;age:number;step:number}|null=null;
+    function updatePalette(ms:number){
+      if(!paletteFade||!roomPalette||!packedBackground)return;
+      const fade=paletteFade;fade.age+=ms;
+      const max=Math.max(...fade.to.map((v,i)=>Math.abs(v-fade.from[i])));
+      const step=fade.ms?Math.min(max,Math.floor(max*Math.min(1,fade.age/fade.ms)/4)*4):max;
+      if(step===fade.step)return;fade.step=step;
+      for(let i=0;i<roomPalette.length;i++)roomPalette[i]=fade.from[i]+Math.sign(fade.to[i]-fade.from[i])*Math.min(step,Math.abs(fade.to[i]-fade.from[i]));
+      packedBackground.renderer.setPalette(roomPalette);
+      if(sceneShapesCanvas){const next=buildSceneShapesCanvas({width:320,height:200,palette:roomPalette,rawBase64:''},packedBackground.clip.frame(0));const context=sceneShapesCanvas.getContext('2d')!;context.clearRect(0,0,320,200);context.drawImage(next,0,0);}
+      foregroundFrames.clear();
+      for(const [name,animation] of scriptRenderers){animation.renderer.setPalette(roomPalette);if(scriptLayers.has(name))animation.renderer.render(animation.clip.pixels);}
+      if(fade.age>=fade.ms)paletteFade=null;
+    }
+    let ambientWait: number | null = null;
     if (packedBackground) for (const [name, info] of Object.entries(packedBackground.clip.pack.clips)) {
       if (!["room", "mask", "hud"].includes(name)) scriptRenderers.set(name, {
         clip: new IndexedClip(packedBackground.clip.pack, info), renderer: new IndexedRenderer(info, false)
       });
+    }
+    if(config.amulet&&!scriptRenderers.has('amulet-rest')){
+      const pack=await loadScenePack(withBase('assets/forest/amulet.kyr.gz'),config.signal),info=pack.clips['amulet-rest'];
+      scriptRenderers.set('amulet-rest',{clip:new IndexedClip(pack,info),renderer:new IndexedRenderer(info,false)});
     }
     let backgroundName = "room";
     let actorVisible = true;
@@ -149,14 +176,19 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
 
     function update(dt: number, nowMs: number) {
+      updatePalette(dt*1000);
       speechRemaining = Math.max(0, speechRemaining - dt * 1000);
       if (speechRemaining > 0) speechAge += dt * 1000;
       if (state.statusMessage && nowMs >= state.statusMessageUntil) {
         state.statusMessage = null;
       }
       if (sceneAnims.length) {
-        updateSceneAnims(sceneAnims, nowMs);
+        updateSceneAnims(sceneAnims, nowMs,(op,value)=>{
+          if(op===0xFFAD)state.pos.x=value;if(op===0xFFAE)state.pos.y=value;
+          if(op===0xFFAF)actorShape=value;
+        });
       }
+      if (ambientWait !== null && !sceneAnims[ambientWait]?.play) ambientWait = null;
       if (state.drops.length) {
         updateDrops(state.drops, state.sceneItems, dt * 1000);
       }
@@ -192,6 +224,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         sequence = null;
         config.onSubtitleChange?.([]);
         config.onSequenceChange?.(false);
+        config.onContinueChange?.(false);
         const done = sequenceDone; sequenceDone = null; done?.();
       }
     }
@@ -218,8 +251,26 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (backgroundName === "room" && spriteDefMap && state.overlays.length) {
         drawSceneOverlays(ctx, sceneShapesImage, spriteDefMap, state.overlays);
       }
+      for (const layer of permanentLayers.values()) ctx.drawImage(layer.image,layer.x,layer.y);
       if (backgroundName === "room" && spriteDefMap && sceneAnims.length) {
         drawSceneAnims(ctx, sceneShapesImage, spriteDefMap, sceneAnims);
+      }
+      if (spriteDefMap) drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, questShapes);
+
+      for (const npc of npcs.values()) { if (!npc.visible || npc.character===2&&(scriptLayers.has("advice")||scriptLayers.has("balance2"))) continue;
+        const scale=actorScaleAt(npc.y,scene.actorScale);
+        const drawNpc=(shape:number,x:number,y:number,flip:boolean)=>{
+          const animation=scriptRenderers.get(`npc-${shape}`),def=config.npcFrames?.[shape];
+          if(!animation||!def)return;
+          const image=animation.renderer.render(animation.clip.frame(0));
+          const w=Math.max(1,Math.trunc(image.width*scale)),h=Math.max(1,Math.trunc(image.height*scale));
+          ctx.save();ctx.translate(Math.trunc(x),Math.trunc(y));if(flip){ctx.translate(w,0);ctx.scale(-1,1);}ctx.drawImage(image,0,0,w,h);ctx.restore();
+        };
+        const talking=speechRemaining>0&&speaker===npc.character,shape=talking?(npc.character===1?50:86):npc.shape,def=config.npcFrames?.[shape];
+        if(def){const x=npc.x+Math.trunc(def.xOffset*scale),y=npc.y+Math.trunc(def.yOffset*scale),flip=npc.facing>=1&&npc.facing<=3;
+          drawNpc(shape,x,y,flip);
+          if(talking)drawNpc((npc.character===1?53:89)+brandonTalkHead(speechAge)-17,x+(npc.character===1?4:flip?0:8)*scale,y+(npc.character===1?8:1)*scale,flip);
+        }
       }
       const actorLayerPre = mask ? resolveActorLayer(state.pos, drawLayerTable, mask) : 1;
       if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayerPre, "behind");
@@ -228,7 +279,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
 
       const sequence = getSequence(state.dir);
-      const talkingFrame = speechRemaining > 0 ? frames.findIndex(frame => frame.shapeIndex === 16) : -1;
+      const talkingFrame = speechRemaining > 0 && speaker === 0 ? frames.findIndex(frame => frame.shapeIndex === 16) : -1;
       const frameIndex = state.moving ? sequence[state.frame] : talkingFrame >= 0 ? talkingFrame : actorShape !== null ? frames.findIndex(frame => frame.shapeIndex === actorShape) : getIdleFrame(state.dir);
       const frame = frames[Math.min(frames.length - 1, frameIndex)];
       if (!frame) {
@@ -269,7 +320,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         let fg = foregroundFrames.get(actorLayer);
         if (!fg) {
           fg = buildForegroundFrame(bg, mask, actorLayer, packedBackground ? {
-            pixels: packedBackground.clip.frame(0), palette: packedBackground.clip.info.palette
+            pixels: packedBackground.clip.frame(0), palette: roomPalette!
           } : undefined);
           foregroundFrames.set(actorLayer, fg);
         }
@@ -278,7 +329,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
       for (const layer of scriptLayers.values()) ctx.drawImage(layer.image, layer.x, layer.y);
 
-      if (backgroundName === "room" && packedBackground && atmosphere && !reducedMotion?.matches) drawKallakAtmosphere(ctx, lastTime);
+      if (scene.opening && backgroundName === "room" && packedBackground && atmosphere && !reducedMotion?.matches) drawKallakAtmosphere(ctx, lastTime);
       ctx.restore();
 
       if (scene.uiMaskY < LOGICAL_HEIGHT) {
@@ -292,6 +343,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (uiOverlay) {
         ctx.drawImage(uiOverlay, 0, 0);
       }
+      const rest=scriptRenderers.get('amulet-rest');
+      if(hasAmulet&&rest)ctx.drawImage(rest.renderer.render(rest.clip.frame(0)),224,152);
+      const amulet=scriptLayers.get('amulet');
+      if(amulet)ctx.drawImage(amulet.image,amulet.x,amulet.y);
       drawInventory(ctx, itemsSheet, inventoryItems, state.inventorySlots);
       if (state.itemInHand && state.pointer) {
         const item = inventoryItems.get(state.itemInHand);
@@ -353,7 +408,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let animationFrame = requestAnimationFrame(loop);
 
     function setTarget(point: Vec2) {
-      if (sequence || point.y >= scene.uiMaskY || state.drops.length) return;
+      if (dead || sequence || point.y >= scene.uiMaskY || state.drops.length) return;
       pendingPortal = null;
       actorShape = null;
       const path = findWalkPath(state.pos, point, p => isWalkable(p, scene, mask));
@@ -372,6 +427,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       cancelAnimationFrame(animationFrame);
       sequence?.stop();
       config.onSequenceChange?.(false);
+      config.onContinueChange?.(false);
       for (const value of scriptRenderers.values()) value.renderer.dispose();
       packedBackground?.dispose();
     }
@@ -405,7 +461,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function handleClick(point: Vec2) {
-      if (sequence) return true;
+      if (sequence?.awaiting) { sequence.confirm(point); config.onContinueChange?.(false); return true; }
+      if (sequence || dead) return true;
       if (state.drops.length) return true;
       // The original first conversation intercepts the south exit. Also let a
       // direct click on the trunk initiate it, which works well with touch input.
@@ -421,6 +478,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         setTarget(portal.point);
         if (state.target || (Math.abs(state.pos.x - portal.point.x) <= 4 && Math.abs(state.pos.y - portal.point.y) <= 2)) pendingPortal = portal;
         return true;
+      }
+      if (point.y < scene.uiMaskY && findSceneItemAt(point,state.sceneItems) === -1) {
+        const actions=config.onInteract?.(point,getSnapshot());
+        if(actions){playScript(actions);return true;}
       }
       stopWalking();
       const sceneItemIndex = point.y < scene.uiMaskY ? findSceneItemAt(point, state.sceneItems) : -1;
@@ -458,6 +519,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         }
       }
       if (state.itemInHand) {
+        if(noDropRegions.some(r=>point.x>=r.x&&point.x<r.x+r.w&&point.y>=r.y&&point.y<r.y+r.h))return true;
         const droppedItem = state.itemInHand;
         if (dropItemAt(point, state.itemInHand, state.drops, state.sceneItems, scene, mask)) {
           setStatusMessage(`Положил ${getItemStatusName(droppedItem)}`);
@@ -535,7 +597,26 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function applyScript(action: RoomAction) {
+      config.onScriptAction?.(action);
       switch (action.op) {
+        case 'choice':setStatusMessage('Click where you want to go.');break;
+        case 'death':dead=true;actorVisible=false;config.onDeath?.();break;
+        case 'exit':config.onExit?.({id:'script',target:action.target,side:'north',entry:action.entry,rect:{x:0,y:0,w:0,h:0},point:state.pos});break;
+        case 'palette':if(roomPalette){const to=roomPalette.slice();to.splice(action.start*3,action.colors.length,...action.colors);paletteFade={from:roomPalette.slice(),to,ms:action.ms,age:0,step:-1};updatePalette(0);}break;
+        case 'flag':if(action.flag===45)hasAmulet=action.value;break;
+        case 'ambientWait':if(sceneAnims[action.index]?.play)ambientWait=action.index;break;
+        case 'confirm':config.onContinueChange?.(true);break;
+        case 'npc':npcs.set(action.character,action);break;
+        case 'hand':state.itemInHand=action.item;break;
+        case 'item':state.sceneItems.push({id:action.item,x:action.x,y:action.y});break;
+        case 'shape':questShapes.push(action);break;
+        case 'noDrop':noDropRegions.push(action);break;
+        case 'mask':
+          if(mask)for(let y=Math.max(0,action.y);y<Math.min(mask.height,action.y+action.h);y++)for(let x=Math.max(0,action.x);x<Math.min(mask.width,action.x+action.w);x++){
+            const i=y*mask.width+x;mask.pixels[i]=action.blocked?mask.pixels[i]|128:mask.pixels[i]&127;
+          }break;
+        case 'ambientRun':
+          if(sceneAnims[action.index]){const anim=sceneAnims[action.index];anim.play=true;anim.visible=true;anim.ip=0;anim.nextRun=0;ambientWait=action.index;}break;
         case "scene":
           backgroundName = action.name;
           scriptLayers.clear(); stopWalking();
@@ -557,30 +638,36 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           state.stepAccumulatorMs = state.walkDelayTicks * TICK_MS;
           break;
         }
-        case "face": face(action.facing); actorShape = action.shape < 0 ? null : action.shape; break;
+        case "face": face(action.facing); actorShape = action.shape < 0 ? null : action.shape;if(action.shape===88)actorVisible=false;break;
         case "frame": {
           const animation = scriptRenderers.get(action.clip);
           if (!animation) throw new Error(`Missing script animation ${action.clip}`);
-          scriptLayers.delete(action.clip);
-          scriptLayers.set(action.clip, { image: animation.renderer.render(animation.clip.frame(action.index)), x: action.x, y: action.y });
-          if (["brantree", "touch"].includes(action.clip)) actorVisible = false;
+          const pixels=animation.clip.frame(action.index);
+          if(action.permanent)permanentLayers.set(action.clip,{image:buildIndexedCanvas(animation.clip.info,pixels),x:action.x,y:action.y});
+          else {scriptLayers.delete(action.clip);scriptLayers.set(action.clip, { image: animation.renderer.render(pixels), x: action.x, y: action.y });}
+          if (["brantree", "touch", "brynn1", "brynn2", "brynn3", "raindrop", "wow", "tag", "agile", "balance2"].includes(action.clip)) actorVisible = false;
           break;
         }
         case "close":
           scriptLayers.delete(action.clip);
-          if (["brantree", "touch"].includes(action.clip)) actorVisible = true;
+          if (["brantree", "touch", "brynn1", "brynn2", "brynn3", "raindrop", "wow", "tag", "agile", "balance2"].includes(action.clip)) actorVisible = true;
           break;
         case "say": {
+          speaker=action.speaker??0;
           const palette = packedBackground?.clip.info.palette;
           const color = palette ? `rgb(${palette.slice(action.color * 3, action.color * 3 + 3).join(",")})` : "#f2f2f2";
-          config.onSubtitleChange?.([{ startMs: 0, endMs: action.ms, text: action.text, x: action.x, y: action.y,
-            type: "talk", align: "center", maxWidth: 220, color }]);
+          config.onSubtitleChange?.(action.text.trim()?[{ startMs: 0, endMs: action.ms, text: action.text, x: action.x, y: action.y,
+            type: "talk", align: "center", maxWidth: 220, color }]:[]);
           speechRemaining = action.blocking ? action.ms : 0;
           speechAge = 0;
           break;
         }
         case "clearText": config.onSubtitleChange?.([]); speechRemaining = 0; break;
-        case "ambient": if (sceneAnims[action.index]) sceneAnims[action.index].play = action.enabled; break;
+        case "ambient": if (sceneAnims[action.index]) {
+          const anim=sceneAnims[action.index];
+          if(action.internal)anim.visible=action.enabled;
+          else anim.play=action.enabled;
+        } break;
         case "message": setStatusMessage(action.text); break;
       }
     }
@@ -590,20 +677,23 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       pendingPortal = null;
       sequenceDone = done ?? null;
       config.onSequenceChange?.(true);
-      sequence = new RoomScript(actions, { apply: applyScript, walking: () => state.moving,
+      sequence = new RoomScript(actions, { apply: applyScript, walking: () => state.moving || ambientWait !== null,
         frames: name => scriptRenderers.get(name)?.clip.info.frames.length ?? 0 });
       sequence.update(0);
     }
 
     if (config.entry) face(config.entry.facing);
+    for(const action of config.setupActions??[])applyScript(action);
+    for(const anim of sceneAnims)anim.visible=anim.play;
     if (openingScript && config.playOpening !== false) playScript(openingScript.opening);
     else if (config.entryActions?.length) playScript(config.entryActions);
 
+    function getSnapshot() { return { pos: { ...state.pos }, facing:state.dir==="right"?3:state.dir==="left"?5:state.dir==="up"?0:4, inventorySlots: state.inventorySlots, itemInHand: state.itemInHand,
+      sceneItems: state.sceneItems, overlays: state.overlays, treeSpoken }; }
     return { setTarget, stop, setDebug, setPointer, setWalkSpeed, setAnimStepInterval, handleClick,
       setAtmosphere: (enabled: boolean) => { atmosphere = enabled; },
       runSequence: playScript,
-      getSnapshot: () => ({ pos: { ...state.pos }, inventorySlots: state.inventorySlots, itemInHand: state.itemInHand,
-        sceneItems: state.sceneItems, overlays: state.overlays, treeSpoken }) };
+      getSnapshot };
   } catch (error) {
     for (const value of scriptRenderers.values()) value.renderer.dispose();
     packedBackground?.dispose();

@@ -89,6 +89,7 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     if (portals.get(7)!.some(p => p.target === 24)) throw new Error("Broken bridge is passable");
     game.handleClick({ x: 100, y: 165 }); expectedHeld = null;
     game.handleClick({ x: 215, y: 83 });
+    await until(() => !playing, "original note pickup");
     if (game.getSnapshot().itemInHand !== "letter") throw new Error("Could not pick up letter");
     game.handleClick({ x: 120, y: 165 });
     await travel(1); await travel(0);
