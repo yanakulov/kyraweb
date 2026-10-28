@@ -49,3 +49,13 @@ Runtime `RoomScript` holds input until scripted walks and frame/text waits finis
 - Source and frame hashes live in tests/fixtures/forest-pixels.json.gz, outside the published build. forest.json.gz contains only runtime metadata. The loader accepts compressed bytes and transparent HTTP decompression.
 - UI uses a quiet pixel stone border, small gems, original logo and touch-sized controls. No image smoothing or generated replacement art is applied to the game.
 - This is a bounded first-region implementation, not a complete Kyra engine. Later quest opcodes, full audio, later-world navigation and saves are not covered.
+
+# Rendering and touch controls — 2026-10-29
+
+- Home EMC shapes are restricted to the home background while the opening temporarily renders TRUNK/GEM. Foreground occlusion now composites current room decorations rather than restoring a bare CPS over the note and saw; decoration changes invalidate the cache.
+- FACE/FACE2 are opaque room patches and render behind Brandon. Their foreground portions use the original priority mask. The opening browser fixture checks prop pixels outside/inside home and the tree/actor draw order.
+- Kallak hand overlays use the sequence's original x coordinates and y minus 8, matching the movie viewport's shift from 16 to 8. Removed the unrelated -57 x offset.
+- Clicking a room dialogue dismisses its current voice wait without cancelling movies, movement, choices or quest effects. Intro clicks advance only the active subtitle; they do nothing during silent scenes or the menu.
+- Exit arrows follow actual room portals, appear on pointer hover/focus, and can be kept visible with Exits. Coarse-pointer devices start with arrows shown. A separate Inventory panel offers 48px controls and uses the same original slots and item state.
+- Canvas pointer input keeps pinch zoom while preventing one-finger page panning during aiming; controls have touch feedback and no long-press text selection. Code and the 390px layout were checked; physical Safari/Chrome touch behaviour still needs a real phone.
+- Validation: 41 Node tests, typecheck, build/size check, full opening with all 29 tree lines, complete forest quest browser run, and application-level inventory store/take, exit and dialogue-click checks.

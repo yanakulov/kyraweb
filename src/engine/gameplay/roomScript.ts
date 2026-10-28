@@ -79,8 +79,18 @@ export class RoomScript {
   private index = 0;
   private wait = 0;
   private voice = 0;
+  private waitingForVoice = false;
   private clearAfterWait = false;
   private cancelled = false;
+  /** Dismiss only the current line; movement, movies and choices still complete. */
+  skipLine() {
+    if (this.cancelled || this.awaiting || this.voice <= 0) return false;
+    this.voice = 0;
+    if (this.waitingForVoice) this.wait = 0;
+    this.clearAfterWait = false;
+    this.host.apply({ op: "clearText" });
+    return true;
+  }
   awaiting = false;
   private resume: ((point: { x: number; y: number }) => RoomAction[]) | null =
     null;
@@ -149,6 +159,7 @@ export class RoomScript {
       budget -= used;
       this.voice = Math.max(0, this.voice - used);
       if (this.wait > 1e-6) return;
+      this.waitingForVoice = false;
       if (this.clearAfterWait) {
         this.host.apply({ op: "clearText" });
         this.clearAfterWait = false;
@@ -158,6 +169,7 @@ export class RoomScript {
       // customPrintTalkString waits for the previous CD voice before replacing it.
       if (action.op === "say" && this.voice > 0) {
         this.wait = this.voice;
+        this.waitingForVoice = true;
         continue;
       }
       this.index++;
@@ -172,7 +184,7 @@ export class RoomScript {
         this.host.apply(action);
         return;
       }
-      if (action.op === "waitVoice") this.wait = this.voice;
+      if (action.op === "waitVoice") { this.wait = this.voice; this.waitingForVoice = true; }
       else if (action.op === "wait") this.wait = action.ms;
       else {
         this.host.apply(action);
@@ -182,6 +194,7 @@ export class RoomScript {
           this.voice = action.ms;
           if (action.blocking) {
             this.wait = action.ms;
+            this.waitingForVoice = true;
             this.clearAfterWait = true;
           }
         }

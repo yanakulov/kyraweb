@@ -28,6 +28,61 @@ import opening from "../public/assets/packs/opening.json";
 import openingPixels from "./fixtures/opening-pixels.json";
 import { roomPortals, nearestFloor, type WorldRoom } from "../src/engine/gameplay/world";
 import worldData from "../public/assets/world/world.json";
+import { portalAtPoint, portalMarker } from "../src/engine/gameplay/navigation";
+
+test("skipping a line releases speech waits without skipping movies, walks or decisions", () => {
+  const applied: RoomAction[] = [];
+  const say: RoomAction = { op: 'say', text: 'First', voiceId: 1, ms: 5000, x: 160, y: 60, color: 1, blocking: true };
+  const script = new RoomScript([say, { op: 'movie', clip: 'liftup', x: 0, y: 0, ticks: 6 }, { ...say, text: 'Second' }, { op: 'confirm' }], {
+    apply: action => applied.push(action), walking: () => false, frames: () => 3
+  });
+  script.update(0);
+  assert.equal(script.skipLine(), true);
+  script.update(0);
+  assert.equal(applied.at(-1)?.op, 'frame');
+  assert.equal(script.skipLine(), false);
+  script.update(299);
+  assert.equal(applied.filter(a => a.op === 'say').length, 1);
+  script.update(1);
+  assert.equal(applied.filter(a => a.op === 'say').length, 2);
+  script.skipLine(); script.update(0);
+  assert.equal(script.awaiting, true);
+  assert.equal(script.skipLine(), false);
+  assert.equal(script.done, false);
+  script.stop(); assert.equal(script.skipLine(), false);
+});
+
+test("skipping a nonblocking tree voice keeps its remaining animation frames", () => {
+  const applied: RoomAction[] = [];
+  const script = new RoomScript([
+    { op: 'say', text: 'Tree', voiceId: 1, ms: 5000, x: 160, y: 60, color: 1, blocking: false },
+    { op: 'movie', clip: 'face', x: 0, y: 0, ticks: 6 }, { op: 'waitVoice' }, { op: 'message', text: 'Ready' }
+  ], { apply: a => applied.push(a), walking: () => false, frames: () => 3 });
+  script.update(0); script.skipLine(); script.update(299);
+  assert.equal(script.done, false);
+  script.update(1); assert.equal(script.done, true);
+  assert.equal(applied.filter(a => a.op === 'frame').length, 3);
+});
+
+test("exit markers use actual available portals, including doors and corner precedence", () => {
+  for (const room of worldData.rooms as WorldRoom[]) {
+    const pack = parseScenePack(gunzipSync(readFileSync(`public/assets/world/${room.id}.kyr.gz`)));
+    const clip = new IndexedClip(pack, pack.clips.mask);
+    const portals = roomPortals(room, { width: 320, height: 144, pixels: Array.from(clip.frame(0)) });
+    for (const portal of portals) {
+      const marker = portalMarker(portal);
+      assert.ok(marker.x >= 20 && marker.x <= 300 && marker.y >= 20 && marker.y <= 116);
+    }
+    if (room.id === 7) assert.equal(portals.some(p => p.side === 'west'), false);
+    assert.equal(portalAtPoint(portals, {x: 160, y: 170}), undefined);
+    assert.equal(portalAtPoint(portals, null), undefined);
+  }
+});
+
+test("Kallak hand tracks keep original x coordinates and the shared viewport offset", () => {
+  const step = buildIntroSteps().find(step => step.id === 'kallak_writing')!;
+  assert.deepEqual(step.overlayFrames!.positions!.slice(0, 3), [{x:149,y:24},{x:148,y:19},{x:147,y:12}]);
+});
 
 test("Westwood RLE decodes forest literals, short fills and big-endian long fills", () => {
   const bytes = new Uint8Array([3, 1, 2, 3, 253, 9, 0, 1, 0, 7]);
@@ -219,6 +274,18 @@ function introHarness() {
   };
 }
 const subtitle = { text: "Hello", startMs: 20, endMs: 80, y: 180 };
+
+test("intro click skips the current subtitle but preserves the following scene", async () => {
+  const h = introHarness();
+  try {
+    const events: string[][] = [];
+    const playback = playIntro(h.canvas, [{ id: 'talk', durationMs: 500, subtitles: [subtitle, { ...subtitle, text: 'Next', startMs: 100, endMs: 200 }] }], { onSubtitleChange: p => events.push(p.lines.map(l => l.text)) });
+    await settleLoads(); h.tick(30); playback.skipLine(); h.tick(31);
+    assert.deepEqual(events.at(-1), []);
+    h.tick(51); assert.deepEqual(events.at(-1), ['Next']);
+    playback.stop(); await playback.done;
+  } finally { h.restore(); }
+});
 
 test("intro masks sprite overflow from row 136, while full-screen logos remain uncovered", async () => {
   const h = introHarness();

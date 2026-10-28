@@ -76,6 +76,7 @@ export type IntroStep = {
 };
 
 export type IntroPlayback = {
+  skipLine: () => void;
   skip: () => void;
   stop: () => void;
   setDemoLoopStep: (id: string | null) => void;

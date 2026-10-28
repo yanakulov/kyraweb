@@ -18,9 +18,17 @@
           height="200"
           aria-label="Kyrandia game scene"
           @click="handleClick"
-          @mousemove="handleMove"
-          @mouseleave="handleLeave"
+          @pointerdown="handlePointerDown"
+          @pointermove="handleMove"
+          @pointerleave="handleLeave"
+          @pointercancel="handleLeave"
         ></canvas>
+        <div v-if="!introActive && !sequenceActive && !loading && !gameError" class="exit-markers" :class="{ 'show-exits': showExits }">
+          <button v-for="portal in portals" :key="portal.id" class="exit-marker" :class="{ hovered: hoveredExit === portal.id }"
+            :style="exitStyle(portal)" type="button" :aria-label="`Go ${portal.side}`" @click="takeExit(portal)">
+            <svg viewBox="0 0 11 11" aria-hidden="true" :style="{ transform: `rotate(${({ north: 0, east: 90, south: 180, west: 270 })[portal.side]}deg)` }"><path d="M5 1h1v1h1v1h1v1h1v1H7v5H4V5H2V4h1V3h1V2h1z" /></svg>
+          </button>
+        </div>
         <button v-if="awaitingContinue" class="pixel-button continue-button" type="button" @click="game?.handleClick({ x: 160, y: 100 })">Continue</button>
         <template v-if="introPanelVisible">
           <img
@@ -44,9 +52,19 @@
         </div>
       </div>
     </div>
+    <section v-if="inventoryOpen && !introActive" class="touch-inventory" aria-label="Inventory">
+      <p aria-live="polite">{{ heldItem ? `In hand: ${itemDefinitions.get(heldItem)?.name}` : 'Choose an item, then tap where to use it.' }}</p>
+      <div class="inventory-grid">
+        <button v-for="(item, index) in inventorySlots" :key="index" class="inventory-slot" type="button"
+          :disabled="sequenceActive || loading || !!gameError" :aria-label="item ? `Take ${itemDefinitions.get(item)?.name}` : heldItem ? `Store item in slot ${index + 1}` : `Empty slot ${index + 1}`"
+          @click="useInventorySlot(index)"><span v-if="item" class="item-icon" :style="itemStyle(item)"></span></button>
+      </div>
+    </section>
     <div class="game-toolbar">
       <p class="game-hint" aria-live="polite">{{ gameHint }}</p>
       <nav class="game-actions" aria-label="Game controls">
+        <button v-if="!introActive" class="text-button" type="button" :aria-expanded="inventoryOpen" @click="inventoryOpen = !inventoryOpen">{{ heldItem ? 'Item in hand' : 'Inventory' }}</button>
+        <button v-if="!introActive" class="text-button" type="button" :aria-pressed="showExits" @click="showExits = !showExits">Exits</button>
         <button class="text-button" type="button" @click="openMenu">Menu</button>
         <button v-if="fullscreenAvailable" class="text-button" type="button" @click="toggleFullscreen">
           {{ isFullscreen ? "Exit full screen" : "Full screen" }}
@@ -106,6 +124,46 @@ import { LOGICAL_WIDTH } from "./engine/core/constants";
 import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
 import { gemCutScene } from "./engine/scenes/gemCut";
 import SubtitleOverlay from "./components/SubtitleOverlay.vue";
+import { portalAtPoint, portalMarker } from "./engine/gameplay/navigation";
+import { buildInventoryItems, getInventorySlotPositions } from "./engine/gameplay/inventory";
+import type { RoomPortal, InventoryItemId, Vec2 } from "./engine/core/types";
+const portals = ref<RoomPortal[]>([]);
+const hoveredExit = ref<string>();
+const showExits = ref(false);
+const inventoryOpen = ref(false);
+const inventorySlots = ref<(InventoryItemId | null)[]>([]);
+const heldItem = ref<InventoryItemId | null>(null);
+const itemDefinitions = buildInventoryItems();
+let touchPointer = false;
+function syncControls() {
+  portals.value = game?.getPortals() ?? [];
+  const snapshot = game?.getSnapshot();
+  inventorySlots.value = snapshot?.inventorySlots.slice() ?? [];
+  heldItem.value = snapshot?.itemInHand ?? null;
+  hoveredExit.value = undefined;
+}
+function exitStyle(portal: RoomPortal) {
+  const point = portalMarker(portal);
+  return { left: `${point.x / 3.2}%`, top: `${point.y / 2}%` };
+}
+function itemStyle(item: InventoryItemId) {
+  const tile = itemDefinitions.get(item)!.tileIndex;
+  return { backgroundPosition: `${-(tile % 20) * 32}px ${-Math.floor(tile / 20) * 32}px` };
+}
+function interact(point: Vec2) {
+  if (!game || loading.value || gameError.value) return;
+  game.setPointer(point);
+  if (!game.handleClick(point)) game.setTarget(point);
+  syncControls();
+  if (touchPointer) game.setPointer(null);
+}
+function takeExit(portal: RoomPortal) {
+  interact({ x: portal.rect.x + portal.rect.w / 2, y: portal.rect.y + portal.rect.h / 2 });
+}
+function useInventorySlot(index: number) {
+  const slot = getInventorySlotPositions()[index];
+  interact({ x: slot.x + 8, y: slot.y + 8 });
+}
 const appRef = ref<HTMLElement | null>(null);
 const gameError = ref("");
 const loading = ref(false);
@@ -153,11 +211,11 @@ const config = {
   onContinueChange: (waiting: boolean) => { awaitingContinue.value = waiting; },
   scene: gemCutScene,
   world: import.meta.env.BASE_URL + "assets/world/world.json",
-  onLocationChange: (name: string) => { locationName.value = name; },
-  onLoadingChange: (value: boolean) => { loading.value = value; },
+  onLocationChange: (name: string) => { locationName.value = name; queueMicrotask(syncControls); },
+  onLoadingChange: (value: boolean) => { loading.value = value; queueMicrotask(syncControls); },
   onNavigationError: (message: string) => { navigationError.value = message; },
   onSubtitleChange: (lines: import('./engine/intro/types').IntroSubtitle[]) => { subtitleLines.value = lines; },
-  onSequenceChange: (active: boolean) => { sequenceActive.value = active; }
+  onSequenceChange: (active: boolean) => { sequenceActive.value = active; queueMicrotask(syncControls); }
 };
 
 async function boot() {
@@ -235,6 +293,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     return;
   }
   game = startedGame;
+  syncControls();
   loading.value = false;
   game.setAtmosphere(atmosphere.value);
   game.setDebug({
@@ -251,7 +310,8 @@ const gameHint = computed(() => {
   if (loading.value) return "Loading the scene…";
   if (navigationError.value) return navigationError.value;
   if (introPanelVisible.value) return "Your journey begins here.";
-  return introActive.value || sequenceActive.value ? "The story is unfolding…" : `${locationName.value} · Click or tap paths and exits to explore.`;
+  if (subtitleVisible.value) return "Click or tap to skip this line.";
+  return introActive.value || sequenceActive.value ? "The story is unfolding…" : `${locationName.value} · Tap to walk. Choose an item to use it.`;
 });
 
 async function launchIntro(startIndex: number, autoStartGame: boolean) {
@@ -319,31 +379,36 @@ function fadeOutIntroPanel(durationMs: number) {
 
 function handleClick(event: MouseEvent) {
   if (introActive.value) {
+    intro?.skipLine();
     return;
   }
   if (!canvasRef.value || !game) return;
   const point = mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY);
-  game.setPointer(point);
-  const used = game.handleClick(point);
-  if (!used) {
-    game.setTarget(point);
-  }
+  interact(point);
 }
 
-function handleMove(event: MouseEvent) {
+function handlePointerDown(event: PointerEvent) {
+  touchPointer = event.pointerType !== 'mouse';
+  handleMove(event);
+}
+
+function handleMove(event: PointerEvent) {
   if (introActive.value) return;
   if (!canvasRef.value || !game) return;
   const point = mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY);
   game.setPointer(point);
+  hoveredExit.value = portalAtPoint(portals.value, point)?.id;
 }
 
 function handleLeave() {
+  hoveredExit.value = undefined;
   if (introActive.value) return;
   if (!game) return;
   game.setPointer(null);
 }
 
 onMounted(() => {
+  showExits.value = window.matchMedia('(any-pointer: coarse)').matches;
   fullscreenAvailable.value = document.fullscreenEnabled;
   document.addEventListener("fullscreenchange", updateFullscreen);
   void boot();
