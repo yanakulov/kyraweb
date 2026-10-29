@@ -7,7 +7,8 @@
       { "name": "button-bevel", "value": "inset 0 0 0 2px #14231d, inset 0 0 0 3px #5d6747", "purpose": "Square, tactile controls." }
     ],
     "motion": [
-      { "name": "book-opening", "value": "7000ms total; hinge 0-2200ms; color 2900-4300ms; zoom 4600-7000ms", "purpose": "Open the Blender book, hold the original landscape in monochrome, restore color and enter the picture; bypass under reduced motion." },
+      { "name": "book-opening", "value": "8900ms total; hinge 0-2200ms; ink 1800-4200ms; color 4500-6200ms; zoom 6500-8900ms", "purpose": "Open onto bare physical parchment, trace landscape contours with sparse hatching and a small gold trace, wash in color and enter the original picture; bypass under reduced motion." },
+      { "name": "book-effects", "value": "fade from zoom 0.55 to 0.95", "purpose": "Fade half-resolution GTAO (radius 0.22, thickness 0.12, blend 0.65), bloom (threshold 2.8, strength 0.12, radius 0.25), film grading and vignette to zero; render the final original frame directly." },
       { "name": "book-handoff", "value": "onFirstFrame", "purpose": "Keep the final book view until the intro draws; Westwood and AkulaFlow continue on the same original landscape." },
       { "name": "book-rendering", "value": "requestAnimationFrame on demand", "purpose": "Render loading, resize, pointer movement and opening; stop when settled." }
     ],
@@ -52,14 +53,17 @@
     "overview": "Old leather, wood, aged gold and emerald fittings make the browser feel part of Kyrandia. A Blender-modeled book carries the original retail cover embossed into leather; generated interface art supplies the surrounding fantasy controls. The original 320 × 200 game fills the stage once the camera enters the book, with no external masthead, toolbar or footer.",
     "keyCharacteristics": [
       "Original cover art and pixel game scenes, with a physical Blender-modeled book as the entrance.",
-      "Warm shadows, parchment lettering and deep green controls.",
+      "Warm candlelight, cool moonlight, parchment lettering and deep green controls.",
       "Motion for opening the story and acknowledging input, not perpetual decoration."
     ],
     "rules": [
       "Use the original HUD Options button to launch internal dialogs; keep credits inside Options.",
       "Show the transparent AkulaFlow intro mark over the original Kyrandia landscape used by Westwood, preserving the existing reveal and fade.",
       "Use the original supplied retail cover as embossed leather on the Blender model; export via extractor/model_storybook.py to public/assets/interface/storybook.glb.gz and retain the editable .blend in ignored .reference/.",
-      "Fill the viewport with the table; place the candle behind the book on the right, outside the hinge arc."
+      "Fill the viewport with the table; place the candle behind the book on the right, outside the hinge arc. Keep the spine fixed to the back board below the page surface.",
+      "Trace contours from assets/intro/logo_bg.png into the lit parchment with sparse hatching and a small gold trace, then wash in color; do not begin with a grayscale photo on a floating plane.",
+      "Keep the original landscape's exact pixel colors at handoff by fading scene effects out before the final frame. FantasyBook.vue, storybookInk.ts and bookTransition.ts are the implemented sources.",
+      "Measure the complete production build and packed book model separately after changes; neither has a fixed size promise."
     ],
     "dos": [
       "Do keep the game view unobscured outside explicitly opened dialogs and the next action visible.",
@@ -68,6 +72,7 @@
       "Do check the book, menu, help and settings at desktop and narrow mobile sizes.",
       "Do retain reduced-motion and WebGL-fallback paths.",
       "Do preserve the supplied original cover composition and the original landscape through the book-to-intro handoff.",
+      "Do draw the illustration into the physical parchment and remove scene effects before the final original game frame.",
       "Do keep props outside the cover's hinge arc."
     ],
     "donts": [

@@ -45,7 +45,7 @@ def image(name, pixels, jpeg=False):
     return im
 
 
-def material(name, color, metallic=0, roughness=.55, texture=None, normal=None):
+def material(name, color, metallic=0, roughness=.55, texture=None, normal=None, roughness_map=None):
     m = bpy.data.materials.new(name)
     m.diffuse_color = (*color, 1)
     m.use_nodes = True
@@ -64,6 +64,11 @@ def material(name, color, metallic=0, roughness=.55, texture=None, normal=None):
         bump = m.node_tree.nodes.new("ShaderNodeNormalMap")
         m.node_tree.links.new(tex.outputs["Color"], bump.inputs["Color"])
         m.node_tree.links.new(bump.outputs["Normal"], bs.inputs["Normal"])
+    if roughness_map:
+        tex = m.node_tree.nodes.new("ShaderNodeTexImage")
+        tex.image = roughness_map
+        roughness_map.colorspace_settings.name = "Non-Color"
+        m.node_tree.links.new(tex.outputs["Color"], bs.inputs["Roughness"])
     return m
 
 
@@ -100,12 +105,21 @@ def bevel(obj, width=.04, segments=4):
     return obj
 
 
-def box(name, pos, size, mat, width=.04, parent=None):
+def box(name, pos, size, mat, width=.04, parent=None, uv_scale=None, uv_offset=(0,0)):
     bpy.ops.mesh.primitive_cube_add(size=1, location=xyz(pos))
     obj = bpy.context.object
     obj.name = name
     obj.dimensions = (size[0], size[2], size[1])
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    # Cube-atlas UVs stretch a quarter of a texture over a whole 72-unit plank.
+    # Project each face in local physical units instead, before beveling.
+    if uv_scale:
+        uv = obj.data.uv_layers.active
+        for face in obj.data.polygons:
+            axes = [i for i in range(3) if i != max(range(3),key=lambda j: abs(face.normal[j]))]
+            for li in face.loop_indices:
+                co = obj.data.vertices[obj.data.loops[li].vertex_index].co
+                uv.data[li].uv = tuple(co[axis]*uv_scale[i]+uv_offset[i] for i,axis in enumerate(axes))
     obj.data.materials.append(mat)
     bevel(obj, width)
     if parent:
@@ -172,13 +186,24 @@ cover_mat = material("Original retail art - gold leather relief", (1,1,1), .48, 
 y, x = np.mgrid[0:256, 0:256]
 grain = rng.random((256, 256))
 grain = (grain + np.roll(grain,1,0) + np.roll(grain,1,1))/3
-leather_image = image("oxblood-leather", np.array([.105,.027,.012])[None,None,:]*(.75+grain[:,:,None]*.45), jpeg=True)
-leather_normal = image("leather-grain", normal_map(grain, .30))
-leather = material("Oxblood calf leather", (.13,.035,.016), 0, .72, leather_image, leather_normal)
+cells=rng.random((24,24,2))
+gx,gy=x*24/256,y*24/256
+ix,iy=gx.astype(int),gy.astype(int)
+distance=np.full((256,256),10.)
+for dx in [-1,0,1]:
+    for dy in [-1,0,1]:
+        seed=cells[(iy+dy)%24,(ix+dx)%24]
+        distance=np.minimum(distance,(gx-ix-dx-seed[:,:,0])**2+(gy-iy-dy-seed[:,:,1])**2)
+pebble=np.clip(1-distance*1.6,0,1)
+leather_image = image("oxblood-leather", np.array([.105,.032,.018])[None,None,:]*(.76+pebble[:,:,None]*.25), jpeg=True)
+leather_normal = image("leather-grain", normal_map(pebble, 1.8))
+leather_roughness=image("leather-roughness",np.repeat((.65+.23*pebble)[:,:,None],3,axis=2),jpeg=True)
+leather = material("Oxblood calf leather", (.13,.035,.016), 0, .72, leather_image, leather_normal, leather_roughness)
 marble = np.sin(x*.095 + 2.1*np.sin(y*.025) + .45*np.sin((x+y)*.035))
-marble = .72 + .24*marble + .04*np.sin(x*.8+y*.3) + .035*grain
-endpaper_image = image("marbled-endpaper", np.array([.40,.21,.11])[None,None,:]*marble[:,:,None], jpeg=True)
-inside = material("Marbled inside endpaper", (.35,.19,.10), 0, .93, endpaper_image)
+marble = .88 + .055*marble + .02*np.sin(x*.8+y*.3) + .035*grain
+endpaper_image = image("marbled-endpaper", np.array([.32,.23,.15])[None,None,:]*marble[:,:,None], jpeg=True)
+paper_normal=image("paper-fibers-normal",normal_map(grain,.35))
+inside = material("Marbled inside endpaper", (.35,.19,.10), 0, .93, endpaper_image, paper_normal)
 brass = material("Antique brass", (.49,.29,.085), .76, .36)
 gold_edge = material("Old gilded tooling", (.67,.43,.16), .64, .44)
 paper_image = image("parchment-fibers", np.array([.72,.63,.46])[None,None,:]*(.93+.10*grain[:,:,None]), jpeg=True)
@@ -191,15 +216,17 @@ ribbon_mat = material("Crimson silk bookmark", (.19,.016,.027), .08, .47)
 # The timber grain runs the length of the table, with irregular annual lines.
 y, x = np.mgrid[0:512, 0:512]
 wave = x*.13 + np.sin(y*.009)*1.3 + np.sin(y*.031+x*.008)*.45
+wave += 3*np.exp(-((x-180)/42)**2-((y-270)/75)**2)
 wood_grain = .66 + .08*np.sin(wave) + .06*np.sin(wave*4.3) - .14*np.abs(np.sin(wave*8.7))**18 + .035*rng.random((512,512))
 wood_image = image("walnut-table", np.array([.23,.105,.041])[None,None,:]*wood_grain[:,:,None], jpeg=True)
 wood_normal = image("walnut-grain",normal_map(wood_grain, .9))
-wood = material("Oiled dark walnut", (.13,.06,.022), 0, .59, wood_image, wood_normal)
+wood_roughness=image("walnut-roughness",np.repeat((.48+.27*wood_grain)[:,:,None],3,axis=2),jpeg=True)
+wood = material("Oiled dark walnut", (.13,.06,.022), 0, .59, wood_image, wood_normal, wood_roughness)
 for plank in range(25):
-    box(f"Walnut plank {plank+1}", ((plank-12)*2.2,-.37,0), (2.19,.42,72), wood, .035)
+    box(f"Walnut plank {plank+1}", ((plank-12)*2.2,-.37,0), (2.19,.42,72), wood, .035, uv_scale=(.55,.24),uv_offset=(plank*.371,plank*.193))
 
 # Closed book; its hinge is an exported empty, never merged into the cover.
-box("Back leather board", (0,-.045,0), (3.13,.16,4.15), leather, .07)
+box("Back leather board", (0,-.045,0), (3.13,.16,4.15), leather, .07, uv_scale=(1.2,1.2))
 box("Page block", (.025,.178,0), (2.96,.36,3.94), page_edge, .045)
 # Individual leaves make the fore-edge visible without dense geometry.
 for i in range(22):
@@ -212,8 +239,8 @@ hinge.location = xyz((-1.55,.44,0))
 hinge["sourceCoverSHA256"] = hashlib.sha256(opt.cover.read_bytes()).hexdigest()
 hinge["sourceCoverTreatment"] = "Original pixels preserved as square bronze/leather relief; no redrawn artwork."
 bpy.context.view_layer.update()
-box("Leather front board", (0,.44,0), (3.1,.12,4.1), leather, .07, hinge)
-box("Front board suede lining", (0,.375,0), (2.93,.012,3.93), inside, .04, hinge)
+box("Leather front board", (0,.44,0), (3.1,.12,4.1), leather, .07, hinge, uv_scale=(1.2,1.2))
+box("Front board suede lining", (0,.375,0), (2.93,.012,3.93), inside, .04, hinge, uv_scale=(.75,.75))
 for inset in [.25,.31]:
     xx,zz=1.55-inset,2.05-inset
     tube("Inside stamped border",[(-xx,.361,-zz),(xx,.361,-zz),(xx,.361,zz),(-xx,.361,zz),(-xx,.361,-zz)],.006,brass,hinge)
@@ -228,16 +255,18 @@ def bookplate_label(name,width,depth,z,uv_rect):
 bookplate_label("Original Fables and Fiends bookplate",1.58,.30,-.32,(.385,.850,.590,.890))
 bookplate_label("Original Book One bookplate",.95,.18,.10,(.394,.681,.579,.713))
 
-# A curved binding, with four raised bands, flexes with the cover.
-for band in range(5):
-    z = -2.01 if band == 0 else -1.2+(band-1)*.8
-    points = [(-1.48-.14*math.sin(t), .25+.25*math.cos(t), z)
+# The binding belongs to the fixed back board, below the page surface.
+# Parenting it to the lid turned its lower edge into an upright fin when open.
+for band,z in enumerate([-1.45,-.50,.50,1.45]):
+    points = [(-1.48-.14*math.sin(t), .135+.215*math.cos(t), z)
               for t in np.linspace(0, math.pi, 25)]
-    tube(f"Raised spine band {band}", points, .035, leather, hinge)
-spine_verts = [(-1.48-.14*math.sin(t), .25+.25*math.cos(t), z)
+    tube(f"Raised spine band {band}", points, .018, leather)
+spine_verts = [(-1.48-.14*math.sin(t), .135+.215*math.cos(t), z)
                for z in [-2.01,2.01] for t in np.linspace(0, math.pi, 33)]
 spine_faces = [(i,i+1,i+34,i+33) for i in range(32)]
-smooth(mesh("Rounded leather spine", spine_verts, spine_faces, leather, parent=hinge))
+spine_uv=[(i/32*.5,z*1.2) for z in [-2.01,2.01] for i in range(33)]
+spine=smooth(mesh("Rounded leather spine", spine_verts, spine_faces, leather, spine_uv))
+assert spine.parent is None and max(v[1] for v in spine_verts) < .37
 
 # Fine gilded border, inlaid square artwork and real outward relief.
 for inset, radius in [(0.13,.013),(0.20,.006)]:
@@ -250,7 +279,7 @@ for row in range(N):
     for col in range(N):
         u=col/(N-1)
         emboss=float(tonal[min(1023,round(v*1023)), min(1023,round(u*1023))])
-        verts.append(((u-.5)*2.65, .507+emboss*.014, (.5-v)*2.65-.07))
+        verts.append(((u-.5)*2.65, .507+emboss*.024, (.5-v)*2.65-.07))
         uv.append((u,v))
 faces=[(r*N+c,r*N+c+1,(r+1)*N+c+1,(r+1)*N+c) for r in range(N-1) for c in range(N-1)]
 smooth(mesh("Original cover bas relief",verts,faces,cover_mat,uv,hinge))
