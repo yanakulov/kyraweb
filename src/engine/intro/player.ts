@@ -19,7 +19,7 @@ export function frameAtTime(times: number[], elapsedMs: number) {
 export function playIntro(
   canvas: HTMLCanvasElement,
   steps: IntroStep[],
-  options?: { onStepChange?: (id: string) => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean; atmosphere?: () => boolean; onLoadingChange?: (loading: boolean) => void }
+  options?: { onFirstFrame?: () => void; onStepChange?: (id: string) => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean; atmosphere?: () => boolean; onLoadingChange?: (loading: boolean) => void }
 ): IntroPlayback {
   const ctx = canvas.getContext("2d");
   if (!ctx) {
@@ -69,6 +69,7 @@ export function playIntro(
 
   let running = true;
   let animationFrame = 0;
+  let firstFrame = true;
   let demoLoopStepId: string | null = null;
   let demoExitRequested = false;
   let skipLine = () => {};
@@ -327,10 +328,7 @@ export function playIntro(
           if (bottom) ctx.drawImage(bottom, 0, LOGICAL_HEIGHT - offset);
         } else if (step.bgSrc) {
           const bg = imageMap.get(step.bgSrc);
-          if (bg) {
-            if (step.id === 'akulaflow') drawStudioLogo(ctx, bg, elapsed, !!reducedMotion?.matches);
-            else ctx.drawImage(bg, 0, 0);
-          }
+          if (bg) ctx.drawImage(bg, 0, 0);
         }
 
         if (activeSceneAnim) {
@@ -408,7 +406,10 @@ export function playIntro(
         if (step.overlaySrc) {
           const overlay = imageMap.get(step.overlaySrc);
           const pos = step.overlayPos ?? { x: 0, y: 0 };
-          if (overlay) ctx.drawImage(overlay, pos.x, pos.y);
+          if (overlay) {
+            if (step.id === 'akulaflow') drawStudioLogo(ctx, overlay, elapsed, !!reducedMotion?.matches);
+            else ctx.drawImage(overlay, pos.x, pos.y);
+          }
         }
 
         if (step.id === "kallak_writing" && options?.atmosphere?.() && !reducedMotion?.matches) {
@@ -435,6 +436,7 @@ export function playIntro(
         if (renderSubtitlesOnCanvas && !subtitleLoopRange && step.subtitles?.length) {
           drawSubtitles(step.subtitles, subtitleElapsed, alpha);
         }
+        if (firstFrame) { firstFrame = false; options?.onFirstFrame?.(); }
         animationFrame = requestAnimationFrame(loop);
       };
 

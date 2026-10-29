@@ -37,7 +37,8 @@ export function buildIntroSteps(): IntroStep[] {
     {
       id: "akulaflow",
       durationMs: WESTWOOD_TOTAL_MS,
-      bgSrc: withBase("assets/interface/akulaflow-studio.webp")
+      bgSrc: withBase("assets/intro/logo_bg.png"),
+      overlaySrc: withBase("assets/interface/akulaflow-studio.webp")
     },
     {
       id: "kyrandia_scroll",

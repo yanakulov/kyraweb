@@ -3,5 +3,5 @@
 <style>body{margin:16px;background:#10100c;color:#eee;font:14px system-ui}nav{display:flex;gap:12px;margin-bottom:16px}button{padding:12px}iframe{display:block;border:1px solid #766449;width:390px;height:844px}</style>
 <nav><button data-width="390" data-height="844">Mobile 390</button><button data-width="320" data-height="700">Small mobile 320</button><button data-width="1080" data-height="720">Desktop</button></nav>
 <iframe title="Responsive game preview" src="/kyraweb/"></iframe>
-<script>document.querySelectorAll('button').forEach(button=>button.onclick=()=>{const frame=document.querySelector('iframe');frame.style.width=button.dataset.width+'px';frame.style.height=button.dataset.height+'px';});</script>
+<script>if(new URLSearchParams(location.search).has('controls'))document.querySelector('iframe').src='/kyraweb/tests/browser/controls.html';document.querySelectorAll('button').forEach(button=>button.onclick=()=>{const frame=document.querySelector('iframe');frame.style.width=button.dataset.width+'px';frame.style.height=button.dataset.height+'px';});</script>
 </html>

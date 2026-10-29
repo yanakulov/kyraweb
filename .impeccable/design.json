@@ -4,17 +4,15 @@
   "title": "Design System: Kyrandia - Fables & Fiends",
   "extensions": {
     "shadows": [
-      { "name": "game-frame", "value": "inset 0 0 0 3px #17130e, inset 0 0 0 4px #6e5732, 0 20px 60px #0008", "purpose": "Layered brass frame against the wooden page." },
       { "name": "button-bevel", "value": "inset 0 0 0 2px #14231d, inset 0 0 0 3px #5d6747", "purpose": "Square, tactile controls." }
     ],
     "motion": [
-      { "name": "book-opening", "value": "1450ms; cubic ease-out cover rotation", "purpose": "Open the physical cover and enter the intro; bypass under reduced motion." },
+      { "name": "book-opening", "value": "7000ms total; hinge 0-2200ms; color 2900-4300ms; zoom 4600-7000ms", "purpose": "Open the Blender book, hold the original landscape in monochrome, restore color and enter the picture; bypass under reduced motion." },
+      { "name": "book-handoff", "value": "onFirstFrame", "purpose": "Keep the final book view until the intro draws; Westwood and AkulaFlow continue on the same original landscape." },
       { "name": "book-rendering", "value": "requestAnimationFrame on demand", "purpose": "Render loading, resize, pointer movement and opening; stop when settled." }
     ],
     "breakpoints": [
-      { "name": "mobile", "value": "600px" },
-      { "name": "narrow", "value": "360px" },
-      { "name": "short-landscape", "value": "max-height: 500px and orientation: landscape" }
+      { "name": "mobile", "value": "600px" }
     ]
   },
   "components": [
@@ -25,15 +23,15 @@
       "css": ".ds-primary{min-height:44px;padding:10px 20px;font:14px/1.4 Kyrandia,Georgia,serif;color:var(--paper,#e7dcba);background:linear-gradient(#30453a,#152b23);border:1px solid #b29757;border-radius:0;box-shadow:inset 0 0 0 2px #14231d,inset 0 0 0 3px #5d6747;cursor:pointer}.ds-primary:hover{background:#425943;color:#fff3d2;border-color:#edd591}.ds-primary:active{background:#14251b}.ds-primary:focus-visible{outline:2px solid #f5d88f;outline-offset:4px}"
     },
     {
-      "name": "Toolbar action", "kind": "button",
-      "description": "Menu, fullscreen, inventory and settings controls.",
+      "name": "Options action", "kind": "button",
+      "description": "Menu, fullscreen, inventory and help controls inside the Options dialog, opened from the original HUD button.",
       "html": "<button class=\"ds-toolbar\">Settings</button>",
       "css": ".ds-toolbar{min-height:44px;padding:10px 12px;font:11px/1.5 Kyrandia,Georgia,serif;color:var(--gold,#d8bc7b);background:#1e231a;border:1px solid #655535;border-radius:0;cursor:pointer}.ds-toolbar:hover{background:var(--stone,#162a25);color:#fff3d2}.ds-toolbar:focus-visible{outline:2px solid #f5d88f;outline-offset:4px}"
     },
     {
       "name": "Settings panel", "kind": "custom", "refersTo": "panel",
-      "description": "Readable controls and help on a deep green surface.",
-      "html": "<section class=\"ds-panel\"><h2>Adventure settings</h2><p>Choose your walk speed.</p></section>",
+      "description": "Scrollable settings, help and inventory dialogs constrained to the game stage, with focus containment and Escape dismissal. Credits live inside Options.",
+      "html": "<section class=\"ds-panel\"><h2>Options</h2><p>Choose your walk speed.</p></section>",
       "css": ".ds-panel{padding:24px;background:var(--panel,#14231d);color:var(--paper,#e7dcba);border:1px solid var(--edge,#786447);font:15px/1.6 Georgia,serif}.ds-panel h2{font:25px Georgia,serif;color:#e4ce97;margin:0 0 24px}.ds-panel p{margin:0}"
     },
     {
@@ -44,25 +42,33 @@
     },
     {
       "name": "Inventory slot", "kind": "button",
-      "description": "Touch-friendly slot; the real component supplies original item sprites and accessible item names.",
+      "description": "Touch-friendly slot in the internal inventory overlay; the real component supplies original item sprites and accessible item names.",
       "html": "<button class=\"ds-slot\" aria-label=\"Empty inventory slot\"></button>",
       "css": ".ds-slot{min-width:44px;min-height:48px;background:#0c1410;border:2px ridge #786447;cursor:pointer}.ds-slot:active{border-color:#f5d88f}.ds-slot:focus-visible{outline:2px solid #f5d88f;outline-offset:4px}"
     }
   ],
   "narrative": {
     "northStar": "The book on Kallak's desk",
-    "overview": "Old leather, wood, aged gold and emerald fittings make the browser feel part of Kyrandia. Generated illustrations carry material detail; readable controls and generous game framing carry the interface. The original 320 × 200 game remains the focal point once the book opens.",
+    "overview": "Old leather, wood, aged gold and emerald fittings make the browser feel part of Kyrandia. A Blender-modeled book carries the original retail cover embossed into leather; generated interface art supplies the surrounding fantasy controls. The original 320 × 200 game fills the stage once the camera enters the book, with no external masthead, toolbar or footer.",
     "keyCharacteristics": [
-      "Pixel illustrations and original game sprites, with a physical 3D book as the entrance.",
+      "Original cover art and pixel game scenes, with a physical Blender-modeled book as the entrance.",
       "Warm shadows, parchment lettering and deep green controls.",
       "Motion for opening the story and acknowledging input, not perpetual decoration."
     ],
-    "rules": [],
+    "rules": [
+      "Use the original HUD Options button to launch internal dialogs; keep credits inside Options.",
+      "Show the transparent AkulaFlow intro mark over the original Kyrandia landscape used by Westwood, preserving the existing reveal and fade.",
+      "Use the original supplied retail cover as embossed leather on the Blender model; export via extractor/model_storybook.py to public/assets/interface/storybook.glb.gz and retain the editable .blend in ignored .reference/.",
+      "Fill the viewport with the table; place the candle behind the book on the right, outside the hinge arc."
+    ],
     "dos": [
-      "Do keep the game view unobscured and the next action visible.",
+      "Do keep the game view unobscured outside explicitly opened dialogs and the next action visible.",
+      "Do keep controls and credits inside the game presentation.",
       "Do preserve the original cursor, pixel density and scene framing.",
       "Do check the book, menu, help and settings at desktop and narrow mobile sizes.",
-      "Do retain reduced-motion and WebGL-fallback paths."
+      "Do retain reduced-motion and WebGL-fallback paths.",
+      "Do preserve the supplied original cover composition and the original landscape through the book-to-intro handoff.",
+      "Do keep props outside the cover's hinge arc."
     ],
     "donts": [
       "Don't replace generated material art with generic gradients or decorative cards.",
