@@ -10,6 +10,7 @@ export type IntroStep = {
   fadeInMs?: number;
   fadeOutMs?: number;
   bgSrc?: string;
+  bgSrcRu?: string;
   overlaySrc?: string;
   overlayPos?: Vec2;
   textLines?: string[];

@@ -35,6 +35,7 @@ import worldData from "../public/assets/world/world.json";
 import { portalAtPoint, portalMarker } from "../src/engine/gameplay/navigation";
 import { gemCutScene } from "../src/engine/scenes/gemCut";
 import { validateWorldSave } from "../src/engine/gameplay/saveStorage";
+import { locale, setLocale } from "../src/i18n";
 
 test("skipping a line releases speech waits without skipping movies, walks or decisions", () => {
   const applied: RoomAction[] = [];
@@ -292,6 +293,30 @@ function introHarness() {
   };
 }
 const subtitle = { text: "Hello", startMs: 20, endMs: 80, y: 180 };
+
+test('the Malcolm story uses the selected bitmap, switches language without restarting and keeps its fades', async () => {
+  const h = introHarness(), originalImage = globalThis.Image, previousLanguage = locale.value;
+  const requested: string[] = [], alphas: number[] = [];
+  class FakeImage {
+    onload: (() => void) | null = null; onerror: (() => void) | null = null; source = '';
+    set src(value: string) { this.source = value; requested.push(value); queueMicrotask(() => this.onload?.()); }
+  }
+  Object.assign(globalThis, { Image: FakeImage });
+  const story = buildIntroSteps().find(step => step.id === 'story_text')!;
+  const playback = playIntro(h.canvas, [story], { onSubtitleChange: payload => alphas.push(payload.alpha) });
+  try {
+    setLocale('ru'); await settleLoads(); h.tick(125);
+    assert.deepEqual(requested, [story.bgSrc, story.bgSrcRu]);
+    assert.equal((h.draws.at(-1)![0] as FakeImage).source, '/assets/intro/text-ru.png');
+    assert.equal(alphas.at(-1), 0.5);
+    setLocale('en'); h.tick(250);
+    assert.equal((h.draws.at(-1)![0] as FakeImage).source, '/assets/intro/text.png');
+    setLocale('ru'); h.tick(story.durationMs - 125);
+    assert.equal((h.draws.at(-1)![0] as FakeImage).source, '/assets/intro/text-ru.png');
+    assert.equal(alphas.at(-1), 0.5);
+    assert.equal(h.textDraws(), 0, 'the translation must be a bitmap, not canvas text');
+  } finally { playback.stop(); await settleLoads(); globalThis.Image = originalImage; setLocale(previousLanguage); h.restore(); }
+});
 
 test("the Kallak book opens only after its scene is drawn and can resume the original intro", async () => {
   const h = introHarness();
