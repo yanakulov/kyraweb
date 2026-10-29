@@ -1,10 +1,11 @@
 <template>
-  <main class="app" ref="appRef">
+  <main class="app" :class="{ 'book-is-closed': !bookOpened }" ref="appRef">
     <header class="masthead">
-      <h1><img src="/assets/interface/HUD/game-logo.png" alt="The Legend of Kyrandia" width="582" height="148" /></h1>
-      <span>Book One · Web remake</span>
+      <h1><img :src="`${baseUrl}assets/interface/kyrandia-title.webp`" alt="The Legend of Kyrandia" width="600" height="200" /></h1>
+      <div class="edition"><span>Fables &amp; Fiends</span><small>Book One · A web reimagining</small></div>
     </header>
-    <div class="game-frame">
+    <FantasyBook v-if="!bookOpened" @open="openBook" />
+    <div v-show="bookOpened" class="game-frame">
       <div class="stage">
         <SubtitleOverlay
           :lines="subtitleLines"
@@ -32,16 +33,22 @@
           <img
             class="intro-logo"
             :style="{ opacity: introPanelOpacity }"
-            src="/assets/interface/HUD/game-logo.png"
+            :src="`${baseUrl}assets/interface/kyrandia-title.webp`"
             alt="The Legend of Kyrandia"
           />
           <div class="intro-menu" :style="{ opacity: introPanelOpacity }">
+            <p class="chapter-title">A tale of magic. A kingdom to awaken.</p>
+            <div class="intro-choices">
             <button
               class="pixel-button start-button"
               type="button"
               :disabled="introPanelClosing"
               @click="handleIntroPanelClick"
-            >Start game</button>
+            ><span class="button-gem" aria-hidden="true"></span>Start game</button>
+            <button class="pixel-button menu-secondary" type="button" :disabled="introPanelClosing" :aria-expanded="helpOpen" @click="showHelp">How to play</button>
+            <button class="pixel-button menu-secondary" type="button" :disabled="introPanelClosing" :aria-expanded="panelOpen" @click="showSettings">Settings</button>
+            </div>
+            <p class="menu-footnote">Book One · The beginning of a legend</p>
           </div>
         </template>
         <div v-if="gameError" class="game-error" role="alert">
@@ -58,20 +65,25 @@
           @click="useInventorySlot(index)"><span v-if="item" class="item-icon" :style="itemStyle(item)"></span></button>
       </div>
     </section>
-    <div class="game-toolbar">
+    <div v-if="bookOpened" class="game-toolbar">
       <p class="game-hint" aria-live="polite">{{ gameHint }}</p>
       <nav class="game-actions" aria-label="Game controls">
         <button v-if="!introActive" class="text-button" type="button" :aria-expanded="inventoryOpen" @click="inventoryOpen = !inventoryOpen">{{ heldItem ? 'Item in hand' : 'Inventory' }}</button>
-        <button class="text-button" type="button" @click="openMenu">Menu</button>
+        <button v-if="!introPanelVisible" class="text-button" type="button" @click="openMenu">Menu</button>
         <button v-if="fullscreenAvailable" class="text-button" type="button" @click="toggleFullscreen">
           {{ isFullscreen ? "Exit full screen" : "Full screen" }}
         </button>
-        <button class="text-button" type="button" :aria-expanded="panelOpen" aria-controls="game-settings" @click="panelOpen = !panelOpen">
+        <button v-if="!introPanelVisible" class="text-button" type="button" :aria-expanded="panelOpen" aria-controls="game-settings" @click="showSettings">
           Settings
         </button>
       </nav>
     </div>
+    <section v-if="helpOpen" id="game-help" class="settings help-panel" aria-labelledby="help-title">
+      <div class="panel-heading"><h2 id="help-title">Your adventure begins</h2><button class="text-button" type="button" @click="helpOpen = false">Close</button></div>
+      <div class="help-columns"><p><strong>Explore</strong>Click to walk. Move the cursor to an exit to reveal its arrow.</p><p><strong>Discover</strong>Click people to talk, or objects to take them. Choose an inventory item, then click where to use it.</p><p><strong>On a touch screen</strong>Swipe to guide the cursor. Tap to interact. During dialogue, tap to skip the current line.</p></div>
+    </section>
     <section v-if="panelOpen" id="game-settings" class="settings" aria-label="Game settings">
+      <div class="panel-heading"><h2>Adventure settings</h2><button class="text-button" type="button" @click="panelOpen = false">Close</button></div>
       <div class="settings-main">
         <label class="check-field"><input type="checkbox" v-model="atmosphere" /> Window dust</label>
         <label class="setting-field">
@@ -108,14 +120,20 @@
       </details>
     </section>
     <footer class="credits">
-      <span>Original game © 1992 Westwood Studios</span>
-      <a href="https://github.com/yanakulov/kyraweb" target="_blank" rel="noopener noreferrer">Web remake by Yan Akulov</a>
+      <span>Original tale © 1992 Westwood Studios</span>
+      <a href="https://github.com/yanakulov/kyraweb" target="_blank" rel="noopener noreferrer">Reimagined by AkulaFlow · Yan Akulov</a>
     </footer>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+const FantasyBook = defineAsyncComponent(() => import('./components/FantasyBook.vue'));
+const bookOpened = ref(false);
+const helpOpen = ref(false);
+async function openBook() { bookOpened.value = true; await nextTick(); void boot(); }
+function showHelp() { helpOpen.value = !helpOpen.value; panelOpen.value = false; }
+function showSettings() { panelOpen.value = !panelOpen.value; helpOpen.value = false; }
 import { mapPointerToCanvas, startGame } from "./engine/gameplay/game";
 import { LOGICAL_WIDTH } from "./engine/core/constants";
 import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
@@ -324,6 +342,7 @@ async function launchIntro(startIndex: number, autoStartGame: boolean) {
 
 function openMenu() {
   panelOpen.value = false;
+  helpOpen.value = false;
   void launchIntro(introSteps.findIndex(step => step.id === "kallak_writing"), true);
 }
 
@@ -419,7 +438,7 @@ function cancelGesture() { gesture = null; }
 onMounted(() => {
   fullscreenAvailable.value = document.fullscreenEnabled;
   document.addEventListener("fullscreenchange", updateFullscreen);
-  void boot();
+  document.title = 'Fables & Fiends — The Legend of Kyrandia';
   subtitleResizeObserver = new ResizeObserver(updateSubtitleScale);
   if (canvasRef.value) subtitleResizeObserver.observe(canvasRef.value);
   window.addEventListener("resize", updateSubtitleScale);

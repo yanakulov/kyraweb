@@ -4,6 +4,7 @@ import { drawKallakAtmosphere } from "../rendering/kallakAtmosphere";
 import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
 import type { SceneAnimState, SceneSpriteDef } from "../core/types";
 import type { IntroPlayback, IntroStep, IntroSubtitle } from "./types";
+import { drawStudioLogo } from './studioLogo';
 
 export function frameAtTime(times: number[], elapsedMs: number) {
   let low = 0, high = times.length;
@@ -39,6 +40,7 @@ export function playIntro(
 
   const NO_UI_OVERLAY = new Set([
     "westwood",
+    "akulaflow",
     "kyrandia",
     "kyrandia_scroll",
     "story_text",
@@ -101,6 +103,10 @@ export function playIntro(
       skipLine = () => {
         if (!running || loadingSince !== null || steps[stepIndex]?.id === demoLoopStepId) return;
         const elapsed = performance.now() - stepStart;
+        if (steps[stepIndex]?.id === 'akulaflow') {
+          stepStart -= steps[stepIndex].durationMs - elapsed;
+          return;
+        }
         const line = steps[stepIndex]?.subtitles?.find(line => elapsed >= line.startMs && elapsed < line.endMs);
         if (line) stepStart -= line.endMs - elapsed;
       };
@@ -321,7 +327,10 @@ export function playIntro(
           if (bottom) ctx.drawImage(bottom, 0, LOGICAL_HEIGHT - offset);
         } else if (step.bgSrc) {
           const bg = imageMap.get(step.bgSrc);
-          if (bg) ctx.drawImage(bg, 0, 0);
+          if (bg) {
+            if (step.id === 'akulaflow') drawStudioLogo(ctx, bg, elapsed, !!reducedMotion?.matches);
+            else ctx.drawImage(bg, 0, 0);
+          }
         }
 
         if (activeSceneAnim) {

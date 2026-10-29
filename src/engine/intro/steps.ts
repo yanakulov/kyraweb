@@ -34,7 +34,11 @@ export function buildIntroSteps(): IntroStep[] {
       bgSrc: withBase("assets/intro/logo_bg.png"),
       indexedFrames: sequence("westwood", westwoodIndices, westwoodIndices.map((_, i) => i * WESTWOOD_TOTAL_MS / westwoodIndices.length), { x: 0, y: 46 })
     },
-    // Kyrandia logo step temporarily disabled.
+    {
+      id: "akulaflow",
+      durationMs: WESTWOOD_TOTAL_MS,
+      bgSrc: withBase("assets/interface/akulaflow-studio.webp")
+    },
     {
       id: "kyrandia_scroll",
       durationMs: scrollMs,

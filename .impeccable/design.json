@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-29T00:00:00Z",
+  "title": "Design System: Kyrandia - Fables & Fiends",
+  "extensions": {
+    "shadows": [
+      { "name": "game-frame", "value": "inset 0 0 0 3px #17130e, inset 0 0 0 4px #6e5732, 0 20px 60px #0008", "purpose": "Layered brass frame against the wooden page." },
+      { "name": "button-bevel", "value": "inset 0 0 0 2px #14231d, inset 0 0 0 3px #5d6747", "purpose": "Square, tactile controls." }
+    ],
+    "motion": [
+      { "name": "book-opening", "value": "1450ms; cubic ease-out cover rotation", "purpose": "Open the physical cover and enter the intro; bypass under reduced motion." },
+      { "name": "book-rendering", "value": "requestAnimationFrame on demand", "purpose": "Render loading, resize, pointer movement and opening; stop when settled." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "600px" },
+      { "name": "narrow", "value": "360px" },
+      { "name": "short-landscape", "value": "max-height: 500px and orientation: landscape" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action", "kind": "button", "refersTo": "button",
+      "description": "Start the adventure or open its book.",
+      "html": "<button class=\"ds-primary\">Start game</button>",
+      "css": ".ds-primary{min-height:44px;padding:10px 20px;font:14px/1.4 Kyrandia,Georgia,serif;color:var(--paper,#e7dcba);background:linear-gradient(#30453a,#152b23);border:1px solid #b29757;border-radius:0;box-shadow:inset 0 0 0 2px #14231d,inset 0 0 0 3px #5d6747;cursor:pointer}.ds-primary:hover{background:#425943;color:#fff3d2;border-color:#edd591}.ds-primary:active{background:#14251b}.ds-primary:focus-visible{outline:2px solid #f5d88f;outline-offset:4px}"
+    },
+    {
+      "name": "Toolbar action", "kind": "button",
+      "description": "Menu, fullscreen, inventory and settings controls.",
+      "html": "<button class=\"ds-toolbar\">Settings</button>",
+      "css": ".ds-toolbar{min-height:44px;padding:10px 12px;font:11px/1.5 Kyrandia,Georgia,serif;color:var(--gold,#d8bc7b);background:#1e231a;border:1px solid #655535;border-radius:0;cursor:pointer}.ds-toolbar:hover{background:var(--stone,#162a25);color:#fff3d2}.ds-toolbar:focus-visible{outline:2px solid #f5d88f;outline-offset:4px}"
+    },
+    {
+      "name": "Settings panel", "kind": "custom", "refersTo": "panel",
+      "description": "Readable controls and help on a deep green surface.",
+      "html": "<section class=\"ds-panel\"><h2>Adventure settings</h2><p>Choose your walk speed.</p></section>",
+      "css": ".ds-panel{padding:24px;background:var(--panel,#14231d);color:var(--paper,#e7dcba);border:1px solid var(--edge,#786447);font:15px/1.6 Georgia,serif}.ds-panel h2{font:25px Georgia,serif;color:#e4ce97;margin:0 0 24px}.ds-panel p{margin:0}"
+    },
+    {
+      "name": "Walk speed", "kind": "input",
+      "description": "Native select with a comfortable touch target.",
+      "html": "<label class=\"ds-field\">Walk speed<select><option>Fast</option><option>Fastest</option><option>Slow</option></select></label>",
+      "css": ".ds-field{display:grid;gap:8px;color:var(--paper,#e7dcba);font:12px/1.6 Kyrandia,Georgia,serif}.ds-field select{min-height:44px;padding:8px;color:var(--paper,#e7dcba);background:var(--ink,#15140f);border:1px solid var(--edge,#786447);border-radius:0;font:inherit}.ds-field select:focus-visible{outline:2px solid #f5d88f;outline-offset:4px}"
+    },
+    {
+      "name": "Inventory slot", "kind": "button",
+      "description": "Touch-friendly slot; the real component supplies original item sprites and accessible item names.",
+      "html": "<button class=\"ds-slot\" aria-label=\"Empty inventory slot\"></button>",
+      "css": ".ds-slot{min-width:44px;min-height:48px;background:#0c1410;border:2px ridge #786447;cursor:pointer}.ds-slot:active{border-color:#f5d88f}.ds-slot:focus-visible{outline:2px solid #f5d88f;outline-offset:4px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The book on Kallak's desk",
+    "overview": "Old leather, wood, aged gold and emerald fittings make the browser feel part of Kyrandia. Generated illustrations carry material detail; readable controls and generous game framing carry the interface. The original 320 × 200 game remains the focal point once the book opens.",
+    "keyCharacteristics": [
+      "Pixel illustrations and original game sprites, with a physical 3D book as the entrance.",
+      "Warm shadows, parchment lettering and deep green controls.",
+      "Motion for opening the story and acknowledging input, not perpetual decoration."
+    ],
+    "rules": [],
+    "dos": [
+      "Do keep the game view unobscured and the next action visible.",
+      "Do preserve the original cursor, pixel density and scene framing.",
+      "Do check the book, menu, help and settings at desktop and narrow mobile sizes.",
+      "Do retain reduced-motion and WebGL-fallback paths."
+    ],
+    "donts": [
+      "Don't replace generated material art with generic gradients or decorative cards.",
+      "Don't add continuous book rendering, oversized downloads or ornamental controls without a functional reason."
+    ]
+  }
+}
