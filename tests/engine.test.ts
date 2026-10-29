@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { playIntro, frameAtTime } from "../src/engine/intro/player";
 import { buildIntroSteps } from "../src/engine/intro/steps";
 import type { IntroStep } from "../src/engine/intro/types";
-import { findWalkPath } from "../src/engine/gameplay/pathfinding";
+import { findWalkPath, findClickPath } from "../src/engine/gameplay/pathfinding";
 import { getSequence } from "../src/engine/gameplay/movement";
 import { BRANDON_FRAMES } from "../src/engine/characters/brandonFrames";
 import { isWalkable } from "../src/engine/scene/masks";
@@ -470,6 +470,34 @@ test("pathfinder walks around obstacles, respects foot width and stops at blocke
   assert.ok(findWalkPath({ x: 40, y: 40 }, { x: 52, y: 40 }, passable).every(passable));
   assert.deepEqual(findWalkPath({ x: 40, y: 40 }, { x: 72, y: 40 }, () => false), []);
   assert.equal(isWalkable({ x: 40, y: 140 }, { ...scene, uiMaskY: 150 }, { width: 320, height: 100, pixels: [] }), false);
+});
+
+test('scenery clicks approach reachable floor around obstacles without crossing isolated islands or thin walls', () => {
+  const start = {x:40,y:40}, target = {x:100,y:20};
+  const floor = (p:Vec2) => p.x>=20 && p.x<=120 && p.y>=20 && p.y<=80 && !(p.x>=60 && p.x<=80 && p.y<60) && !(p.x>88 && p.y<32);
+  const route = findClickPath(start,target,floor);
+  assert.deepEqual(route.at(-1), {x:100,y:32});
+  assert.ok(route.some(p=>p.y>=60), 'walk around the wall instead of stopping on its near side');
+  assert.ok(route.every(floor));
+  const islands = (p:Vec2) => p.y>=20 && p.y<=60 && ((p.x>=20&&p.x<=60)||(p.x>=100&&p.x<=120));
+  assert.deepEqual(findClickPath(start,{x:104,y:40},islands).at(-1),{x:60,y:40});
+  const thinWall = (p:Vec2) => p.x>=20&&p.x<=60&&p.y>=20&&p.y<=60&&p.y!==41;
+  assert.deepEqual(findClickPath(start,{x:40,y:50},thinWall),[]);
+  let improved=0;
+  for(const room of worldData.rooms as WorldRoom[]) {
+    const pack=parseScenePack(gunzipSync(readFileSync(`public/assets/world/${room.id}.kyr.gz`)));
+    const clip=new IndexedClip(pack,pack.clips.mask),mask={width:clip.info.width,height:clip.info.height,pixels:Array.from(clip.frame(0))};
+    const from=nearestFloor(mask,room.entrances.south),passable=(p:Vec2)=>isWalkable(p,{...scene,uiMaskY:136},mask);
+    for(const point of [{x:40,y:30},{x:160,y:40},{x:280,y:60}]) {
+      const path=findClickPath(from,point,passable),old=findWalkPath(from,point,passable);
+      assert.ok(path.every(passable),room.name);
+      const end=path.at(-1)??from,previous=old.at(-1)??from;
+      const distance=(p:Vec2)=>Math.hypot(p.x-point.x,p.y-point.y);
+      assert.ok(distance(end)<=distance(previous)+0.001,room.name);
+      if(distance(end)<distance(previous))improved++;
+    }
+  }
+  assert.ok(improved>0,'real off-path clicks must improve');
 });
 
 test("real GEMCUT routes stay on the grid and never cross the mask", () => {

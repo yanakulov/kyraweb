@@ -13,7 +13,7 @@ import {
   initInventory
 } from "./inventory";
 import { buildMaskCanvas, buildForegroundFrame, isWalkable, resolveActorLayer } from "../scene/masks";
-import { findWalkPath } from "./pathfinding";
+import { findWalkPath, findClickPath } from "./pathfinding";
 import { getIdleFrame, getSequence, pickDirection } from "./movement";
 import { filterSceneAnimShapes, findOverlayAt, initSceneOverlays, drawSceneOverlays } from "../scene/overlays";
 import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
@@ -416,10 +416,6 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         ctx.stroke();
       }
 
-      if (state.target) {
-        ctx.fillStyle = "rgba(255, 220, 160, 0.8)";
-        ctx.fillRect(state.target.x - 1, state.target.y - 1, 2, 2);
-      }
     }
 
     function loop(now: number) {
@@ -439,7 +435,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (transition?.active || dead || sequence || point.y >= scene.uiMaskY || state.drops.length) return;
       pendingPortal = null;
       actorShape = null;
-      const path = findWalkPath(state.pos, point, p => isWalkable(p, scene, mask));
+      const path = findClickPath(state.pos, point, p => isWalkable(p, scene, mask));
       stopWalking();
       if (!path.length) return;
       state.path = path;

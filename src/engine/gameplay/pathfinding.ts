@@ -2,6 +2,7 @@
 // Adapted from ScummVM engines/kyra/engine/scene_v1.cpp.
 // Copyright ScummVM contributors. See LICENSES/GPL-3.0.txt.
 import type { Vec2 } from "../core/types";
+import { LOGICAL_WIDTH, LOGICAL_HEIGHT } from "../core/constants";
 
 // Pathfinder order: E, NE, N, NW, W, SW, S, SE.
 const DX = [4, 4, 0, -4, -4, -4, 0, 4];
@@ -97,4 +98,34 @@ export function findWalkPath(from: Vec2, target: Vec2, passable: (p: Vec2) => bo
   }
   let current = start;
   return simplify(path).map(dir => (current = step(current, dir)));
+}
+
+/** Clicks on scenery approach the closest reachable floor, never an isolated island. */
+export function findClickPath(from: Vec2, target: Vec2, passable: (p: Vec2) => boolean): Vec2[] {
+  const start = snapToWalkGrid(from), to = snapToWalkGrid(target);
+  const canStep = (a: Vec2, b: Vec2) => passable(b) && passable({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const original = passable(to) ? findWalkPath(start, to, passable) : [];
+  if (equal(start, to)) return [];
+  if (original.length && equal(original[original.length - 1], to) &&
+      original.every((p, i) => canStep(i ? original[i - 1] : start, p))) return original;
+
+  // The scene has at most 80×100 grid points; a bounded flood needs no search library.
+  const points = [start], parents = [-1], visited = new Set([`${start.x},${start.y}`]);
+  const distance = (p: Vec2) => (p.x - target.x) ** 2 + (p.y - target.y) ** 2;
+  let best = 0;
+  for (let i = 0; i < points.length; i++) {
+    const point = points[i];
+    if (distance(point) < distance(points[best])) best = i;
+    if (equal(point, to)) { best = i; break; }
+    for (let dir = 0; dir < 8; dir++) {
+      const next = step(point, dir), key = `${next.x},${next.y}`;
+      if (next.x < 0 || next.x >= LOGICAL_WIDTH || next.y < 0 || next.y >= LOGICAL_HEIGHT || visited.has(key)) continue;
+      if (!canStep(point, next)) continue;
+      visited.add(key);
+      points.push(next); parents.push(i);
+    }
+  }
+  const path: Vec2[] = [];
+  for (let i = best; parents[i] !== -1; i = parents[i]) path.push(points[i]);
+  return path.reverse();
 }
