@@ -1,5 +1,8 @@
 <template>
   <section class="fantasy-book" :class="{ 'is-opening': opening, 'is-options': isOptions, 'is-rendered': rendered, 'is-fallback': fallback }" :aria-label="t('Fables and Fiends, Book One')" @pointermove="move" @pointerdown="move" @pointerleave="rest">
+    <header v-if="!isOptions" class="book-front-title" :aria-hidden="opening">
+      <img :src="`${base}assets/interface/kyrandia-title.webp`" alt="The Legend of Kyrandia" width="256" height="85" />
+    </header>
     <div ref="host" class="book-table" @click="openCover">
       <img v-if="fallback && !isOptions" class="book-fallback" :src="`${base}assets/interface/book-cover.webp`" :alt="t('The original Kyrandia cover embossed into leather')" />
       <span v-if="!ready && !fallback && !isOptions" class="book-loading" role="status">{{ t('Preparing your story…') }}</span>
@@ -13,6 +16,10 @@
         <slot name="invitation" />
       </div>
     </div>
+    <footer v-if="!isOptions" class="book-front-credits" :aria-hidden="opening">
+      <p>{{ t('Original tale © 1992 Westwood Studios') }}<span>{{ t('An unofficial web remake') }}</span></p>
+      <div class="book-remake-credit"><span>{{ t('Remake by') }}</span><span class="book-studio-mark"><img :src="`${base}assets/interface/akulaflow-studio.webp`" alt="AkulaFlow" width="320" height="200" /></span></div>
+    </footer>
     <p v-if="opening" class="sr-only" role="status">{{ t('The story begins…') }}</p>
   </section>
 </template>
@@ -404,6 +411,17 @@ onBeforeUnmount(() => {
 <style scoped>
 .fantasy-book { position: fixed; inset: 0; z-index: 20; overflow: hidden; isolation: isolate; background: #1b130c; }
 .fantasy-book.is-options:not(.is-rendered) { visibility: hidden; pointer-events: none; }
+.book-front-title, .book-front-credits { position: absolute; z-index: 2; pointer-events: none; transition: opacity 350ms, transform 350ms; }
+.book-front-title { top: max(16px,env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); }
+.book-front-title img { display: block; width: clamp(180px,28vw,300px); height: auto; max-width: 70vw; max-height: 14svh; object-fit: contain; filter: drop-shadow(0 3px 8px #000a); }
+.book-front-credits { bottom: max(18px,env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: calc(100% - 32px); display: flex; justify-content: center; align-items: center; gap: 28px; color: #c7b18b; text-shadow: 0 1px 3px #000; }
+.book-front-credits p { margin: 0; font: 12px/1.6 Georgia,serif; text-align: right; }
+.book-front-credits p span { display: block; color: #a18d6c; font-size: 11px; }
+.book-remake-credit { display: flex; align-items: center; gap: 9px; padding-left: 26px; border-left: 1px solid #a286493d; font: small-caps 12px/1.3 Georgia,serif; }
+.book-studio-mark { position: relative; display: block; width: 150px; height: 34px; overflow: hidden; }
+.book-studio-mark img { position: absolute; width: 100%; height: auto; top: 50%; transform: translateY(-50%); image-rendering: pixelated; }
+.is-opening .book-front-title { opacity: 0; transform: translate(-50%,-8px); }
+.is-opening .book-front-credits { opacity: 0; transform: translate(-50%,8px); }
 .book-ui { position: absolute; inset: 0; pointer-events: none; }
 .book-ui :deep(.book-projection) { position: absolute; inset: 0; pointer-events: none; }
 .book-page-menu { width: 320px; height: 420px; overflow: auto; overscroll-behavior: contain; color: #38240f; visibility: hidden; pointer-events: none !important; backface-visibility: hidden; }
@@ -422,5 +440,14 @@ onBeforeUnmount(() => {
 .book-open:hover, .book-open:focus-visible { color: #fff0bd; text-shadow: 0 0 12px #edbe6688,0 1px 2px #000; }
 .book-open:hover span { transform: scale(1.2); }
 .is-fallback .book-cover-invitation { position: absolute; left: 50%; top: 63%; transform: translate(-50%,-50%) !important; width: min(288px,70vw); }
-@media (prefers-reduced-motion: reduce) { .book-open, .book-open span { transition: none; } }
+@media (max-width: 600px) {
+  .book-front-credits { flex-direction: column; gap: 3px; }
+  .book-front-credits p { text-align: center; font-size: 11px; }
+  .book-remake-credit { border: 0; padding: 0; }
+}
+@media (max-height: 500px) {
+  .book-front-title { top: max(6px,env(safe-area-inset-top)); }
+  .book-front-credits { bottom: max(6px,env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) { .book-open, .book-open span, .book-front-title, .book-front-credits { transition: none; } }
 </style>

@@ -66,6 +66,8 @@ export const russian: Record<string, string> = {
   'Continue': 'Продолжить',
   'Stay here': 'Остаться',
   'Original tale © 1992 Westwood Studios': 'Оригинальная история © 1992 Westwood Studios',
+  'An unofficial web remake': 'Неофициальный веб-ремейк',
+  'Remake by': 'Ремейк от',
   'Reimagined by AkulaFlow · Yan Akulov': 'Новая глава — AkulaFlow · Ян Акулов',
   'Explore.': 'Исследуйте.',
   'Click to walk. Move the cursor to an exit to reveal its arrow.': 'Щёлкните, чтобы идти. Подведите курсор к выходу — появится стрелка.',
