@@ -228,9 +228,23 @@ addCheck('Verify Russian book',async()=>{
   assert(/[А-Яа-яЁё]/.test(menu().querySelector('.folio-help')?.textContent??''),'Help was not translated');
   await closeOptions(); await openOptions(); await click('Settings',menu());
   assert(menu().querySelector('#book-language-value')?.textContent==='Русский','Language changed when reopening the book');
+  await click('The story so far',menu());
+  for(let page=0;page<4;page++) {
+    await advance(10000);
+    const story=document.querySelector<HTMLElement>('.book-prologue')!;
+    const projection=story.closest<HTMLElement>('.book-projection')!;
+    const text=story.querySelector('.prologue-story .sr-only')!.textContent!;
+    assert(projection.scrollTop===0&&projection.scrollLeft===0,'Reading the prologue scrolled its 3D projection');
+    assert(story.querySelector('.prologue-story p[aria-hidden]')?.textContent===text,'The revealed prologue differs from its accessible text');
+    assert(story.querySelector('.opening-word')?.textContent===text.split(' ',1)[0],'The illuminated initial separated from its first word');
+    assert(getComputedStyle(story.querySelector('.initial')!).cssFloat==='none','The illuminated initial still floats beside the paragraph');
+    if(page<3) { story.querySelector<HTMLButtonElement>('.prologue-next')!.click(); await nextTick(); }
+  }
+  document.querySelector<HTMLButtonElement>('.prologue-skip')!.click(); await nextTick();
+  await click('Settings',menu());
   if(previous==='English') await choose('book-language','English');
   await closeOptions();
-},'Russian menus, custom choices and persisted language');
+},'Russian menus, persisted language and four stable prologue pages');
 
 addCheck('Verify Russian letter',async()=>{
   hud(); safeTestSlot();

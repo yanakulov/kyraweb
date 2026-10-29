@@ -270,7 +270,9 @@ onMounted(async () => {
       const lining = model.scene.getObjectByName('Front_board_suede_lining') as T.Mesh<T.BufferGeometry,T.MeshStandardMaterial> | undefined;
       if (lining?.isMesh) { lining.material.dispose(); lining.material = page.material.clone(); }
       if (pageMenu.value && pageLayer.value) {
-        uiRenderer = new CSS3DRenderer(); uiRenderer.domElement.className = 'book-projection'; pageLayer.value.append(uiRenderer.domElement);
+        uiRenderer = new CSS3DRenderer(); uiRenderer.domElement.className = 'book-projection';
+        // Focusing a page must not scroll its projection away from the book mesh.
+        uiRenderer.domElement.style.overflow = 'clip'; pageLayer.value.append(uiRenderer.domElement);
         uiScene = new T.Scene(); menu = new CSS3DObject(pageMenu.value);
         menu.position.set(-3.1,.528,-.03); menu.rotation.x = -Math.PI/2; menu.scale.setScalar(2.55/320); menu.visible = false; uiScene.add(menu);
       }
