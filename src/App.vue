@@ -24,9 +24,8 @@
           @pointercancel="cancelGesture"
           :class="{ 'cursor-controlled': !introActive }"
         ></canvas>
-        <div v-if="!introActive && !gameError" class="game-cursor" :style="{ left: `${cursor.x / 3.2}%`, top: `${cursor.y / 2}%` }" aria-hidden="true">
-          <svg v-if="cursorExit" viewBox="0 0 11 11" :style="{ transform: `translate(-50%, -50%) rotate(${({ north: 0, east: 90, south: 180, west: 270 })[cursorExit.side]}deg)` }"><path d="M5 1h1v1h1v1h1v1h1v1H7v5H4V5H2V4h1V3h1V2h1z" /></svg>
-          <svg v-else-if="!heldItem" viewBox="0 0 12 16"><path d="M1 1v12h2v-2h2l2 4h2l-2-5h4L1 1z" /></svg>
+        <div v-if="!introActive && !gameError" class="game-cursor" :style="{ left: `${(cursor.x - cursorShape.x) / 3.2}%`, top: `${(cursor.y - cursorShape.y) / 2}%`, width: `${cursorShape.w / 3.2}%`, height: `${cursorShape.h / 2}%` }" aria-hidden="true">
+          <img v-if="cursorExit || !heldItem" :src="`${baseUrl}assets/cursors/${cursorExit?.side ?? 'pointer'}.svg`" alt="" />
         </div>
         <button v-if="awaitingContinue" class="pixel-button continue-button" type="button" @click="game?.handleClick({ x: 160, y: 100 })">Continue</button>
         <template v-if="introPanelVisible">
@@ -128,6 +127,11 @@ import type { RoomPortal, InventoryItemId, Vec2 } from "./engine/core/types";
 const portals = ref<RoomPortal[]>([]);
 const cursor = ref<Vec2>({ x: 160, y: 100 });
 const cursorExit = computed(() => sequenceActive.value || loading.value ? undefined : portalAtPoint(portals.value, cursor.value));
+const baseUrl = import.meta.env.BASE_URL;
+const cursorShape = computed(() => ({
+  pointer: {x:1,y:1,w:8,h:10}, north: {x:5,y:1,w:16,h:9},
+  east: {x:7,y:5,w:16,h:11}, south: {x:5,y:7,w:16,h:9}, west: {x:1,y:5,w:16,h:11}
+})[cursorExit.value?.side ?? 'pointer']);
 const inventoryOpen = ref(false);
 const inventorySlots = ref<(InventoryItemId | null)[]>([]);
 const heldItem = ref<InventoryItemId | null>(null);

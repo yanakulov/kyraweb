@@ -52,16 +52,27 @@ test("skipping a line releases speech waits without skipping movies, walks or de
   script.stop(); assert.equal(script.skipLine(), false);
 });
 
-test("skipping a nonblocking tree voice keeps its remaining animation frames", () => {
+test("skipping a tree line immediately finishes its mouth frames and retains the final pose", () => {
   const applied: RoomAction[] = [];
   const script = new RoomScript([
     { op: 'say', text: 'Tree', voiceId: 1, ms: 5000, x: 160, y: 60, color: 1, blocking: false },
     { op: 'movie', clip: 'face', x: 0, y: 0, ticks: 6 }, { op: 'waitVoice' }, { op: 'message', text: 'Ready' }
   ], { apply: a => applied.push(a), walking: () => false, frames: () => 3 });
-  script.update(0); script.skipLine(); script.update(299);
-  assert.equal(script.done, false);
-  script.update(1); assert.equal(script.done, true);
+  script.update(0); script.skipLine(); script.update(0);
+  assert.equal(script.done, true);
   assert.equal(applied.filter(a => a.op === 'frame').length, 3);
+});
+
+test('original tree dialogue advances to the next line after skipping its WSA speech', () => {
+  const actions = opening.tree as RoomAction[];
+  const lines = actions.filter(a=>a.op==='say');
+  const seen: RoomAction[]=[];
+  const script=new RoomScript(actions,{apply:a=>seen.push(a),walking:()=>false,frames:()=>1});
+  let elapsed=0;
+  while(!script.done&&elapsed<60000){script.update(50);script.skipLine();elapsed+=50;}
+  assert.equal(script.done,true);
+  assert.deepEqual(seen.filter(a=>a.op==='say'),lines);
+  assert.ok(elapsed<10000,`Skipped dialogue still took ${elapsed} ms`);
 });
 
 test("exit markers use actual available portals, including doors and corner precedence", () => {

@@ -69,8 +69,8 @@ function advance(ms: number) {
     batch.forEach((callback) => callback(now));
   }
 }
-function capture(label: string) {
-  advance(1000);
+function capture(label: string, advanceClock = true) {
+  if (advanceClock) advance(1000);
   const figure = document.createElement("figure"),
     image = document.createElement("img"),
     caption = document.createElement("figcaption");
