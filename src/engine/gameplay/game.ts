@@ -1,3 +1,4 @@
+import { sceneShuffle } from './sceneShuffle';
 import { DEFAULT_ANIM_STEP_INTERVAL, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS } from "../core/constants";
 import { loadImage, loadMask, loadNpcTextJson, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
@@ -176,7 +177,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let atmosphere = true;
     const reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
 
+    const transition = config.transitionImage ? sceneShuffle(config.transitionImage) : null;
     function update(dt: number, nowMs: number) {
+      if (transition?.active) { transition.update(dt * 1000); return; }
       updatePalette(dt*1000);
       speechRemaining = Math.max(0, speechRemaining - dt * 1000);
       if (speechRemaining > 0) speechAge += dt * 1000;
@@ -261,7 +264,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       // Composite them behind Brandon while he approaches the speaking tree.
       for (const [name, layer] of scriptLayers) if (name === "face" || name === "face2") ctx.drawImage(layer.image, layer.x, layer.y);
 
-      for (const npc of npcs.values()) { if (!npc.visible || npc.character===2&&(scriptLayers.has("advice")||scriptLayers.has("balance2"))) continue;
+      const drawNpcs = (front: boolean) => { for (const npc of [...npcs.values()].sort((a,b)=>a.y-b.y)) { if ((npc.y > state.pos.y) !== front || npc.shape === 88 || !npc.visible || npc.character===2&&(scriptLayers.has("advice")||scriptLayers.has("balance2"))) continue;
         const scale=actorScaleAt(npc.y,scene.actorScale);
         const drawNpc=(shape:number,x:number,y:number,flip:boolean)=>{
           const animation=scriptRenderers.get(`npc-${shape}`),def=config.npcFrames?.[shape];
@@ -276,6 +279,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           if(talking)drawNpc((npc.character===1?53:89)+brandonTalkHead(speechAge)-17,x+(npc.character===1?4:flip?0:8)*scale,y+(npc.character===1?8:1)*scale,flip);
         }
       }
+      };
+      drawNpcs(false);
       const actorLayerPre = mask ? resolveActorLayer(state.pos, drawLayerTable, mask) : 1;
       if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayerPre, "behind");
       if (state.drops.length) {
@@ -318,6 +323,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         ctx.drawImage(br, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
       }
 
+      drawNpcs(true);
       let actorLayer = 1;
       if (backgroundName === "room" && mask) {
         actorLayer = resolveActorLayer(state.pos, drawLayerTable, mask);
@@ -418,13 +424,14 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       lastTime = now;
       update(dt, now);
       render();
+      if (transition?.active) transition.draw(ctx);
       animationFrame = requestAnimationFrame(loop);
     }
 
     let animationFrame = requestAnimationFrame(loop);
 
     function setTarget(point: Vec2) {
-      if (dead || sequence || point.y >= scene.uiMaskY || state.drops.length) return;
+      if (transition?.active || dead || sequence || point.y >= scene.uiMaskY || state.drops.length) return;
       pendingPortal = null;
       actorShape = null;
       const path = findWalkPath(state.pos, point, p => isWalkable(p, scene, mask));
@@ -477,6 +484,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function handleClick(point: Vec2) {
+      if (transition?.active) return true;
       if (sequence?.awaiting) { sequence.confirm(point); config.onContinueChange?.(false); return true; }
       if (sequence) { sequence.skipLine(); return true; }
       if (dead) return true;
@@ -624,7 +632,12 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         case 'flag':if(action.flag===45)hasAmulet=action.value;break;
         case 'ambientWait':if(sceneAnims[action.index]?.play)ambientWait=action.index;break;
         case 'confirm':config.onContinueChange?.(true);break;
-        case 'npc':npcs.set(action.character,action);break;
+        case 'walkDelay':state.walkDelayTicks=Math.max(1,action.ticks);break;
+        case 'npc':
+          npcs.set(action.character,action);
+          // Refreshing Herman transfers drawing from the WSA to the walking actor.
+          if(action.character===2 && action.visible && action.shape!==88)scriptLayers.delete('advice');
+          break;
         case 'hand':state.itemInHand=action.item;break;
         case 'item':state.sceneItems.push({id:action.item,x:action.x,y:action.y});break;
         case 'shape':questShapes.push(action);foregroundFrames.clear();break;
@@ -699,17 +712,18 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       sequenceDone = done ?? null;
       config.onSequenceChange?.(true);
       sequence = new RoomScript(actions, { apply: applyScript, walking: () => state.moving || ambientWait !== null,
+        movementTempo: () => state.walkDelayTicks / 6,
         frames: name => scriptRenderers.get(name)?.clip.info.frames.length ?? 0 });
       sequence.update(0);
     }
 
     if (config.entry) face(config.entry.facing);
     for(const action of config.setupActions??[])applyScript(action);
-    for(const anim of sceneAnims)anim.visible=anim.play;
+
     if (openingScript && config.playOpening !== false) playScript(openingScript.opening);
     else if (config.entryActions?.length) playScript(config.entryActions);
 
-    function getSnapshot() { return { pos: { ...state.pos }, facing:state.dir==="right"?3:state.dir==="left"?5:state.dir==="up"?0:4, inventorySlots: state.inventorySlots, itemInHand: state.itemInHand,
+    function getSnapshot() { return { pos: { ...state.pos }, walkDelayTicks: state.walkDelayTicks, facing:state.dir==="right"?3:state.dir==="left"?5:state.dir==="up"?0:4, inventorySlots: state.inventorySlots, itemInHand: state.itemInHand,
       sceneItems: state.sceneItems, overlays: state.overlays, treeSpoken }; }
     return { setTarget, stop, setDebug, setPointer, setWalkSpeed, setAnimStepInterval, handleClick,
       setAtmosphere: (enabled: boolean) => { atmosphere = enabled; },

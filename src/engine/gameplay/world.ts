@@ -81,7 +81,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     const planned={flags:new Set(quest.flags),files:{...quest.files},herman:{...quest.herman},merith:{...quest.merith},phasing:quest.phasing,vase:quest.vase};
     let setupActions:RoomAction[]=[];
     const facing=from?({north:0,east:3,south:4,west:5}[from.side]):5;
-    const snapshot={...resume,...continued,pos:arrival,facing};
+    const snapshot={...resume,...continued,pos:arrival,facing,walkDelayTicks:({slowest:11,slow:9,fast:6,fastest:3})[settings.walkSpeed]};
     if(questRoom){
       setupActions=traceForest(questRoom,0,planned,snapshot).actions;
       for(const action of setupActions){
@@ -104,7 +104,13 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     const token = ++tokenCounter, oldOwner = callbackOwner;
     callbackOwner = token;
     let game: RoomGame;
-    try { game = await startRoom(canvas, { ...config, world: undefined, backgroundPack: pack,
+    let transitionImage: HTMLCanvasElement | undefined;
+    if (from?.id === 'phase') {
+      transitionImage = document.createElement('canvas');
+      transitionImage.width = 320; transitionImage.height = 200;
+      transitionImage.getContext('2d')!.drawImage(canvas, 0, 0);
+    }
+    try { game = await startRoom(canvas, { ...config, world: undefined, backgroundPack: pack, transitionImage,
       scene: { ...config.scene, name: meta.title, indexedBackground: { src, clip: "room" }, maskClip: "mask",
         indexedUi: { src: withBase("assets/packs/kallak-room.kyr.gz"), clip: "hud" }, meta, emc: { sceneAnimShapes: meta.shapes }, actorScale: meta.actorScale,
         opening: id === 0 ? config.scene.opening : undefined, items: id === 0 ? config.scene.items : [],

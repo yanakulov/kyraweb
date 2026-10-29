@@ -7,6 +7,7 @@ export type RoomAction =
       facing: number;
       visible: boolean;
     }
+  | { op: "walkDelay"; ticks: number }
   | { op: "walk"; x: number; y: number }
   | { op: "actor"; x: number; y: number; facing: number; visible: boolean }
   | { op: "visible"; visible: boolean }
@@ -64,7 +65,7 @@ export type RoomAction =
   | { op: "palette"; start: number; colors: number[]; ms: number }
   | { op: "ambientRun" | "ambientWait"; index: number }
   | { op: "clearText" | "waitVoice" }
-  | { op: "wait"; ms: number }
+  | { op: "wait"; ms: number; movement?: boolean }
   | { op: "ambient"; index: number; enabled: boolean; internal?: boolean }
   | { op: "commit"; x: number; y: number; w: number; h: number }
   | { op: "message"; text: string };
@@ -107,6 +108,7 @@ export class RoomScript {
     private host: {
       apply: (action: RoomAction) => void;
       walking: () => boolean;
+      movementTempo?: () => number;
       frames: (clip: string) => number;
     },
   ) {
@@ -185,7 +187,7 @@ export class RoomScript {
         return;
       }
       if (action.op === "waitVoice") { this.wait = this.voice; this.waitingForVoice = true; }
-      else if (action.op === "wait") this.wait = action.ms;
+      else if (action.op === "wait") this.wait = action.ms * (action.movement ? (this.host.movementTempo?.() ?? 1) : 1);
       else {
         this.host.apply(action);
         if (action.op === "frame" || action.op === "palette")

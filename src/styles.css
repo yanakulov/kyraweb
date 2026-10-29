@@ -198,16 +198,9 @@ button:disabled { cursor: default; }
 .text-button[aria-expanded="true"] { background: var(--stone); color: var(--paper); }
 .text-button[aria-pressed="true"] { color: var(--paper); border-color: var(--gold); }
 
-.exit-markers { position: absolute; inset: 0; pointer-events: none; }
-.exit-marker {
-  position: absolute; transform: translate(-50%, -50%); width: 44px; height: 44px;
-  display: grid; place-items: center; padding: 9px; border: 0; background: transparent;
-  opacity: 0; pointer-events: none;
-}
-.exit-marker svg { width: 26px; height: 26px; fill: #ffe39a; stroke: #211823; stroke-width: 0.8; paint-order: stroke; shape-rendering: crispEdges; }
-.exit-marker.hovered, .exit-marker:focus-visible, .show-exits .exit-marker { opacity: 1; }
-.show-exits .exit-marker, .exit-marker:focus-visible { pointer-events: auto; }
-.exit-marker:active svg { fill: #fff; }
+.cursor-controlled { cursor: none !important; }
+.game-cursor { position: absolute; width: 3.75%; height: 8%; pointer-events: none; z-index: 5; }
+.game-cursor svg { width: 100%; height: 100%; fill: #ffe39a; stroke: #211823; stroke-width: 1; paint-order: stroke; shape-rendering: crispEdges; }
 .touch-inventory { margin-top: 8px; padding: 10px; background: #242337 url('/assets/interface/stone.svg'); border: 2px ridge #756c86; }
 .touch-inventory p { font-size: 11px; line-height: 1.6; margin: 0 0 8px; }
 .inventory-grid { display: grid; grid-template-columns: repeat(5, minmax(44px, 1fr)); gap: 6px; }
