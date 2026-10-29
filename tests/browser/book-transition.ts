@@ -79,6 +79,21 @@ async function readyBook() {
   assert(hint.width>0&&hint.height>0&&hint.left>=book.left&&hint.right<=book.right&&hint.top>=book.top&&hint.bottom<=book.bottom,'Cover invitation is not visible inside the book viewport');
   const saved=document.querySelector('.book-continue');
   assert(!saved||saved.closest('.book-cover-invitation'),'Continue journey is outside the book cover');
+  const title=openingBook()!.querySelector<HTMLElement>('.book-front-title');
+  const credits=openingBook()!.querySelector<HTMLElement>('.book-front-credits');
+  assert(title&&credits,'The closed book is missing its title or credits');
+  for (const [name,element] of [['Title',title],['Credits',credits]] as const) {
+    const bounds=element.getBoundingClientRect();
+    assert(element.getAttribute('aria-hidden')!=='true',`${name} is hidden on the closed book`);
+    assert(bounds.width>0&&bounds.height>0&&bounds.left>=-.5&&bounds.right<=innerWidth+.5&&bounds.top>=-.5&&bounds.bottom<=innerHeight+.5,`${name} escapes the viewport`);
+    assert(getComputedStyle(element).pointerEvents==='none',`${name} blocks interaction with the book`);
+  }
+  assert(credits.textContent?.includes('Westwood'),'The original Westwood credit is missing');
+  const titleLogo=title.querySelector<HTMLImageElement>('img');
+  const remakeLogo=credits.querySelector<HTMLImageElement>('img');
+  assert(titleLogo&&/Kyrandia/i.test(titleLogo.alt),'The Kyrandia title image is missing');
+  assert(remakeLogo&&/AkulaFlow/i.test(remakeLogo.alt),'The AkulaFlow remake image is missing');
+  await until(()=>titleLogo.complete&&titleLogo.naturalWidth>0&&remakeLogo.complete&&remakeLogo.naturalWidth>0,'The closed-book logos did not load');
   const stage=canvas().getBoundingClientRect();
   assert(stage.width>0&&stage.height>0,'Hidden game has no stable layout');
 }
@@ -86,7 +101,9 @@ async function enterIntro() {
   await readyBook();
   checkBounds=canvas().getBoundingClientRect(); lastHandoff=null; handoffCount=0;
   try {
+    const decorations=[...openingBook()!.querySelectorAll('.book-front-title,.book-front-credits')];
     await press('.book-open');
+    assert(decorations.every(element=>element.getAttribute('aria-hidden')==='true'),'Front title or credits remain exposed after opening the book');
     await until(()=>!openingBook(), 'The opening book did not reach the intro',60000,dismissPrologue);
     const handoff=lastHandoff as Capture|null;
     assert(handoff&&!handoff.options,'No fully opaque opening handoff frame was rendered');
@@ -116,6 +133,7 @@ async function optionsRoundTrip(early=false) {
   try {
     await press('.hud-options');
     await until(()=>!!document.querySelector('.fantasy-book.is-options.is-rendered'),'Options did not render');
+    assert(!optionsBook()!.querySelector('.book-front-title,.book-front-credits'),'Closed-book decorations appear on the Options spread');
     const first=lastHandoff as Capture|null;
     assert(first?.options,'Options did not begin on a full game frame');
     samePixels(before,first.pixels,'Options changed pixels before pulling back');
