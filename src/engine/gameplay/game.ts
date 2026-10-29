@@ -1,5 +1,5 @@
 import { sceneShuffle } from './sceneShuffle';
-import { translateGameText } from '../../i18n';
+import { locale, translateGameText } from '../../i18n';
 import { DEFAULT_ANIM_STEP_INTERVAL, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS } from "../core/constants";
 import { loadImage, loadMask, loadNpcTextJson, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
@@ -57,13 +57,14 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const packedHud = hudPack && hudInfo ? new IndexedClip(hudPack, hudInfo) : null;
     const maskInfo = scene.maskClip && packedBackground?.clip.pack.clips[scene.maskClip];
     const packedMask = packedBackground && maskInfo ? new IndexedClip(packedBackground.clip.pack, maskInfo) : null;
-    const [bg, br, ui, mask, itemsSheet, npcText] = await Promise.all([
+    const [bg, br, ui, mask, itemsSheet, npcText, optionsRu] = await Promise.all([
       packedBase ? Promise.resolve(packedBase) : loadImage(scene.bgSrc),
       loadImage(scene.brSrc),
       !packedHud && scene.uiOverlaySrc ? loadImage(scene.uiOverlaySrc) : Promise.resolve(null),
       packedMask ? Promise.resolve({ width: packedMask.info.width, height: packedMask.info.height, pixels: Array.from(packedMask.frame(0)) }) : scene.maskSrc ? loadMask(scene.maskSrc) : Promise.resolve(null),
       loadImage(withBase("assets/inventory/items.png")),
-      loadNpcTextJson(withBase("assets/text/npc_text.json")).catch(() => null)
+      loadNpcTextJson(withBase("assets/text/npc_text.json")).catch(() => null),
+      packedHud || scene.uiOverlaySrc ? loadImage(withBase("assets/interface/HUD/options-ru.png"), config.signal) : Promise.resolve(null)
     ]);
     const sceneMeta = scene.meta ?? (scene.sceneMetaSrc ? await loadSceneMeta(scene.sceneMetaSrc) : null);
     const sceneEmc = scene.emc ?? (scene.sceneEmcSrc ? await loadSceneEmc(scene.sceneEmcSrc) : null);
@@ -383,6 +384,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
       if (uiOverlay) {
         ctx.drawImage(uiOverlay, 0, 0);
+        if (locale.value === 'ru' && optionsRu) ctx.drawImage(optionsRu, 9, 163);
       }
       const rest=scriptRenderers.get('amulet-rest');
       if(hasAmulet&&rest)ctx.drawImage(rest.renderer.render(rest.clip.frame(0)),224,152);

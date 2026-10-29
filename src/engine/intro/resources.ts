@@ -7,7 +7,7 @@ import { IndexedClip, loadScenePack } from "../resources/scenePack";
 export async function loadIntroResources(step: IntroStep, signal: AbortSignal) {
   const paths = new Set<string>();
   const add = (...values: (string | undefined)[]) => values.forEach(value => { if (value) paths.add(value); });
-  add(step.bgSrc, step.overlaySrc);
+  add(step.bgSrc, step.bgSrcRu, step.overlaySrc);
   for (const track of [step.frames, step.bgFrames, step.overlayFrames]) track?.src.forEach(src => add(src));
   add(step.scroll?.topSrc, step.scroll?.bottomSrc, step.scrollSlices?.topSrc, step.scrollSlices?.bottomSrc,
     step.scrollIntro?.baseSrc, step.scrollIntro?.bottomSrc);

@@ -57,7 +57,8 @@ export function buildIntroSteps(): IntroStep[] {
       durationMs: storyFrameMs,
       fadeInMs: 250,
       fadeOutMs: 250,
-      bgSrc: withBase("assets/intro/text.png")
+      bgSrc: withBase("assets/intro/text.png"),
+      bgSrcRu: withBase("assets/intro/text-ru.png")
     },
     {
       id: "shore_anim",

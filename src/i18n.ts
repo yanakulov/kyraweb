@@ -122,7 +122,6 @@ export const russian: Record<string, string> = {
   'This saved room is incomplete. Choose another saved game.': 'Данные сохранённой комнаты неполны. Выберите другую главу.',
   "This save does not match the room's animations.": 'Это сохранение несовместимо с анимациями комнаты. Выберите другую главу.',
   'The saved room animation is invalid.': 'Данные анимации в сохранении повреждены. Выберите другую главу.',
-  'Malcolm, the evil jester, has broken free. He now controls the source of all magic in the Land.': 'Злой шут Малколм вырвался на свободу. Теперь в его власти источник всей магии этой земли.',
   'Dear Brynn:': 'Дорогая Брин!',
   'Malcolm has broken free. Soon he will come for me. Please help Brandon. Direct him toward the Amulet. Use the lavender rose to key the spells.': 'Малколм вырвался на свободу. Скоро он придёт за мной. Прошу, помоги Брендону. Направь его к Амулету. Пусть лиловая роза станет ключом к чарам.',
   "Darm and Zanthia should be able to help. Be careful, he'll try to get all of us.": 'Дарм и Зантия должны суметь помочь. Будь осторожна: он попытается добраться до каждого из нас.',

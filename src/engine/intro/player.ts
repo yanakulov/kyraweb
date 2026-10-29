@@ -5,6 +5,7 @@ import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene
 import type { SceneAnimState, SceneSpriteDef } from "../core/types";
 import type { IntroPlayback, IntroStep, IntroSubtitle } from "./types";
 import { drawStudioLogo } from './studioLogo';
+import { locale } from '../../i18n';
 
 export function frameAtTime(times: number[], elapsedMs: number) {
   let low = 0, high = times.length;
@@ -333,7 +334,7 @@ export function playIntro(
           if (top) ctx.drawImage(top, 0, -offset);
           if (bottom) ctx.drawImage(bottom, 0, LOGICAL_HEIGHT - offset);
         } else if (step.bgSrc) {
-          const bg = imageMap.get(step.bgSrc);
+          const bg = imageMap.get(locale.value === 'ru' && step.bgSrcRu ? step.bgSrcRu : step.bgSrc);
           if (bg) ctx.drawImage(bg, 0, 0);
         }
 
