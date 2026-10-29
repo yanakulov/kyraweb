@@ -1,6 +1,7 @@
 import { createApp, nextTick } from 'vue';
 import App from '../../src/App.vue';
-import { readSaveSlots } from '../../src/engine/gameplay/saveStorage';
+import { readSaveSlots, writeSaveSlot } from '../../src/engine/gameplay/saveStorage';
+import { t } from '../../src/i18n';
 import '../../src/styles.css';
 
 // Real application and rendering, with a visible clock for reproducible review.
@@ -46,7 +47,8 @@ const book = () => document.querySelector<HTMLElement>('.fantasy-book.is-options
 function menu() { const el=document.querySelector<HTMLElement>('.book-page-menu.is-visible .folio-menu'); assert(el,'Options page is not visible'); return el; }
 function hud() { const el=document.querySelector<HTMLButtonElement>('.hud-options'); assert(el&&!el.disabled,'Reach gameplay and let Brandon finish the current sequence first.'); return el; }
 async function click(label: string, scope: ParentNode = document) {
-  const button=[...scope.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent?.trim()===label||b.getAttribute('aria-label')===label);
+  const translated=t(label);
+  const button=[...scope.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent?.trim()===translated||b.getAttribute('aria-label')===translated);
   assert(button&&!button.matches(':disabled'),`Missing or disabled control: ${label}. ${details()}`);
   button.focus(); button.click(); await nextTick();
 }
@@ -56,6 +58,22 @@ async function bookReady() {
 }
 async function openOptions() { assert(!book(),'Close Options before starting this check'); const trigger=hud(); trigger.focus(); trigger.click(); await bookReady(); return trigger; }
 async function closeOptions() { menu().dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await until(()=>!book(),'Options did not finish its return zoom'); }
+async function choose(id: string, label: string) {
+  const trigger=menu().querySelector<HTMLButtonElement>(`[role="combobox"][aria-controls="${id}-choices"]`);
+  assert(trigger,'Missing book dropdown: '+id); trigger.click(); await nextTick();
+  const options=menu().querySelector<HTMLElement>(`#${id}-choices`);
+  assert(options?.getAttribute('role')==='listbox','Custom dropdown did not open');
+  const option=[...options.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(el=>el.textContent?.replace('✧','').trim()===t(label));
+  assert(option,'Missing dropdown choice: '+label); option.click(); await nextTick();
+  assert(trigger.getAttribute('aria-expanded')==='false','Dropdown did not close after selection');
+  assert(document.activeElement===trigger,'Dropdown did not restore keyboard focus');
+}
+const speedLabels = { slowest: 'Slowest', slow: 'Slow', fast: 'Fast', fastest: 'Fastest' };
+function selectedSpeed() {
+  const label=menu().querySelector('#book-speed-value')?.textContent;
+  const speed=Object.entries(speedLabels).find(([,value])=>t(value)===label)?.[0];
+  assert(speed,'The book does not display a known walk speed'); return speed as keyof typeof speedLabels;
+}
 function addCheck(label: string, action: () => Promise<void>, pass = label) {
   const button=document.createElement('button'); button.textContent=label; aside.insertBefore(button,status);
   button.onclick=()=>void runCheck(button,label,action,pass);
@@ -68,13 +86,15 @@ document.addEventListener('keydown', event => {
 });
 createApp(App).mount('#app');
 addCheck('Reach gameplay',async()=>{
-  if (book()) await closeOptions();
+  if (book()&&!document.querySelector('.journey-choice')) await closeOptions();
   if (document.querySelector('.hud-options:not(:disabled)')) return;
   const open=document.querySelector<HTMLButtonElement>('.book-open');
   if(open) { await until(()=>!open.disabled,'The opening book did not load'); open.click(); await nextTick(); }
   const deadline=Date.now()+120000;
   for(let elapsed=0;elapsed<240000;elapsed+=1000) {
-    const start=document.querySelector<HTMLButtonElement>('.intro-menu .start-button');
+    const prologue=document.querySelector<HTMLButtonElement>('.prologue-skip');
+    if(prologue&&!prologue.disabled) { prologue.click(); await nextTick(); }
+    const start=document.querySelector<HTMLButtonElement>('.book-page-menu.is-visible .journey-choice');
     if(start&&!start.disabled) { start.click(); await nextTick(); }
     const next=document.querySelector<HTMLButtonElement>('.continue-button');
     if(next&&!next.disabled) { next.click(); await nextTick(); }
@@ -90,7 +110,7 @@ verify.textContent = 'Verify swipe cursor';
 aside.insertBefore(verify,status);
 verify.onclick = () => void runCheck(verify,'Verify swipe cursor',async () => {
   hud(); assert(!book(),'Close Options before checking gestures');
-  const canvas = document.querySelector<HTMLCanvasElement>('canvas[aria-label="Kyrandia game scene"]')!;
+  const canvas = document.querySelector<HTMLCanvasElement>('.stage canvas')!;
   const cursor = document.querySelector<HTMLElement>('.game-cursor');
   if (!cursor || !document.querySelector('.hud-options')) throw Error('Finish the opening before checking gestures');
   const rect = canvas.getBoundingClientRect();
@@ -165,28 +185,79 @@ addCheck('Verify saved chapter round trip',async()=>{
   hud(); safeTestSlot();
   const untouched=[localStorage.getItem('kyrandia.save.1'),localStorage.getItem('kyrandia.save.2')];
   await openOptions(); await click('Settings',menu());
-  const originalSpeed=menu().querySelector('select')!.value;
+  const originalSpeed=selectedSpeed();
   await click('Back to Options',menu()); await click('Save game',menu());
   const name=menu().querySelector('input')!; name.value=TEST_NAME; name.dispatchEvent(new Event('input',{bubbles:true})); await nextTick();
   safeTestSlot();
   let slot=menu().querySelectorAll<HTMLElement>('.folio-saves li')[2]; assert(slot,'Chapter 3 is absent');
   await click('Save here',slot);
-  if([...slot.querySelectorAll('button')].some(b=>b.textContent?.trim()==='Replace')) { safeTestSlot(); await click('Replace',slot); }
+  if([...slot.querySelectorAll('button')].some(b=>b.textContent?.trim()===t('Replace'))) { safeTestSlot(); await click('Replace',slot); }
   const record=readSaveSlots()[2].save;
-  assert(record?.name===TEST_NAME&&menu().querySelector('.folio-message')?.textContent?.includes('saved.'),`Saving failed: ${details()}`);
+  assert(record?.name===TEST_NAME&&menu().querySelector('.folio-message')?.textContent?.includes(t(`“${TEST_NAME}” saved.`)),`Saving failed: ${details()}`);
   assert(record.state.settings.walkSpeed===originalSpeed,'Saved walk speed differs from the displayed setting');
   const savedBytes=localStorage.getItem('kyrandia.save.3');
   await click('Back to Options',menu()); await click('Settings',menu());
-  const speed=menu().querySelector('select')!;
-  speed.value=originalSpeed==='slowest'?'fastest':'slowest'; speed.dispatchEvent(new Event('change',{bubbles:true})); await nextTick();
-  assert(speed.value!==originalSpeed,'Walk speed did not change');
+  await choose('book-speed',originalSpeed==='slowest'?'Fastest':'Slowest');
+  assert(selectedSpeed()!==originalSpeed,'Walk speed did not change');
   await click('Back to Options',menu()); await click('Load game',menu());
   slot=menu().querySelectorAll<HTMLElement>('.folio-saves li')[2];
   assert(slot.querySelector('strong')?.textContent===TEST_NAME,'Load targeted the wrong chapter');
   await click('Load chapter',slot); await until(()=>!book(),'Saved chapter did not load and return to gameplay');
   assert(localStorage.getItem('kyrandia.save.3')===savedBytes,'Loading unexpectedly rewrote the saved chapter');
   await openOptions(); await click('Settings',menu());
-  assert(menu().querySelector('select')!.value===originalSpeed,'Loading did not restore the saved walk speed');
+  assert(selectedSpeed()===originalSpeed,'Loading did not restore the saved walk speed');
   assert(localStorage.getItem('kyrandia.save.1')===untouched[0]&&localStorage.getItem('kyrandia.save.2')===untouched[1],'Another save slot changed');
   await closeOptions();
 },'chapter 3 saved, changed and restored through UI');
+
+addCheck('Verify Russian book',async()=>{
+  await openOptions(); await click('Settings',menu());
+  const previous=menu().querySelector('#book-language-value')?.textContent;
+  await choose('book-language','English');
+  assert(menu().querySelector('h2')?.textContent==='Settings','English did not apply before switching to Russian');
+  await choose('book-language','Русский');
+  assert(document.documentElement.lang==='ru','Document language did not change');
+  assert(menu().querySelector('h2')?.textContent==='Настройки','Settings heading did not translate');
+  assert(menu().querySelector('#book-language-label')?.textContent==='Язык','Language control did not translate');
+  assert(localStorage.getItem('kyrandia.language')==='ru','Russian preference was not persisted');
+  assert(!menu().querySelector('select'),'A native dropdown remains in the book');
+  await click('Back to Options',menu());
+  assert(menu().querySelector('h2')?.textContent==='Меню','Options heading did not translate');
+  assert(!menu().textContent?.includes('Инвентарь'),'Unneeded inventory menu remains');
+  await click('How to play',menu());
+  assert(/[А-Яа-яЁё]/.test(menu().querySelector('.folio-help')?.textContent??''),'Help was not translated');
+  await closeOptions(); await openOptions(); await click('Settings',menu());
+  assert(menu().querySelector('#book-language-value')?.textContent==='Русский','Language changed when reopening the book');
+  if(previous==='English') await choose('book-language','English');
+  await closeOptions();
+},'Russian menus, custom choices and persisted language');
+
+addCheck('Verify Russian letter',async()=>{
+  hud(); safeTestSlot();
+  const record=readSaveSlots()[2].save;
+  assert(record?.state.rooms[0]?.runtime,'Run the saved chapter check from Brandon’s home first.');
+  const savedBytes=localStorage.getItem('kyrandia.save.3')!;
+  const state=structuredClone(record.state), room=state.rooms[0];
+  state.currentRoom=0; state.quest.flags=[...new Set([...state.quest.flags,53,129,242])];
+  room.pos={x:164,y:118}; room.facing=5; room.itemInHand='letter'; room.treeSpoken=true;
+  room.inventorySlots=room.inventorySlots.map(item=>item==='letter'?null:item);
+  room.runtime!.actorVisible=true; room.runtime!.actorShape=null;
+  try {
+    writeSaveSlot(2,{...record,state});
+    await openOptions(); await click('Load game',menu());
+    await click('Load chapter',menu().querySelectorAll('.folio-saves li')[2]);
+    await until(()=>!book(),'Letter chapter did not load');
+  } finally { localStorage.setItem('kyrandia.save.3',savedBytes); }
+  await openOptions(); await click('Settings',menu()); await choose('book-language','Русский'); await closeOptions();
+  const canvas=document.querySelector<HTMLCanvasElement>('.stage canvas')!, box=canvas.getBoundingClientRect();
+  const clientX=box.left+164/320*box.width, clientY=box.top+90/200*box.height;
+  canvas.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'mouse',clientX,clientY}));
+  canvas.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX,clientY}));
+  await until(()=>!!document.querySelector('.translated-letter'),'Clicking Brandon did not open the decoded letter');
+  const letter=document.querySelector<HTMLElement>('.translated-letter')!;
+  assert(letter.textContent?.includes('Малколм'),'The letter is not translated');
+  assert(letter.scrollHeight<=letter.clientHeight,'Russian letter text is clipped vertically');
+  assert(letter.scrollWidth<=letter.clientWidth,'Russian letter text is clipped horizontally');
+  const area=letter.getBoundingClientRect();
+  assert(area.left>=box.left&&area.right<=box.right&&area.top>=box.top&&area.bottom<=box.top+136/200*box.height,'The letter escapes the scene');
+},'decoded letter reads in Russian without clipping');

@@ -6,7 +6,7 @@
       class="subtitle-line"
       :style="lineStyle(line)"
     >
-      {{ line.text }}
+      {{ translateGameText(line.text) }}
     </div>
   </div>
 </template>
@@ -14,6 +14,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { IntroSubtitle } from "../engine/intro/types";
+import { translateGameText } from '../i18n';
 
 const props = withDefaults(
   defineProps<{

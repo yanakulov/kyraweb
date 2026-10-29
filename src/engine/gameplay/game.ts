@@ -1,4 +1,5 @@
 import { sceneShuffle } from './sceneShuffle';
+import { translateGameText } from '../../i18n';
 import { DEFAULT_ANIM_STEP_INTERVAL, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS } from "../core/constants";
 import { loadImage, loadMask, loadNpcTextJson, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
@@ -136,6 +137,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       const pack=await loadScenePack(withBase('assets/forest/amulet.kyr.gz'),config.signal),info=pack.clips['amulet-rest'];
       scriptRenderers.set('amulet-rest',{clip:new IndexedClip(pack,info),renderer:new IndexedRenderer(info,false)});
     }
+    if (config.onActorInteract && !scriptRenderers.has('note')) {
+      const pack = await loadScenePack(withBase('assets/forest/note.kyr.gz'), config.signal), info = pack.clips.note;
+      scriptRenderers.set('note', { clip: new IndexedClip(pack, info), renderer: new IndexedRenderer(info, false) });
+    }
     let backgroundName = "room";
     let actorVisible = true;
     let actorShape: number | null = null;
@@ -230,7 +235,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
       if (!state.moving && pendingPortal) {
         const portal = pendingPortal; pendingPortal = null;
-        if (Math.abs(state.pos.x - portal.point.x) <= 4 && Math.abs(state.pos.y - portal.point.y) <= 2) config.onExit?.(portal);
+        if (Math.abs(state.pos.x - portal.point.x) <= 4 && Math.abs(state.pos.y - portal.point.y) <= 2 && !talkToTree()) config.onExit?.(portal);
       }
       sequence?.update(dt * 1000);
       if (sequence?.done) {
@@ -250,6 +255,31 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       state.frame = 0;
       state.stepIndex = 0;
       state.stepAccumulatorMs = 0;
+    }
+
+    function restoreForeground(pos: Vec2, x: number, y: number, w: number, h: number) {
+      if (backgroundName !== 'room' || !mask) return;
+      const layer = resolveActorLayer(pos, drawLayerTable, mask);
+      let fg = foregroundFrames.get(layer);
+      if (!fg) {
+        fg = buildForegroundFrame(bg, mask, layer, packedBackground ? {
+          pixels: packedBackground.clip.frame(0), palette: roomPalette!
+        } : undefined);
+        // Restore the decorated background only over this character's rectangle.
+        const foregroundContext = fg.getContext('2d')!;
+        foregroundContext.globalCompositeOperation = 'source-atop';
+        if (spriteDefMap) {
+          drawSceneAnimShapes(foregroundContext, sceneShapesImage, spriteDefMap, filteredSceneAnimShapes);
+          drawSceneOverlays(foregroundContext, sceneShapesImage, spriteDefMap, state.overlays);
+        }
+        for (const layer of permanentLayers.values()) foregroundContext.drawImage(layer.image, layer.x, layer.y);
+        if (spriteDefMap) drawSceneAnimShapes(foregroundContext, sceneShapesImage, spriteDefMap, questShapes);
+        for (const [name, layer] of scriptLayers) if (name === 'face' || name === 'face2') foregroundContext.drawImage(layer.image, layer.x, layer.y);
+        foregroundContext.globalCompositeOperation = 'source-over';
+        foregroundFrames.set(layer, fg);
+      }
+      ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+      ctx.drawImage(fg, 0, 0); ctx.restore();
     }
 
     function render() {
@@ -286,6 +316,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         if(def){const x=npc.x+Math.trunc(def.xOffset*scale),y=npc.y+Math.trunc(def.yOffset*scale),flip=npc.facing>=1&&npc.facing<=3;
           drawNpc(shape,x,y,flip);
           if(talking)drawNpc((npc.character===1?53:89)+brandonTalkHead(speechAge)-17,x+(npc.character===1?4:flip?0:8)*scale,y+(npc.character===1?8:1)*scale,flip);
+          const image = scriptRenderers.get(`npc-${shape}`)?.clip.info;
+          if (image) restoreForeground(npc, x, y, Math.max(1,Math.trunc(image.width*scale)), Math.max(1,Math.trunc(image.height*scale)));
         }
       }
       };
@@ -332,34 +364,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         ctx.drawImage(br, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
       }
 
-      let actorLayer = 1;
-      if (backgroundName === "room" && mask) {
-        actorLayer = resolveActorLayer(state.pos, drawLayerTable, mask);
-        let fg = foregroundFrames.get(actorLayer);
-        if (!fg) {
-          fg = buildForegroundFrame(bg, mask, actorLayer, packedBackground ? {
-            pixels: packedBackground.clip.frame(0), palette: roomPalette!
-          } : undefined);
-          // Occlusion restores the current decorated background, not the bare CPS.
-          // Otherwise a high-priority table erases the note and saw drawn on it.
-          const foregroundContext = fg.getContext('2d')!;
-          foregroundContext.globalCompositeOperation = 'source-atop';
-          if (spriteDefMap) {
-            drawSceneAnimShapes(foregroundContext, sceneShapesImage, spriteDefMap, filteredSceneAnimShapes);
-            drawSceneOverlays(foregroundContext, sceneShapesImage, spriteDefMap, state.overlays);
-          }
-          for (const layer of permanentLayers.values()) foregroundContext.drawImage(layer.image, layer.x, layer.y);
-          if (spriteDefMap) drawSceneAnimShapes(foregroundContext, sceneShapesImage, spriteDefMap, questShapes);
-          for (const [name, layer] of scriptLayers) if (name === 'face' || name === 'face2') foregroundContext.drawImage(layer.image, layer.x, layer.y);
-          foregroundContext.globalCompositeOperation = 'source-over';
-          foregroundFrames.set(actorLayer, fg);
-        }
-        if (fg && actorVisible) {
-          // A character's background restoration belongs only to its own rectangle.
-          ctx.save(); ctx.beginPath(); ctx.rect(drawX, drawY, drawW, drawH); ctx.clip();
-          ctx.drawImage(fg, 0, 0); ctx.restore();
-        }
-      }
+      const actorLayer = backgroundName === 'room' && mask ? resolveActorLayer(state.pos, drawLayerTable, mask) : 1;
+      if (actorVisible) restoreForeground(state.pos, drawX, drawY, drawW, drawH);
       drawNpcs(true);
       if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
       for (const [name, layer] of scriptLayers) if (name !== "face" && name !== "face2") ctx.drawImage(layer.image, layer.x, layer.y);
@@ -373,7 +379,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
       if (state.statusMessage) {
         const statusY = scene.uiMaskY + 8;
-        drawStatusLine(ctx, state.statusMessage, statusY, LOGICAL_WIDTH);
+        drawStatusLine(ctx, translateGameText(state.statusMessage), statusY, LOGICAL_WIDTH);
       }
       if (uiOverlay) {
         ctx.drawImage(uiOverlay, 0, 0);
@@ -461,6 +467,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       sequence?.stop();
       config.onSequenceChange?.(false);
       config.onContinueChange?.(false);
+      config.onNoteChange?.(false);
       for (const value of scriptRenderers.values()) value.renderer.dispose();
       packedBackground?.dispose();
     }
@@ -501,16 +508,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (sequence) { sequence.skipLine(); return true; }
       if (dead) return true;
       if (state.drops.length) return true;
-      // The original first conversation intercepts the south exit. Also let a
-      // direct click on the trunk initiate it, which works well with touch input.
-      if (openingScript && !treeSpoken &&
-          ((!state.itemInHand && point.x >= 104 && point.x < 192 && point.y >= 32 && point.y < 68) ||
-           (point.x >= 144 && point.x <= 176 && point.y >= 128 && point.y < scene.uiMaskY))) {
-        treeSpoken = true;
-        playScript(openingScript.tree);
-        return true;
-      }
       const portal = portalAtPoint(config.portals ?? [], point);
+      // Every exit hit area must run the original first conversation, including
+      // the corners/door rectangle and a click while carrying an item.
+      if ((portal || (!state.itemInHand && point.x >= 104 && point.x < 192 && point.y >= 32 && point.y < 68) ||
+          (point.x >= 144 && point.x <= 176 && point.y >= 128 && point.y < scene.uiMaskY)) && talkToTree()) return true;
       if (portal) {
         setTarget(portal.point);
         if (state.target || (Math.abs(state.pos.x - portal.point.x) <= 4 && Math.abs(state.pos.y - portal.point.y) <= 2)) pendingPortal = portal;
@@ -522,6 +524,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         if(actions){playScript(actions);return true;}
       }
       const sceneItemIndex = point.y < scene.uiMaskY ? findSceneItemAt(point, state.sceneItems) : -1;
+      if (sceneItemIndex === -1 && point.y < scene.uiMaskY && isPointOnBrandon(point)) {
+        const actions = config.onActorInteract?.(getSnapshot());
+        if (actions) { playScript(actions); return true; }
+      }
       if (sceneItemIndex === -1 && !state.itemInHand && point.y < scene.uiMaskY && isPointOnBrandon(point)) {
         stopWalking();
         const line = getNpcTextLine(100, "Why do I have to do everything?");
@@ -555,7 +561,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
             state.itemInHand = item.id;
             state.sceneItems.splice(itemIndex, 1);
           }
-          setStatusMessage(`Взял ${getItemStatusName(state.itemInHand)}`);
+          setStatusMessage(`Took ${getItemStatusName(state.itemInHand)}`);
           return true;
         }
       }
@@ -564,7 +570,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         if(noDropRegions.some(r=>point.x>=r.x&&point.x<r.x+r.w&&point.y>=r.y&&point.y<r.y+r.h))return true;
         const droppedItem = state.itemInHand;
         if (dropItemAt(point, state.itemInHand, state.drops, state.sceneItems, scene, mask)) {
-          setStatusMessage(`Положил ${getItemStatusName(droppedItem)}`);
+          setStatusMessage(`Placed ${getItemStatusName(droppedItem)}`);
           state.itemInHand = null;
         }
         // A failed drop keeps the item in hand and must not trigger walking/pickup.
@@ -572,6 +578,15 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
       if (point.y >= scene.uiMaskY) { stopWalking(); return true; }
       return false;
+    }
+
+    function talkToTree() {
+      if (!openingScript || treeSpoken) return false;
+      playScript(openingScript.tree, () => {
+        treeSpoken = true;
+        config.onScriptAction?.({ op: 'flag', flag: 53, value: true });
+      });
+      return true;
     }
 
     function exchangeInventorySlot(slot: number) {
@@ -596,7 +611,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (!overlay.active) return;
       foregroundFrames.clear();
       state.itemInHand = overlay.id;
-      setStatusMessage(`Взял ${getItemStatusName(overlay.id)}`);
+      setStatusMessage(`Took ${getItemStatusName(overlay.id)}`);
       if (overlay.replaceShape !== undefined) {
         overlay.shape = overlay.replaceShape;
         overlay.x = overlay.replaceX ?? overlay.x;
@@ -615,19 +630,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function isPointOnBrandon(point: Vec2) {
-      const sequence = getSequence(state.dir);
-      const frameIndex = state.moving ? sequence[state.frame] : getIdleFrame(state.dir);
-      const frame = frames[Math.min(frames.length - 1, frameIndex)];
-      if (!frame) return false;
       const scale = actorScaleAt(state.pos.y, scene.actorScale);
-      const drawX = state.pos.x + Math.trunc(frame.xOffset * scale);
-      const drawY = state.pos.y + Math.trunc(frame.yOffset * scale);
-      return (
-        point.x >= drawX &&
-        point.x <= drawX + Math.trunc(frame.w * scale) &&
-        point.y >= drawY &&
-        point.y <= drawY + Math.trunc(frame.h * scale)
-      );
+      return point.x >= state.pos.x - 12 * scale && point.x <= state.pos.x + 12 * scale && point.y >= state.pos.y - 48 * scale && point.y <= state.pos.y;
     }
 
     function setStatusMessage(text: string) {
@@ -696,6 +700,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         }
         case "face": face(action.facing); actorShape = action.shape < 0 ? null : action.shape;if(action.shape===88)actorVisible=false;break;
         case "frame": {
+          if (action.clip === 'note') config.onNoteChange?.(true);
           if(['needsaw1','advice','balance2'].includes(action.clip))heldNpcPoses.delete(2);
           if(['tag','tag-0'].includes(action.clip))heldNpcPoses.delete(1);
           if(action.clip==='tag')scriptLayers.delete('tag-0');
@@ -709,6 +714,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           break;
         }
         case "close":
+          if (action.clip === 'note') config.onNoteChange?.(false);
           // Closing the movie releases its decoder, not its last screen pixels.
           // TAG-0 is the resting boy while Brandon walks to the next TAG movie.
           if(action.clip!=='tag-0')scriptLayers.delete(action.clip);

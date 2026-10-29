@@ -1,7 +1,8 @@
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
 // Open onto bare paper, trace the landscape in ink, wash in colour, then enter it.
-export function bookTransition(ms: number) {
+export function bookTransition(ms: number, reading = false) {
+  if (reading) ms = Math.min(ms, 4200);
   return {
     hinge: smooth(ms / 2200),
     ink: smooth((ms - 1800) / 2400),
