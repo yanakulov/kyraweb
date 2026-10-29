@@ -24,6 +24,7 @@ export function playIntro(
   const ctx = canvas.getContext("2d");
   if (!ctx) {
     return {
+      setPaused: () => {},
       skipLine: () => {},
       skip: () => {},
       stop: () => {},
@@ -68,6 +69,9 @@ export function playIntro(
   }
 
   let running = true;
+  let paused = false, pausedAt = 0, pauseOffset = 0;
+  let resumeLoop = () => {};
+  const clock = () => (paused ? pausedAt : performance.now()) - pauseOffset;
   let animationFrame = 0;
   let firstFrame = true;
   let demoLoopStepId: string | null = null;
@@ -100,10 +104,10 @@ export function playIntro(
       options?.onLoadingChange?.(false);
       let loadingSince: number | null = null;
       let stepIndex = 0;
-      let stepStart = performance.now();
+      let stepStart = clock();
       skipLine = () => {
-        if (!running || loadingSince !== null || steps[stepIndex]?.id === demoLoopStepId) return;
-        const elapsed = performance.now() - stepStart;
+        if (!running || paused || loadingSince !== null || steps[stepIndex]?.id === demoLoopStepId) return;
+        const elapsed = clock() - stepStart;
         if (steps[stepIndex]?.id === 'akulaflow') {
           stepStart -= steps[stepIndex].durationMs - elapsed;
           return;
@@ -200,7 +204,8 @@ export function playIntro(
       };
 
       const loop = (now: number) => {
-        if (!running) return;
+        if (!running || paused) return;
+        now -= pauseOffset;
         // Keep the remainder instead of adding one display frame at every cut.
         while (loadingSince === null && steps[stepIndex] && now - stepStart >= steps[stepIndex].durationMs) {
           if (steps[stepIndex].id === demoLoopStepId) break;
@@ -440,7 +445,8 @@ export function playIntro(
         animationFrame = requestAnimationFrame(loop);
       };
 
-      animationFrame = requestAnimationFrame(loop);
+      resumeLoop = () => { if (running && !paused) animationFrame = requestAnimationFrame(loop); };
+      resumeLoop();
     })
     .catch((error) => {
       finish(error);
@@ -448,6 +454,11 @@ export function playIntro(
   }
 
   return {
+    setPaused: value => {
+      if (!running || value === paused) return;
+      if (value) { pausedAt = performance.now(); paused = true; cancelAnimationFrame(animationFrame); }
+      else { pauseOffset += performance.now() - pausedAt; paused = false; resumeLoop(); }
+    },
     skipLine: () => skipLine(),
     skip: finish,
     stop: finish,

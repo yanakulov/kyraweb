@@ -1,0 +1,74 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { bookTransition, candleMotion, optionsTransition } from '../src/components/bookTransition';
+import { MeshStandardMaterial, Texture } from 'three';
+import { inscribePage } from '../src/components/storybookInk';
+
+test('Options pulls back from the exact full-colour frame onto the ink page', () => {
+  assert.deepEqual(optionsTransition(0), { hinge: 1, ink: 1, colour: 1, zoom: 1, done: false });
+  assert.deepEqual(optionsTransition(1400), { hinge: 1, ink: 1, colour: 0, zoom: 0, done: true });
+  let previous = 1;
+  for (let ms = 0; ms <= 1600; ms += 20) {
+    const state = optionsTransition(ms);
+    assert.ok(state.zoom >= 0 && state.zoom <= previous);
+    assert.equal(state.colour, state.zoom);
+    assert.equal(state.done, ms >= 1400);
+    previous = state.zoom;
+  }
+  assert.equal(optionsTransition(-100).zoom, 1);
+});
+
+test('an early Options dismissal returns continuously from any point in the pullback', () => {
+  for (const closeAt of [0, 175, 700, 1230, 1400]) {
+    const current = optionsTransition(closeAt);
+    const returning = optionsTransition(0, true, current.zoom);
+    assert.equal(returning.zoom, current.zoom);
+    assert.equal(returning.colour, current.colour);
+    let previous = current.zoom;
+    for (let ms = 0; ms <= 1200; ms += 20) {
+      const state = optionsTransition(ms, true, current.zoom);
+      assert.ok(state.zoom >= previous && state.zoom <= 1);
+      assert.equal(state.done, ms >= 1200);
+      previous = state.zoom;
+    }
+    assert.deepEqual(optionsTransition(1200, true, current.zoom), { hinge: 1, ink: 1, colour: 1, zoom: 1, done: true });
+  }
+});
+
+test('the original opening retains its final exact-frame handoff', () => {
+  assert.deepEqual(bookTransition(0), { hinge: 0, ink: 0, colour: 0, zoom: 0, done: false });
+  assert.deepEqual(bookTransition(8900), { hinge: 1, ink: 1, colour: 1, zoom: 1, done: true });
+});
+
+test('candle motion stays bounded, smooth and independent of frame sampling', () => {
+  let previous = candleMotion(0);
+  for (let frame = 1; frame <= 60 * 60; frame++) {
+    const next = candleMotion(frame / 60);
+    assert.ok(Math.abs(next.bendX) <= .037 && Math.abs(next.bendZ) <= .053);
+    assert.ok(next.scaleY >= .955 && next.scaleY <= 1.045);
+    assert.ok(next.intensity >= .915 && next.intensity <= 1.085);
+    assert.ok(next.warmth >= .32 && next.warmth <= .68);
+    assert.ok(Math.abs(next.intensity - previous.intensity) < .01, 'no light jumps between frames');
+    assert.ok(Math.abs(next.bendZ - previous.bendZ) < .003, 'no flame jumps between frames');
+    assert.ok(Math.abs((next.scaleY - 1) / .045 - (next.intensity - 1) / .085) < 1e-12);
+    previous = next;
+  }
+  const atFiveSeconds = candleMotion(5);
+  for (const rate of [24, 30, 60, 120]) {
+    for (let frame = 0; frame <= 5 * rate; frame++) candleMotion(frame / rate);
+    assert.deepEqual(candleMotion(5), atFiveSeconds);
+  }
+});
+
+test('loading a chapter replaces the already-compiled page image without retaining its old frame', () => {
+  const material = new MeshStandardMaterial(), original = new Texture(), loaded = new Texture();
+  const image = inscribePage(material, original, { value: 1 }, { value: 0 }, true);
+  const shader = { uniforms: {}, vertexShader: '#include <worldpos_vertex>', fragmentShader: '#include <map_fragment>\n#include <emissivemap_fragment>' } as Parameters<typeof material.onBeforeCompile>[0];
+  material.onBeforeCompile(shader, {} as Parameters<typeof material.onBeforeCompile>[1]);
+  assert.equal(shader.uniforms.storyImage.value, original);
+  image.value = loaded;
+  image.wholeFrame.value = false;
+  assert.equal(shader.uniforms.storyImage.value, loaded);
+  assert.equal(shader.uniforms.wholeFrame.value, false);
+  material.dispose(); original.dispose(); loaded.dispose();
+});

@@ -27,7 +27,7 @@ import { RoomScript, type OpeningScript, type RoomAction } from "./roomScript";
 import { brandonTalkHead, actorScaleAt } from "../characters/brandonFrames";
 import { startWorldGame } from "./world";
 import { portalAtPoint } from "./navigation";
-import type { DropAnim, GameConfig, InventoryItemId, SceneItem, SceneOverlayState, Vec2 } from "../core/types";
+import type { DropAnim, GameConfig, InventoryItemId, RoomRuntimeSnapshot, RoomSnapshot, SceneItem, SceneOverlayState, Vec2, WorldSave } from "../core/types";
 
 export type RoomGame = Awaited<ReturnType<typeof startRoom>>;
 export async function startGame(canvas: HTMLCanvasElement, config: GameConfig): Promise<RoomGame> {
@@ -36,6 +36,8 @@ export async function startGame(canvas: HTMLCanvasElement, config: GameConfig): 
 
 export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
   config.signal?.throwIfAborted();
+  // A loaded room must never mutate a caller's save or a previously visited room.
+  if (config.resume) config = { ...config, resume: structuredClone(config.resume) };
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Canvas 2D context not available");
   const ctx = context;
@@ -99,8 +101,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     if (openingPack) for (const [name, info] of Object.entries(openingPack.clips)) {
       scriptRenderers.set(name, { clip: new IndexedClip(openingPack, info), renderer: new IndexedRenderer(info, false) });
     }
-    const scriptLayers = new Map<string, { image: HTMLCanvasElement; x: number; y: number }>();
-    const permanentLayers = new Map<string, { image: HTMLCanvasElement; x: number; y: number }>();
+    const scriptLayers = new Map<string, { image: HTMLCanvasElement; index: number; x: number; y: number }>();
+    const permanentLayers = new Map<string, { image: HTMLCanvasElement; index: number; x: number; y: number }>();
+    const maskChanges: RoomRuntimeSnapshot["masks"] = [];
     const questShapes: {shape:number;x:number;y:number;flags:number}[] = [];
     const noDropRegions: {x:number;y:number;w:number;h:number}[] = [];
     const npcs = new Map<number,Extract<RoomAction,{op:'npc'}>>();
@@ -149,12 +152,12 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     };
 
     const state = {
-      pos: { ...(config.entry ?? config.resume?.pos ?? { x: 160, y: 120 }) } as Vec2,
+      pos: { x: config.entry?.x ?? config.resume?.pos.x ?? 160, y: config.entry?.y ?? config.resume?.pos.y ?? 120 } as Vec2,
       target: null as Vec2 | null,
       path: [] as Vec2[],
       pathIndex: 0,
       pointer: null as Vec2 | null,
-      walkDelayTicks: 6,
+      walkDelayTicks: config.resume?.walkDelayTicks ?? 6,
       stepAccumulatorMs: 0,
       stepIndex: 0,
       animStepInterval: DEFAULT_ANIM_STEP_INTERVAL,
@@ -172,7 +175,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     };
 
     let lastTime = performance.now();
+    let clockMs = 0;
     let running = true;
+    let paused = config.paused ?? false;
     let atmosphere = true;
     const reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
 
@@ -359,7 +364,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
       for (const [name, layer] of scriptLayers) if (name !== "face" && name !== "face2") ctx.drawImage(layer.image, layer.x, layer.y);
 
-      if (scene.opening && backgroundName === "room" && packedBackground && atmosphere && !reducedMotion?.matches) drawKallakAtmosphere(ctx, lastTime);
+      if (scene.opening && backgroundName === "room" && packedBackground && atmosphere && !reducedMotion?.matches) drawKallakAtmosphere(ctx, clockMs);
       ctx.restore();
 
       if (scene.uiMaskY < LOGICAL_HEIGHT) {
@@ -422,20 +427,21 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function loop(now: number) {
-      if (!running) return;
+      if (!running || paused) return;
       // A hidden tab must not consume unseen cutscenes on its next animation frame.
       const dt = Math.min(0.1, Math.max(0, (now - lastTime) / 1000));
       lastTime = now;
-      update(dt, now);
+      clockMs += dt * 1000;
+      update(dt, clockMs);
       render();
       if (transition?.active) transition.draw(ctx);
-      animationFrame = requestAnimationFrame(loop);
+      if (running && !paused) animationFrame = requestAnimationFrame(loop);
     }
 
     let animationFrame = 0;
 
     function setTarget(point: Vec2) {
-      if (transition?.active || dead || sequence || point.y >= scene.uiMaskY || state.drops.length) return;
+      if (paused || !running || transition?.active || dead || sequence || point.y >= scene.uiMaskY || state.drops.length) return;
       pendingPortal = null;
       actorShape = null;
       const path = findClickPath(state.pos, point, p => isWalkable(p, scene, mask));
@@ -482,12 +488,14 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function setPointer(point: Vec2 | null) {
+      if (paused || !running) return;
       state.pointer = point;
       const portal = !sequence && portalAtPoint(config.portals ?? [], point);
       if (canvas.style) canvas.style.cursor = portal ? "pointer" : "default";
     }
 
     function handleClick(point: Vec2) {
+      if (paused || !running) return true;
       if (transition?.active) return true;
       if (sequence?.awaiting) { sequence.confirm(point); config.onContinueChange?.(false); return true; }
       if (sequence) { sequence.skipLine(); return true; }
@@ -624,7 +632,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function setStatusMessage(text: string) {
       state.statusMessage = text;
-      state.statusMessageUntil = performance.now() + 2400;
+      state.statusMessageUntil = clockMs + 2400;
     }
 
     function face(facing: number) {
@@ -655,9 +663,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           break;
         case 'hand':state.itemInHand=action.item;break;
         case 'item':state.sceneItems.push({id:action.item,x:action.x,y:action.y});break;
-        case 'shape':questShapes.push(action);foregroundFrames.clear();break;
-        case 'noDrop':noDropRegions.push(action);break;
+        case 'shape':questShapes.push({ shape: action.shape, x: action.x, y: action.y, flags: action.flags });foregroundFrames.clear();break;
+        case 'noDrop':noDropRegions.push({ x: action.x, y: action.y, w: action.w, h: action.h });break;
         case 'mask':
+          maskChanges.push({ x: action.x, y: action.y, w: action.w, h: action.h, blocked: action.blocked });
           foregroundFrames.clear();
           if(mask)for(let y=Math.max(0,action.y);y<Math.min(mask.height,action.y+action.h);y++)for(let x=Math.max(0,action.x);x<Math.min(mask.width,action.x+action.w);x++){
             const i=y*mask.width+x;mask.pixels[i]=action.blocked?mask.pixels[i]|128:mask.pixels[i]&127;
@@ -694,8 +703,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           if (!animation) throw new Error(`Missing script animation ${action.clip}`);
           const pixels=animation.clip.frame(action.index);
           if(action.permanent || action.clip === 'face' || action.clip === 'face2') foregroundFrames.clear();
-          if(action.permanent){scriptLayers.delete(action.clip);permanentLayers.set(action.clip,{image:buildIndexedCanvas(animation.clip.info,pixels),x:action.x,y:action.y});}
-          else {scriptLayers.delete(action.clip);scriptLayers.set(action.clip, { image: animation.renderer.render(pixels), x: action.x, y: action.y });}
+          if(action.permanent){scriptLayers.delete(action.clip);permanentLayers.set(action.clip,{image:buildIndexedCanvas(animation.clip.info,pixels),index:action.index,x:action.x,y:action.y});}
+          else {scriptLayers.delete(action.clip);scriptLayers.set(action.clip, { image: animation.renderer.render(pixels), index:action.index, x: action.x, y: action.y });}
           if (["brantree", "touch", "brynn1", "brynn2", "brynn3", "raindrop", "wow", "tag", "agile", "balance2"].includes(action.clip)) actorVisible = false;
           break;
         }
@@ -734,28 +743,68 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       sequence = new RoomScript(actions, { apply: applyScript, walking: () => state.moving || ambientWait !== null,
         movementTempo: () => state.walkDelayTicks / 6,
         frames: name => scriptRenderers.get(name)?.clip.info.frames.length ?? 0 });
-      sequence.update(0);
+      if (!paused) sequence.update(0);
     }
 
-    if (config.entry) face(config.entry.facing);
-    for(const action of config.setupActions??[])applyScript(action);
-    for(const anim of sceneAnims)anim.visible=anim.play;
-
-    if (openingScript && config.playOpening !== false) playScript(openingScript.opening);
-    else if (config.entryActions?.length) playScript(config.entryActions);
+    if (config.entry || config.resume?.facing !== undefined) face(config.entry?.facing ?? config.resume!.facing!);
+    const restored = config.resume?.runtime;
+    if (restored) {
+      clockMs = restored.clockMs; sceneTicks = restored.sceneTicks; sceneAccumulatorMs = restored.sceneAccumulatorMs;
+      if (restored.sceneAnims.length !== sceneAnims.length) throw new Error("This save does not match the room's animations.");
+      restored.sceneAnims.forEach((saved, index) => {
+        if (saved.ip > sceneAnims[index].script.length) throw new Error("The saved room animation is invalid.");
+        Object.assign(sceneAnims[index], saved);
+      });
+      for (const change of restored.masks) applyScript({ op: 'mask', ...change });
+      questShapes.push(...restored.shapes); noDropRegions.push(...restored.noDrop);
+      if (restored.palette) applyScript({ op: 'palette', start: 0, colors: restored.palette, ms: 0 });
+      for (const layer of restored.layers) applyScript({ op: 'frame', ...layer, ms: 0 });
+      // Reconstructing still frames must not replay actor/NPC script side effects.
+      for (const npc of restored.npcs) npcs.set(npc.character, { op: 'npc', ...npc });
+      for (const npc of restored.heldNpcPoses) heldNpcPoses.set(npc.character, { op: 'npc', ...npc });
+      actorVisible = restored.actorVisible; actorShape = restored.actorShape; hasAmulet = restored.hasAmulet;
+    } else {
+      for(const action of config.setupActions??[])applyScript(action);
+      for(const anim of sceneAnims)anim.visible=anim.play;
+      if (openingScript && config.playOpening !== false) playScript(openingScript.opening);
+      else if (config.entryActions?.length) playScript(config.entryActions);
+    }
 
     config.signal?.throwIfAborted();
     // Resizing clears the shared canvas; keep the previous room during loading.
     if (canvas.width !== LOGICAL_WIDTH) canvas.width = LOGICAL_WIDTH;
     if (canvas.height !== LOGICAL_HEIGHT) canvas.height = LOGICAL_HEIGHT;
-    animationFrame = requestAnimationFrame(loop);
+    // The caller can atomically replace an old paused game after this promise resolves.
+    render();
+    if (transition?.active) transition.draw(ctx);
+    if (!paused) animationFrame = requestAnimationFrame(loop);
 
-    function getSnapshot() { return { pos: { ...state.pos }, walkDelayTicks: state.walkDelayTicks, facing:state.dir==="right"?3:state.dir==="left"?5:state.dir==="up"?0:4, inventorySlots: state.inventorySlots, itemInHand: state.itemInHand,
-      sceneItems: state.sceneItems, overlays: state.overlays, treeSpoken }; }
+    function getSnapshot(): RoomSnapshot { return structuredClone({ pos: state.pos, walkDelayTicks: state.walkDelayTicks, facing:state.dir==="right"?3:state.dir==="left"?5:state.dir==="up"?0:4, inventorySlots: state.inventorySlots, itemInHand: state.itemInHand,
+      sceneItems: state.sceneItems, overlays: state.overlays, treeSpoken,
+      runtime: { clockMs, sceneTicks, sceneAccumulatorMs, actorVisible, actorShape, hasAmulet,
+        sceneAnims: sceneAnims.map(({ script, ...anim }) => anim),
+        npcs: [...npcs.values()].map(({ op, ...npc }) => npc), heldNpcPoses: [...heldNpcPoses.values()].map(({ op, ...npc }) => npc),
+        masks: maskChanges, shapes: questShapes, noDrop: noDropRegions,
+        layers: [...scriptLayers].map(([clip, layer]) => ({ clip, index: layer.index, x: layer.x, y: layer.y, permanent: false }))
+          .concat([...permanentLayers].map(([clip, layer]) => ({ clip, index: layer.index, x: layer.x, y: layer.y, permanent: true }))),
+        ...(roomPalette ? { palette: roomPalette } : {}) }
+    }); }
+    function getSaveSnapshot() {
+      return running && !dead && !sequence && !transition?.active && !state.drops.length && !paletteFade && ambientWait === null && backgroundName === 'room' && actorVisible ? getSnapshot() : null;
+    }
+    function setPaused(value: boolean) {
+      if (!running || paused === value) return;
+      paused = value;
+      cancelAnimationFrame(animationFrame);
+      // Wall time while a menu is open never enters any game, script or scene clock.
+      lastTime = performance.now();
+      if (!paused) animationFrame = requestAnimationFrame(loop);
+    }
+    function getSaveState(): WorldSave | null { return null; }
     return { setTarget, stop, setDebug, setPointer, setWalkSpeed, setAnimStepInterval, handleClick,
-      setAtmosphere: (enabled: boolean) => { atmosphere = enabled; },
+      setAtmosphere: (enabled: boolean) => { atmosphere = enabled; if (paused) render(); },
       runSequence: playScript,
-      getSnapshot, getPortals: () => !sequence && !dead && backgroundName === "room" ? config.portals ?? [] : [] };
+      getSnapshot, getSaveSnapshot, getSaveState, setPaused, getPortals: () => !paused && !sequence && !dead && backgroundName === "room" ? config.portals ?? [] : [] };
   } catch (error) {
     for (const value of scriptRenderers.values()) value.renderer.dispose();
     packedBackground?.dispose();
