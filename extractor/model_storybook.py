@@ -1,4 +1,4 @@
-"""Build the opening folio from the supplied retail cover, with Blender 5.2.
+"""Build the opening folio from the cleaned original illustration, with Blender 5.2.
 
 blender --background --python extractor/model_storybook.py -- /path/to/cover.jpg
 Optional --render writes inspection images to .reference/storybook/.
@@ -16,7 +16,7 @@ import numpy as np
 from mathutils import Vector
 
 args = argparse.ArgumentParser()
-args.add_argument("cover", type=Path)
+args.add_argument("cover", type=Path, nargs="?", default=Path(__file__).resolve().parent / "materials/cover-illustration.png")
 args.add_argument("--render", action="store_true")
 args.add_argument("--export-only", action="store_true", help="Skip fallback and proof renders when only geometry changes")
 opt = args.parse_args(sys.argv[sys.argv.index("--") + 1:])
@@ -166,8 +166,8 @@ def normal_map(height, strength):
     return n*.5+.5
 
 
-# Original pixels, not a newly drawn cover. The monochrome tooling preserves
-# Malcolm, Brandon, the forest, Fables & Fiends and original Kyrandia lettering.
+# The supplied retail composition, with packaging labels removed by imagegen.
+# Only The Legend of Kyrandia lettering remains above Malcolm and Brandon.
 source = bpy.data.images.load(str(opt.cover.resolve()))
 source.scale(1024, 1024)
 original = np.array(source.pixels[:], dtype=np.float32).reshape(1024, 1024, 4)[:, :, :3]
@@ -263,23 +263,14 @@ hinge = bpy.data.objects.new("CoverHinge", None)
 bpy.context.collection.objects.link(hinge)
 hinge.location = xyz((-1.55,.44,0))
 hinge["sourceCoverSHA256"] = hashlib.sha256(opt.cover.read_bytes()).hexdigest()
-hinge["sourceCoverTreatment"] = "Original pixels preserved as square bronze/leather relief; no redrawn artwork."
+hinge["sourceCoverTreatment"] = "Original composition with retail labels removed; Kyrandia title preserved as bronze/leather relief."
 bpy.context.view_layer.update()
 box("Leather front board", (0,.44,0), (3.1,.12,4.1), leather, .07, hinge, uv_scale=(1.2,1.2))
 box("Front board suede lining", (0,.375,0), (2.93,.012,3.93), inside, .04, hinge, uv_scale=(.75,.75))
 for inset in [.25,.31]:
     xx,zz=1.55-inset,2.05-inset
     tube("Inside stamped border",[(-xx,.361,-zz),(xx,.361,-zz),(xx,.361,zz),(-xx,.361,zz),(-xx,.361,-zz)],.006,brass,hinge)
-# An original-lettering bookplate on the inside, using the same cover atlas.
-# The reversed U coordinates read correctly after the cover rotates 180°.
-box("Inside folio bookplate",(0,.353,-.12),(1.92,.012,1.12),parchment,.025,hinge)
-def bookplate_label(name,width,depth,z,uv_rect):
-    u0,v0,u1,v1=uv_rect
-    return mesh(name,[(-width/2,.345,z+depth/2),(width/2,.345,z+depth/2),
-                       (width/2,.345,z-depth/2),(-width/2,.345,z-depth/2)],
-                [(3,2,1,0)],cover_mat,[(u1,v0),(u0,v0),(u0,v1),(u1,v1)],hinge)
-bookplate_label("Original Fables and Fiends bookplate",1.58,.30,-.32,(.385,.850,.590,.890))
-bookplate_label("Original Book One bookplate",.95,.18,.10,(.394,.681,.579,.713))
+# The inside remains unprinted for the projected prologue and menu.
 
 # The binding belongs to the fixed back board, below the page surface.
 # Parenting it to the lid turned its lower edge into an upright fin when open.

@@ -19,7 +19,7 @@ export function frameAtTime(times: number[], elapsedMs: number) {
 export function playIntro(
   canvas: HTMLCanvasElement,
   steps: IntroStep[],
-  options?: { onFirstFrame?: () => void; onStepChange?: (id: string) => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean; atmosphere?: () => boolean; onLoadingChange?: (loading: boolean) => void }
+  options?: { onFirstFrame?: () => void; onStepChange?: (id: string) => void; onStepReady?: (id: string) => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean; atmosphere?: () => boolean; onLoadingChange?: (loading: boolean) => void }
 ): IntroPlayback {
   const ctx = canvas.getContext("2d");
   if (!ctx) {
@@ -232,6 +232,7 @@ export function playIntro(
         for (const [index, entry] of cache) if (index !== stepIndex && index !== stepIndex + 1) {
           entry.value?.dispose(); cache.delete(index);
         }
+        const sceneChanged = step.id !== activeSceneAnimStep;
         if (options?.onStepChange) {
           if (step.id !== activeSceneAnimStep) {
             options.onStepChange(step.id);
@@ -442,7 +443,8 @@ export function playIntro(
           drawSubtitles(step.subtitles, subtitleElapsed, alpha);
         }
         if (firstFrame) { firstFrame = false; options?.onFirstFrame?.(); }
-        animationFrame = requestAnimationFrame(loop);
+        if (sceneChanged) options?.onStepReady?.(step.id);
+        if (running && !paused) animationFrame = requestAnimationFrame(loop);
       };
 
       resumeLoop = () => { if (running && !paused) animationFrame = requestAnimationFrame(loop); };

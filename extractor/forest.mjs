@@ -73,6 +73,8 @@ export async function buildForest(root, out = "public/assets/forest") {
     "HERMAN.CPS",
     "MERITH.CPS",
     "NOTEENG.CPS",
+    "_NPC.EMC",
+    "CHAPTER1.VRM",
     "AMULET.WSA",
     "DROPUP.WSA",
     "DROPDOWN.WSA",
@@ -98,7 +100,33 @@ export async function buildForest(root, out = "public/assets/forest") {
     await readFile("public/assets/world/world.json", "utf8"),
   );
   const data = { rooms: {}, sources: {}, frames: {} };
+  const note = decodeCps(get('NOTEENG.CPS'), get('PALETTE.COL'));
+  const notePixels = new Uint8Array(194 * 128);
+  for (let y = 0; y < 128; y++) notePixels.set(note.pixels.subarray((y + 8) * 320 + 63, (y + 8) * 320 + 257), y * 194);
+  const noteClip = { width: 194, height: 128, frames: [notePixels], palette: note.palette, transparentIndex: -1 };
+  const npcProgram = parseEmc(get('_NPC.EMC')), npcVoices = readPak(get('CHAPTER1.VRM'));
+  function letterActions(readable) {
+    const actions = [];
+    runEmc(npcProgram, 0, (op, a, strings) => {
+      switch (op) {
+        case 0x72: return 0;
+        case 4: return +(readable && a[0] === 129);
+        case 1: actions.push({ op: 'say', text: strings[a[1]], voiceId: a[0], ms: vocDuration(npcVoices.get(`${a[0]}.VOC`)), x: 0, y: 0, color: 15, blocking: true }); break;
+        case 0x21: actions.push({ op: 'wait', ms: -a[0] * 1000 / 60 }); break;
+        case 0x14: actions.push({ op: 'hand', item: null }); break;
+        case 0x52: actions.push({ op: 'frame', clip: 'note', index: 0, x: 63, y: 8, ms: 0 }); break;
+        case 0x4a: actions.push({ op: 'confirm' }); break;
+        case 0x53: actions.push({ op: 'close', clip: 'note' }); break;
+        case 0x0e: actions.push({ op: 'hand', item: 'letter' }); break;
+        default: throw new Error(`Unsupported letter syscall ${op}`);
+      }
+      return 0;
+    }, { 0: 0, 4: 42, 5: 0 });
+    return actions;
+  }
+  const letter = { sealed: letterActions(false), readable: letterActions(true) };
   await mkdir(out, { recursive: true });
+  await writeFile(join(out, 'note.kyr.gz'), encodeScenePack({ note: noteClip }));
   for (const name of names) {
     const id = ROOMS[name],
       image = decodeCps(get(`${name}.CPS`), get("PALETTE.COL"));
@@ -255,7 +283,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     };
   await writeFile(
     join(out, "forest.json.gz"),
-    gzipSync(JSON.stringify({ rooms: data.rooms }), { level: 9 }),
+    gzipSync(JSON.stringify({ rooms: data.rooms, letter }), { level: 9 }),
   );
   await mkdir("tests/fixtures", { recursive: true });
   await writeFile(

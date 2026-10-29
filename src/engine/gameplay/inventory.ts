@@ -4,15 +4,15 @@ import type { InventoryItem, InventoryItemId, InventorySlot, MaskData, SceneItem
 
 const INVENTORY_ITEM_DEFS: Record<InventoryItemId, InventoryItem> = {
   // Tile indices are 0-based, 20 columns per row in items.png.
-  letter: { id: "letter", name: "Letter", statusName: "письмо", tileIndex: 42 },
-  ruby: { id: "ruby", name: "Ruby", statusName: "рубин", tileIndex: 0 },
-  saw: { id: "saw", name: "Saw", statusName: "пила", tileIndex: 44 },
+  letter: { id: "letter", name: "Letter", tileIndex: 42 },
+  ruby: { id: "ruby", name: "Ruby", tileIndex: 0 },
+  saw: { id: "saw", name: "Saw", tileIndex: 44 },
   rose: { id: "rose", name: "Lavender rose", tileIndex: 16 },
   silverRose: { id: "silverRose", name: "Silver rose", tileIndex: 19 },
   marble: { id: "marble", name: "Marble", tileIndex: 43 },
   teardrop: { id: "teardrop", name: "Teardrop", tileIndex: 52 },
-  apple: { id: "apple", name: "Apple", statusName: "яблоко", tileIndex: 19 },
-  appleEaten: { id: "appleEaten", name: "Apple (eaten)", statusName: "огрызок", tileIndex: 20 }
+  apple: { id: "apple", name: "Apple", tileIndex: 19 },
+  appleEaten: { id: "appleEaten", name: "Apple (eaten)", tileIndex: 20 }
 };
 
 const INVENTORY_SLOTS: InventorySlot[] = [
@@ -147,5 +147,5 @@ export function getInventorySlotPositions() {
 export function getItemStatusName(id: InventoryItemId) {
   const item = INVENTORY_ITEM_DEFS[id];
   if (!item) return id;
-  return item.statusName ?? item.name ?? id;
+  return item.name ?? id;
 }

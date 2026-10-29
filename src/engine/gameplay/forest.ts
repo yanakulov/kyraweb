@@ -6,6 +6,7 @@ import { runEmc, type EmcProgram } from "../../../extractor/emc.mjs";
 import type { RoomAction } from "./roomScript";
 import type { RoomSnapshot, Vec2, InventoryItemId } from "../core/types";
 import type { WorldRoom } from "./world";
+import { actorScaleAt } from '../characters/brandonFrames';
 
 export type ForestRoom = WorldRoom & {
   program: EmcProgram;
@@ -13,7 +14,7 @@ export type ForestRoom = WorldRoom & {
   clipFrames: Record<string, number>;
   npcFrames: Record<number, { xOffset: number; yOffset: number }>;
 };
-export type ForestData = { rooms: Record<string, ForestRoom> };
+export type ForestData = { rooms: Record<string, ForestRoom>; letter: { sealed: RoomAction[]; readable: RoomAction[] } };
 export async function loadForestData(
   src: string,
   signal?: AbortSignal,
@@ -226,7 +227,9 @@ export function traceForest(
             return +snapshot.sceneItems.some(
               (item) => originalItem(item.id) === a[0],
             );
-          case 0x8c:
+          case 0x8c: {
+            const scale = actorScaleAt(actor.y, room.actorScale);
+            if (a[0] >= actor.x - 12 * scale && a[0] <= actor.x + 12 * scale && a[1] >= actor.y - 48 * scale && a[1] <= actor.y) return 0;
             return Number(
               Object.entries(npcs).find(
                 ([, n]) =>
@@ -236,6 +239,7 @@ export function traceForest(
                   a[1] <= n.y,
               )?.[0] ?? -1,
             );
+          }
           case 0x0b:
             actor.x = a[0] & ~3;
             actor.y = a[1] & ~1;

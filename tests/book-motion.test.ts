@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bookTransition, candleMotion, optionsTransition } from '../src/components/bookTransition';
 import { MeshStandardMaterial, Texture } from 'three';
-import { inscribePage } from '../src/components/storybookInk';
+import { inscribePage, illustrationLevels } from '../src/components/storybookInk';
 
 test('Options pulls back from the exact full-colour frame onto the ink page', () => {
   assert.deepEqual(optionsTransition(0), { hinge: 1, ink: 1, colour: 1, zoom: 1, done: false });
@@ -40,6 +40,15 @@ test('the original opening retains its final exact-frame handoff', () => {
   assert.deepEqual(bookTransition(8900), { hinge: 1, ink: 1, colour: 1, zoom: 1, done: true });
 });
 
+test('the prologue holds on the illustrated spread until the reader continues', () => {
+  const page = { hinge: 1, ink: 1, colour: 0, zoom: 0, done: false };
+  for (const elapsed of [4200, 8900, 600000]) assert.deepEqual(bookTransition(elapsed, true), page);
+  assert.deepEqual(bookTransition(4200), page, 'releasing the held clock is continuous');
+  assert.equal(bookTransition(6200).colour, 1);
+  assert.equal(bookTransition(8900).zoom, 1);
+  assert.equal(bookTransition(8900).done, true);
+});
+
 test('candle motion stays bounded, smooth and independent of frame sampling', () => {
   let previous = candleMotion(0);
   for (let frame = 1; frame <= 60 * 60; frame++) {
@@ -66,9 +75,18 @@ test('loading a chapter replaces the already-compiled page image without retaini
   const shader = { uniforms: {}, vertexShader: '#include <worldpos_vertex>', fragmentShader: '#include <map_fragment>\n#include <emissivemap_fragment>' } as Parameters<typeof material.onBeforeCompile>[0];
   material.onBeforeCompile(shader, {} as Parameters<typeof material.onBeforeCompile>[1]);
   assert.equal(shader.uniforms.storyImage.value, original);
-  image.value = loaded;
-  image.wholeFrame.value = false;
+  image.update(loaded,false);
   assert.equal(shader.uniforms.storyImage.value, loaded);
   assert.equal(shader.uniforms.wholeFrame.value, false);
   material.dispose(); original.dispose(); loaded.dispose();
+});
+
+test('ink levels recover the tonal range of a dark room without clipping to a bright window', () => {
+  const pixels = new Uint8ClampedArray(100*4);
+  for(let i=0;i<100;i++) pixels.set([i<98 ? 20+i : 255,i<98 ? 20+i : 255,i<98 ? 20+i : 255,255],i*4);
+  const [black,white] = illustrationLevels(pixels);
+  assert.ok(black<.12 && white>.4 && white<.5);
+  assert.deepEqual(illustrationLevels(new Uint8ClampedArray(8)),[0,1]);
+  const flat=illustrationLevels(Uint8ClampedArray.from([25,25,25,255]));
+  assert.ok(flat[1]-flat[0]>=.2, 'flat images retain a finite sampling range');
 });

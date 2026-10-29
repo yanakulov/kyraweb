@@ -16,9 +16,11 @@ export type GameConfig = {
   entryActions?: import("../gameplay/roomScript").RoomAction[];
   setupActions?: import("../gameplay/roomScript").RoomAction[];
   onInteract?: (point: Vec2, snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[] | null;
+  onActorInteract?: (snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[] | null;
   onScriptAction?: (action: import("../gameplay/roomScript").RoomAction) => void;
   onDeath?:()=>void;
   onContinueChange?: (waiting: boolean) => void;
+  onNoteChange?: (visible: boolean) => void;
   npcFrames?: Record<number, { xOffset: number; yOffset: number }>;
   amulet?: boolean;
   portals?: RoomPortal[];
@@ -157,7 +159,6 @@ export type InventoryItemId = "letter" | "ruby" | "saw" | "apple" | "appleEaten"
 export type InventoryItem = {
   id: InventoryItemId;
   name: string;
-  statusName?: string;
   tileIndex: number;
 };
 

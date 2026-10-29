@@ -128,6 +128,9 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       entry: from || restoring ? { ...arrival, facing } : undefined,
       playOpening: !restoring && !from && config.playOpening !== false, entryActions, setupActions, amulet:quest.flags.has(45), npcFrames:questRoom?.npcFrames, portals: roomPortals(meta, mask),
       onScriptAction: action=>{applyForestState(quest,action);if(action.op==='mask')changeMask(action);},
+      onActorInteract: snapshot => snapshot.itemInHand === 'letter'
+        ? forest.letter[quest.flags.has(129) ? 'readable' : 'sealed'].map(action => action.op === 'say' ? { ...action, x: snapshot.pos.x, y: snapshot.pos.y - 56 } : action)
+        : null,
       onInteract: questRoom?(point,snapshot)=>{
         if(snapshot.treeSpoken)quest.flags.add(53);
         const result=traceForest(questRoom,1,quest,snapshot,point,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask));
@@ -135,6 +138,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       }:undefined,
       onDeath:()=>{if(active&&callbackOwner===token)config.onDeath?.();},
       onContinueChange:value=>{if(active&&callbackOwner===token)config.onContinueChange?.(value);},
+      onNoteChange:value=>{if(active&&callbackOwner===token)config.onNoteChange?.(value);},
       onExit: portal => void exit(portal),
       onSequenceChange: value => { if (active && callbackOwner === token) {
         config.onSequenceChange?.(value);

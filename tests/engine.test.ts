@@ -3,6 +3,7 @@ import './forest.test';
 import './studio-logo.test';
 import './book-motion.test';
 import './save-storage.test';
+import './localization.test';
 import assert from "node:assert/strict";
 import { playIntro, frameAtTime } from "../src/engine/intro/player";
 import { buildIntroSteps } from "../src/engine/intro/steps";
@@ -281,15 +282,33 @@ function introHarness() {
   let textDraws = 0;
   const draws: unknown[][] = [];
   const rectangles: unknown[][] = [];
-  const ctx = new Proxy({}, { get: (_, key) => key === "drawImage" ? (...args: unknown[]) => draws.push(args) : key === "fillRect" ? (...args: unknown[]) => rectangles.push(args) : key === "fillText" ? () => textDraws++ : key === "measureText" ? (s: string) => ({ width: s.length * 6 }) : () => {} });
+  const clips: unknown[][] = [];
+  const ctx = new Proxy({}, { get: (_, key) => key === "drawImage" ? (...args: unknown[]) => draws.push(args) : key === "fillRect" ? (...args: unknown[]) => rectangles.push(args) : key === 'rect' ? (...args: unknown[]) => clips.push(args) : key === "fillText" ? () => textDraws++ : key === "measureText" ? (s: string) => ({ width: s.length * 6 }) : () => {} });
   const canvas = { getContext: () => ctx } as unknown as HTMLCanvasElement;
-  return { canvas, draws, rectangles, textDraws: () => textDraws,
+  return { canvas, draws, rectangles, clips, textDraws: () => textDraws,
     tick(ms: number) { now = ms; const pending = [...frames.values()]; frames.clear(); pending.forEach(cb => cb(now)); },
     pending: () => frames.size,
     restore() { Object.assign(globalThis, original); }
   };
 }
 const subtitle = { text: "Hello", startMs: 20, endMs: 80, y: 180 };
+
+test("the Kallak book opens only after its scene is drawn and can resume the original intro", async () => {
+  const h = introHarness();
+  try {
+    const ready: string[] = [];
+    const playback = playIntro(h.canvas, [{ id: 'kallak_writing', durationMs: 100, demoLoopRange: { startMs: 0, endMs: 90, resumeMs: 0 } }, { id: 'kallak_malcolm', durationMs: 100 }], {
+      onStepChange: id => { if (id === 'kallak_writing') playback.setDemoLoopStep(id); },
+      onStepReady: id => { assert.ok(h.rectangles.length); ready.push(id); if (id === 'kallak_writing') playback.setPaused(true); }
+    });
+    await settleLoads(); h.tick(1);
+    assert.deepEqual(ready, ['kallak_writing']); assert.equal(h.pending(), 0);
+    h.tick(10000); assert.deepEqual(ready, ['kallak_writing']);
+    playback.exitDemoLoop(); playback.setPaused(false); h.tick(10001); h.tick(10102); await settleLoads(); h.tick(10103);
+    assert.deepEqual(ready, ['kallak_writing', 'kallak_malcolm']);
+    playback.stop(); await playback.done;
+  } finally { h.restore(); }
+});
 
 test("book pause freezes intro frames and subtitles without consuming elapsed time", async () => {
   const h = introHarness();
@@ -798,6 +817,17 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     onLocationChange: (_: string, id?: number) => { location = id!; }, onSequenceChange: (value: boolean) => { sequence = value; } };
   const games: Awaited<ReturnType<typeof startGame>>[] = [];
   try {
+    for (const x of [8, 24, 160, 296, 311]) {
+      const firstExit = await startGame(h.canvas, config); games.push(firstExit);
+      firstExit.setWalkSpeed('fastest');
+      firstExit.runSequence([{ op: 'hand', item: 'letter' }]); tick();
+      firstExit.handleClick({ x, y: 134 });
+      assert.equal(sequence, true, `the first exit at x=${x} must start the tree, even with an item in hand`);
+      assert.equal(location, 0);
+      assert.equal(firstExit.getSnapshot().treeSpoken, false, 'the quest flag commits only after the conversation completes');
+      assert.equal(firstExit.getSaveState(), null);
+      firstExit.stop();
+    }
     const game = await startGame(h.canvas, config); games.push(game);
     game.handleClick({ x: 248, y: 82 }); game.handleClick({ x: 100, y: 165 });
     assert.equal(game.getSnapshot().inventorySlots[0], 'ruby');
@@ -849,5 +879,27 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     assert.ok(!loaded.getSnapshot().sceneItems.some(item => item.id === 'ruby'), 'collected props cannot respawn across a save/load and return');
     assert.equal(loaded.getSnapshot().inventorySlots[0], 'ruby');
     assert.equal(loaded.getSnapshot().itemInHand, 'marble');
+
+    // Self-use follows the original _NPC.EMC branches, in any room.
+    const heard: string[] = [], notes: boolean[] = [];
+    const letterGame = await startGame(h.canvas, { ...config, saveState: saved, paused: false,
+      onSubtitleChange: lines => heard.push(...lines.map(line => line.text)), onNoteChange: visible => notes.push(visible) });
+    games.push(letterGame);
+    letterGame.runSequence([{ op: 'actor', x: 280, y: 110, facing: 5, visible: true }, { op: 'hand', item: 'letter' }]); tick();
+    letterGame.handleClick({ x: 280, y: 80 });
+    await until(() => { if (sequence) letterGame.handleClick({ x: 280, y: 80 }); return !sequence; }, 'sealed letter speech did not finish');
+    assert.deepEqual(heard, ["Hmm?  Blank, except it has Brynn's name on it!", "I'd better go to the temple.", 'Brynn will know what to do!']);
+    assert.equal(letterGame.getSnapshot().itemInHand, 'letter');
+    letterGame.runSequence([{ op: 'flag', flag: 129, value: true }]); tick();
+    letterGame.handleClick({ x: 280, y: 80 }); tick();
+    assert.equal(notes.at(-1), true); assert.equal(letterGame.getSnapshot().itemInHand, null);
+    for (let i=0;i<50;i++) tick();
+    assert.equal(sequence, true, 'the readable note waits for a click');
+    letterGame.handleClick({ x: 280, y: 80 }); tick();
+    assert.equal(notes.at(-1), false); assert.equal(letterGame.getSnapshot().itemInHand, 'letter');
+
+    letterGame.runSequence([{ op: 'npc', character: 1, room: 7, x: 60, y: 100, shape: 41, facing: 5, visible: true }]);
+    h.clips.length = 0; tick();
+    assert.ok(h.clips.some(rect => rect[0] === 48 && rect[1] === 52 && rect[2] === 24 && rect[3] === 48), 'Merith restores foreground only over his own sprite, independently of Brandon');
   } finally { for (const game of games) game.stop(); Object.assign(globalThis, original); h.restore(); }
 });
