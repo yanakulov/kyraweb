@@ -53,6 +53,7 @@ body {
   position: relative;
   background: #000;
 }
+.game-frame.is-concealed { visibility: hidden; }
 
 .stage {
   position: relative;
@@ -73,8 +74,9 @@ body {
   touch-action: pinch-zoom;
 }
 
-.book-continue { min-width: 220px; min-height: 54px; font-size: 13px; }
-.book-status { margin: 10px auto 0; max-width: 400px; padding: 0 16px; font: 14px/1.4 Georgia,serif; color: #e8d6aa; }
+.book-continue { padding: 5px 14px; min-height: 32px; font: 16px/1.2 Georgia,serif; color: #d9bd82; border: 0; background: linear-gradient(90deg,transparent,#201007eb 20%,#201007eb 80%,transparent); text-shadow: 0 1px 2px #000; }
+.book-continue:hover { color: #fff1c6; }
+.book-status { margin: 6px 0 0; font: 14px/1.3 Georgia,serif; color: #e8d6aa; }
 
 button, select, input { font: inherit; }
 button, summary, select { touch-action: manipulation; }
@@ -133,7 +135,7 @@ button:disabled { cursor: default; }
   line-height: 1.7;
 }
 
-.app:fullscreen { width: 100%; max-width: none; height: 100%; display: grid; place-items: center; background: #000; }
+.app:fullscreen { --game-surround: #000; width: 100%; max-width: none; height: 100%; display: grid; place-items: center; background: #000; }
 .app:fullscreen .game-frame { width: min(100%, calc(100dvh * 1.6)); }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }

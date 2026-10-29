@@ -9,7 +9,8 @@ window.requestAnimationFrame = callback => { callbacks.push(callback); return ca
 const visited = new Set<number>();
 let expectedHeld: "ruby" | null = "ruby";
 const originalFetch = window.fetch.bind(window);
-let failNextEntrance = false;
+// First reject the speculative request, so the entrance can exercise a real retry.
+let failNextEntrance = true;
 let holdNextEntrance = false, releaseNextEntrance: (() => void) | null = null;
 window.fetch = (input, init) => {
   const url = input instanceof Request ? input.url : String(input);
@@ -98,9 +99,13 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     game.handleClick({ x: 100, y: 165 }); game.handleClick({ x: 120, y: 120 }); advance(2000);
     await travel(1); await travel(0);
     if (game.getSnapshot().sceneItems.filter(item => item.id === "ruby").length !== 1) throw new Error("Dropped ruby lost or duplicated");
-    holdNextEntrance = true; game.handleClick({ x: 160, y: 132 });
-    await until(() => releaseNextEntrance !== null, "pending transition");
-    game.stop(); const stoppedFrame = canvas.toDataURL();
+    // A fresh session has no decoded neighbour yet; hold its prefetch and join it on entry.
+    game.stop(); holdNextEntrance = true;
+    const pendingGame = await startGame(canvas, { scene: gemCutScene, world: "/kyraweb/assets/world/world.json", playOpening: false,
+      onLocationChange: (_, roomId) => { id = roomId!; }, onLoadingChange: value => { loading = value; } });
+    pendingGame.runSequence([{ op: 'exit', target: 1, entry: { x: 208, y: 110 } }]);
+    await until(() => releaseNextEntrance !== null && loading, "pending transition");
+    pendingGame.stop(); const stoppedFrame = canvas.toDataURL();
     releaseNextEntrance!(); await new Promise(resolve => setTimeout(resolve, 30)); advance(1000);
     if (id !== 0 || canvas.toDataURL() !== stoppedFrame) throw new Error("Stopped transition changed room or canvas");
     results.textContent += "ALL PASSED — 17 rooms, round trips, both lift directions, held item, inventory, dropped items, tree state, broken bridge, retry and cancellation";

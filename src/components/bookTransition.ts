@@ -16,6 +16,15 @@ export function pageCameraDistance(viewportHeight: number, gameHeight: number, f
   return 1.625 * viewportHeight / (gameHeight * 2 * Math.tan(fov * Math.PI / 360));
 }
 
+// Use the actual canvas bounds: fullscreen and mobile safe areas change both size and centre.
+export function pageCameraFraming(viewport: { width: number; height: number }, target: { left: number; top: number; width: number; height: number }, fov: number) {
+  return {
+    distance: pageCameraDistance(viewport.height, target.height, fov),
+    offsetX: (viewport.width - target.width) / 2 - target.left,
+    offsetY: (viewport.height - target.height) / 2 - target.top,
+  };
+}
+
 // Options opens from the captured game frame; reversal starts at the current zoom.
 export function optionsTransition(ms: number, returning = false, startZoom = 0) {
   const progress = smooth(ms / (returning ? 1200 : 1400));

@@ -1,8 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bookTransition, candleMotion, optionsTransition } from '../src/components/bookTransition';
-import { MeshStandardMaterial, Texture } from 'three';
+import { bookTransition, candleMotion, optionsTransition, pageCameraFraming } from '../src/components/bookTransition';
+import { MeshStandardMaterial, PerspectiveCamera, Texture, Vector3 } from 'three';
 import { inscribePage, illustrationLevels } from '../src/components/storybookInk';
+
+test('the final book plane matches the actual canvas size and offset, including fullscreen and safe areas', () => {
+  for (const [width,height,left,top,gameWidth,gameHeight] of [
+    [1280,720,70.4,4,1139.2,712],
+    [1920,1080,96,0,1728,1080],
+    [390,844,4,302.625,382,238.75],
+    [390,780,14,286,360,225],
+  ]) {
+    const framing = pageCameraFraming({width,height},{left,top,width:gameWidth,height:gameHeight},35);
+    const camera = new PerspectiveCamera(35,width/height,.05,100);
+    camera.position.set(0,.386+framing.distance,-.15); camera.up.set(0,0,-1);
+    camera.lookAt(0,.386,-.15);
+    camera.setViewOffset(width,height,framing.offsetX,framing.offsetY,width,height);
+    camera.updateMatrixWorld();
+    const corners = [new Vector3(-1.3,.386,-.15-.8125),new Vector3(1.3,.386,-.15+.8125)].map(p=>p.project(camera));
+    const actual = [(corners[0].x+1)*width/2,(1-corners[0].y)*height/2,(corners[1].x+1)*width/2,(1-corners[1].y)*height/2];
+    const expected = [left,top,left+gameWidth,top+gameHeight];
+    actual.forEach((value,i)=>assert.ok(Math.abs(value-expected[i])<.001, `${width}×${height}: edge ${i} matches the game canvas`));
+  }
+});
 
 test('Options pulls back from the exact full-colour frame onto the ink page', () => {
   assert.deepEqual(optionsTransition(0), { hinge: 1, ink: 1, colour: 1, zoom: 1, done: false });

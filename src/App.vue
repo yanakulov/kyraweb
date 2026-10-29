@@ -1,17 +1,17 @@
 <template>
   <main class="app" :class="{ 'book-is-closed': !bookOpened }" ref="appRef">
-    <FantasyBook v-if="!bookOpened" ref="openingBook" :snapshot="openingSnapshot ?? undefined" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @ready="openingReadingReady = true" @open="openBook">
+    <FantasyBook v-if="!bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :snapshot="openingSnapshot ?? undefined" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="prepareOpening" @ready="openingReadingReady = true" @open="openBook">
       <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" @continue="finishPrologue" />
-      <template #invitation><button v-if="latestSave" class="pixel-button book-continue" type="button" :disabled="bookBusy" @click.stop="continueJourney">{{ t('Continue journey') }}</button><p v-if="bookBusy || bookMessage" class="book-status" role="status">{{ t(bookBusy ? 'Opening your saved chapter…' : bookMessage) }}</p></template>
+      <template #invitation><button v-if="latestSave" class="book-continue" type="button" :disabled="bookBusy" @click.stop="continueJourney">{{ t('Continue journey') }}</button><p v-if="bookBusy || bookMessage" class="book-status" role="status">{{ t(bookBusy ? 'Opening your saved chapter…' : bookMessage) }}</p></template>
     </FantasyBook>
-    <FantasyBook v-if="bookSnapshot" mode="options" :snapshot="bookSnapshot" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
+    <FantasyBook v-if="bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
       <BookPrologue v-if="readingHistory" :ready="bookReady" returning @continue="readingHistory = false" />
       <BookMenu v-else :gameplay="!introActive" :main-menu="kallakMenu" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookMessage" :slots="bookSlots" :initial-view="bookInitialView"
         v-model:walk-speed="walkSpeed" v-model:atmosphere="atmosphere" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen"
         @start-journey="startJourney" @read-prologue="readingHistory = true" @resume="resumeBook" @save="saveChapter" @load="loadChapter" @fullscreen="toggleFullscreen" @main-menu="leaveBook('menu')" @replay-intro="leaveBook('intro')" />
     </FantasyBook>
-    <div v-show="bookOpened" class="game-frame" :inert="!!bookSnapshot">
-      <div class="stage">
+    <div class="game-frame" :class="{ 'is-concealed': !bookOpened }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot">
+      <div class="stage" :aria-busy="loading">
         <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :alpha="subtitleAlpha" :visible="subtitleVisible" />
         <canvas ref="canvasRef" width="320" height="200" :aria-label="t('Kyrandia game scene')" @click="handleClick" @pointerdown="handlePointerDown" @pointermove="handleMove" @pointerup="handlePointerUp" @pointercancel="cancelGesture" :class="{ 'cursor-controlled': !introActive }"></canvas>
         <div v-if="!introActive && !gameError && !overlayOpen" class="game-cursor" :style="{ left: `${(cursor.x - cursorShape.x) / 3.2}%`, top: `${(cursor.y - cursorShape.y) / 2}%`, width: `${cursorShape.w / 3.2}%`, height: `${cursorShape.h / 2}%` }" aria-hidden="true">
@@ -22,7 +22,7 @@
         <div v-if="gameError" class="game-error" role="alert"><p>{{ t(gameError) }}</p><button class="pixel-button" type="button" @click="boot">{{ t('Try again') }}</button><button v-if="latestSave" class="pixel-button" type="button" @click="showBookOptions('load')">{{ t('Load game') }}</button></div>
         <button v-if="!introActive && !gameError && !sequenceActive && !loading" class="hud-options cursor-controlled" type="button" :aria-label="t('Options')" @pointerdown="handlePointerDown" @pointermove="handleMove" @pointerup="handlePointerUp" @pointercancel="cancelGesture" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
         <p class="sr-only" role="status">{{ gameHint }}</p>
-        <p v-if="loading || navigationError" class="scene-notice" role="status">{{ t(loading ? 'Loading…' : navigationError) }}</p>
+        <p v-if="navigationError" class="scene-notice" role="status">{{ t(navigationError) }}</p>
       </div>
     </div>
   </main>
@@ -47,7 +47,19 @@ const saveSlots = shallowRef<SaveSlot[]>([]);
 const latestSave = computed(() => saveSlots.value.filter(slot => slot.save).sort((a,b) => b.save!.savedAt.localeCompare(a.save!.savedAt))[0]);
 const bookSlots = computed(() => saveSlots.value.map(slot => ({ index: slot.index, ...slot.save, error: slot.error })));
 let afterBookResume: (() => void) | null = null;
-function openBook() { bookBusy.value = false; if (openingSnapshot.value && game) { bookOpened.value = true; openingSnapshot.value = null; game.setPaused(false); syncControls(); } else void boot(); }
+let openingStarted = false, openingFinished = false, introFrameReady = false;
+function prepareOpening() {
+  if (openingStarted || openingSnapshot.value) return;
+  openingStarted = true; void boot();
+}
+function openBook() {
+  openingFinished = true; bookBusy.value = false;
+  if (openingSnapshot.value && game) {
+    bookOpened.value = true; openingSnapshot.value = null; game.setPaused(false); syncControls();
+  } else if (introFrameReady || gameError.value) {
+    bookOpened.value = true; intro?.setPaused(false);
+  } else prepareOpening();
+}
 function closePanels() { if (readingHistory.value) { readingHistory.value = false; return; } if (!kallakMenu.value) resumeBook(); }
 function showSettings() { showBookOptions(); }
 function activateOptions(event: MouseEvent) { if (event.detail === 0 || !touchPointer) showSettings(); }
@@ -284,8 +296,13 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   subtitleLines.value = [];
   const runId = introRunId;
   const steps = introSteps.slice(startIndex);
+  introFrameReady = false;
   intro = playIntro(canvasRef.value, steps, {
-    onFirstFrame: () => { bookOpened.value = true; },
+    onFirstFrame: () => {
+      introFrameReady = true;
+      if (bookOpened.value || openingFinished) bookOpened.value = true;
+      else intro?.setPaused(true);
+    },
     renderSubtitlesOnCanvas: false,
     atmosphere: () => atmosphere.value,
     onLoadingChange: (value) => { loading.value = value; },
@@ -360,7 +377,7 @@ async function launchIntro(startIndex: number, autoStartGame: boolean) {
     if (request !== introRunId) return;
     console.error("Failed to start game", error);
     gameError.value = "The game could not load. Please try again.";
-    bookOpened.value = true;
+    if (openingFinished || bookOpened.value) bookOpened.value = true;
     loading.value = false;
   }
 }

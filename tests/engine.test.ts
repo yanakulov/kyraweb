@@ -818,6 +818,7 @@ test('pausing freezes movement, ambient animation, script waits and input withou
 test('world saves restore visited props, quest files, NPCs and inventory without replay; failed loading preserves the old game', async () => {
   const h = introHarness(), original = { Image: globalThis.Image, fetch: globalThis.fetch, document: globalThis.document };
   let now = 0, blockedPath = '', location = -1, sequence = false;
+  const requests: { url: string; signal?: AbortSignal | null }[] = [];
   class FakeImage {
     onload = () => {}; width = 320; height = 200;
     set src(_: string) { queueMicrotask(() => this.onload()); }
@@ -830,6 +831,7 @@ test('world saves restore visited props, quest files, NPCs and inventory without
   }
   Object.assign(globalThis, { Image: FakeImage, document: { createElement: internalCanvas }, fetch: async (url: string, options?: RequestInit) => {
     options?.signal?.throwIfAborted();
+    requests.push({ url, signal: options?.signal });
     if (blockedPath && url.includes(blockedPath)) throw new Error('Simulated network failure');
     return new Response(new Uint8Array(readFileSync(`public/${url.replace(/^\//, '')}`)));
   } });
@@ -881,10 +883,15 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     const detached = game.getSaveState()!; detached.quest.flags.length = 0; detached.rooms[0].sceneItems.push({ id: 'ruby', x: 0, y: 0 });
     assert.deepEqual(game.getSaveState(), saved, 'saving returns isolated room and quest data');
 
-    const events: string[] = [], firstFrameDraws = h.draws.length;
+    const events: string[] = [], navigationErrors: string[] = [], firstFrameDraws = h.draws.length;
     const loaded = await startGame(h.canvas, { ...config, saveState: saved, paused: true,
+      onNavigationError: error => { if (error) navigationErrors.push(error); },
       onSequenceChange: active => { if (active) events.push('sequence'); }, onSubtitleChange: lines => { if (lines.length) events.push('dialogue'); } });
     games.push(loaded);
+    const loadedSignal = requests.filter(request => request.url === config.world).at(-1)!.signal;
+    const requestCount = (url: string) => requests.filter(request => request.signal === loadedSignal && request.url === url).length;
+    assert.equal(requestCount('/assets/world/9.kyr.gz'), 1, 'the neighbouring forest prepares while the restored bridge is still paused');
+    assert.equal(requestCount('/assets/forest/caveb.kyr.gz'), 1, 'the repaired bridge prepares its actual west exit');
     assert.ok(h.draws.length > firstFrameDraws, 'the restored first frame is ready before returning');
     assert.deepEqual(events, [], 'loading runs no opening or entry dialogue');
     assert.deepEqual(loaded.getSaveState(), saved);
@@ -897,6 +904,7 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     incompatible.rooms[7].runtime!.sceneAnims.push(structuredClone(saved.rooms[0].runtime!.sceneAnims[0]));
     await assert.rejects(startGame(h.canvas, { ...config, saveState: incompatible, paused: true }), /room's animations/);
     assert.deepEqual(game.getSaveState(), oldState); assert.equal(h.draws.length, oldDraws, 'failed loading leaves the paused scene intact');
+    blockedPath = '/assets/world/1.kyr.gz';
     loaded.setPaused(false);
     loaded.runSequence([{ op: 'exit', target: 0, entry: { x: 160, y: 120 } }]);
     await until(() => location === 0 && !!loaded.getSaveState(), 'return to the saved home did not finish');
@@ -904,6 +912,17 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     assert.ok(!loaded.getSnapshot().sceneItems.some(item => item.id === 'ruby'), 'collected props cannot respawn across a save/load and return');
     assert.equal(loaded.getSnapshot().inventorySlots[0], 'ruby');
     assert.equal(loaded.getSnapshot().itemInHand, 'marble');
+    await settleLoads();
+    assert.equal(requestCount('/assets/world/1.kyr.gz'), 1, 'home prepares its exit before the player asks to leave');
+    assert.deepEqual(navigationErrors, [], 'a speculative loading failure must not interrupt the current scene');
+    blockedPath = '';
+    loaded.runSequence([{ op: 'exit', target: 1, entry: { x: 208, y: 110 } }]);
+    await until(() => location === 1 && !!loaded.getSaveState(), 'entrance must retry the failed neighbour prefetch');
+    assert.equal(requestCount('/assets/world/1.kyr.gz'), 2);
+    loaded.runSequence([{ op: 'exit', target: 0, entry: { x: 160, y: 120 } }]);
+    await until(() => location === 0 && !!loaded.getSaveState(), 'cached home did not become ready');
+    assert.equal(requestCount('/assets/forest/gemcut.kyr.gz'), 1, 'returning reuses the decoded room, including an in-flight neighbour request');
+    assert.equal(requestCount('/assets/world/1.kyr.gz'), 2, 'a successful cached neighbour is not fetched again');
 
     // Self-use follows the original _NPC.EMC branches, in any room.
     const heard: string[] = [], notes: boolean[] = [];
