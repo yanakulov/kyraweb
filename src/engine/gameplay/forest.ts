@@ -105,7 +105,7 @@ export function traceForest(
     voice = 0,
     voiceElapsed = 0,
     hand = originalItem(snapshot.itemInHand);
-  const delays: Record<number, number> = { 1: 7, 2: 8 };
+  const delays: Record<number, number> = { 0: snapshot.walkDelayTicks ?? 6, 1: 7, 2: 8 };
   const slots = new Map<number, string>();
   const emit = (action: RoomAction) => actions.push(action);
   const duration = () => room.durations[voice] ?? 2000;
@@ -134,7 +134,7 @@ export function traceForest(
     voiceElapsed += ms;
   };
   const npcAction = () =>
-    emit({ op: "npc", character, ...npc, visible: npc.room === room.id });
+    emit({ op: "npc", character, ...npc, visible: npc.room === room.id && npc.shape !== 88 });
   const setFlag = (flag: number, value: boolean) => {
     if (value) flags.add(flag);
     else flags.delete(flag);
@@ -204,6 +204,7 @@ export function traceForest(
             return delays[a[0]] ?? 6;
           case 0x59:
             delays[a[0]] = a[1];
+            if (a[0] === 0) emit({ op: "walkDelay", ticks: a[1] });
             return 0;
           case 0x3d:
             return Math.floor((a[0] + a[1]) / 2);
@@ -332,7 +333,8 @@ export function traceForest(
                 if (npc.shape > base + 8) npc.shape = base + 3;
               }
               npcAction();
-              wait((delays[character] * 1000) / 60);
+              emit({ op: "wait", ms: (delays[character] * 1000) / 60, movement: true });
+              voiceElapsed += (delays[character] * 1000) / 60;
             }
             return 0;
           }

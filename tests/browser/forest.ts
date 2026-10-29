@@ -58,6 +58,7 @@ const game = await startGame(canvas, {
 const { rooms } = (await fetch("/kyraweb/assets/world/world.json").then((r) =>
   r.json(),
 )) as { rooms: WorldRoom[] };
+game.setWalkSpeed('fastest');
 const forest = await loadForestData("/kyraweb/assets/forest/forest.json.gz");
 let repaired = false;
 function advance(ms: number) {

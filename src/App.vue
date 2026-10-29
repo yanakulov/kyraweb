@@ -20,14 +20,13 @@
           @click="handleClick"
           @pointerdown="handlePointerDown"
           @pointermove="handleMove"
-          @pointerleave="handleLeave"
-          @pointercancel="handleLeave"
+          @pointerup="handlePointerUp"
+          @pointercancel="cancelGesture"
+          :class="{ 'cursor-controlled': !introActive }"
         ></canvas>
-        <div v-if="!introActive && !sequenceActive && !loading && !gameError" class="exit-markers" :class="{ 'show-exits': showExits }">
-          <button v-for="portal in portals" :key="portal.id" class="exit-marker" :class="{ hovered: hoveredExit === portal.id }"
-            :style="exitStyle(portal)" type="button" :aria-label="`Go ${portal.side}`" @click="takeExit(portal)">
-            <svg viewBox="0 0 11 11" aria-hidden="true" :style="{ transform: `rotate(${({ north: 0, east: 90, south: 180, west: 270 })[portal.side]}deg)` }"><path d="M5 1h1v1h1v1h1v1h1v1H7v5H4V5H2V4h1V3h1V2h1z" /></svg>
-          </button>
+        <div v-if="!introActive && !gameError" class="game-cursor" :style="{ left: `${cursor.x / 3.2}%`, top: `${cursor.y / 2}%` }" aria-hidden="true">
+          <svg v-if="cursorExit" viewBox="0 0 11 11" :style="{ transform: `translate(-50%, -50%) rotate(${({ north: 0, east: 90, south: 180, west: 270 })[cursorExit.side]}deg)` }"><path d="M5 1h1v1h1v1h1v1h1v1H7v5H4V5H2V4h1V3h1V2h1z" /></svg>
+          <svg v-else-if="!heldItem" viewBox="0 0 12 16"><path d="M1 1v12h2v-2h2l2 4h2l-2-5h4L1 1z" /></svg>
         </div>
         <button v-if="awaitingContinue" class="pixel-button continue-button" type="button" @click="game?.handleClick({ x: 160, y: 100 })">Continue</button>
         <template v-if="introPanelVisible">
@@ -64,7 +63,6 @@
       <p class="game-hint" aria-live="polite">{{ gameHint }}</p>
       <nav class="game-actions" aria-label="Game controls">
         <button v-if="!introActive" class="text-button" type="button" :aria-expanded="inventoryOpen" @click="inventoryOpen = !inventoryOpen">{{ heldItem ? 'Item in hand' : 'Inventory' }}</button>
-        <button v-if="!introActive" class="text-button" type="button" :aria-pressed="showExits" @click="showExits = !showExits">Exits</button>
         <button class="text-button" type="button" @click="openMenu">Menu</button>
         <button v-if="fullscreenAvailable" class="text-button" type="button" @click="toggleFullscreen">
           {{ isFullscreen ? "Exit full screen" : "Full screen" }}
@@ -124,27 +122,24 @@ import { LOGICAL_WIDTH } from "./engine/core/constants";
 import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
 import { gemCutScene } from "./engine/scenes/gemCut";
 import SubtitleOverlay from "./components/SubtitleOverlay.vue";
-import { portalAtPoint, portalMarker } from "./engine/gameplay/navigation";
+import { portalAtPoint } from "./engine/gameplay/navigation";
 import { buildInventoryItems, getInventorySlotPositions } from "./engine/gameplay/inventory";
 import type { RoomPortal, InventoryItemId, Vec2 } from "./engine/core/types";
 const portals = ref<RoomPortal[]>([]);
-const hoveredExit = ref<string>();
-const showExits = ref(false);
+const cursor = ref<Vec2>({ x: 160, y: 100 });
+const cursorExit = computed(() => sequenceActive.value || loading.value ? undefined : portalAtPoint(portals.value, cursor.value));
 const inventoryOpen = ref(false);
 const inventorySlots = ref<(InventoryItemId | null)[]>([]);
 const heldItem = ref<InventoryItemId | null>(null);
 const itemDefinitions = buildInventoryItems();
 let touchPointer = false;
+let gesture: { id: number; x: number; y: number; travel: number } | null = null;
 function syncControls() {
   portals.value = game?.getPortals() ?? [];
   const snapshot = game?.getSnapshot();
   inventorySlots.value = snapshot?.inventorySlots.slice() ?? [];
   heldItem.value = snapshot?.itemInHand ?? null;
-  hoveredExit.value = undefined;
-}
-function exitStyle(portal: RoomPortal) {
-  const point = portalMarker(portal);
-  return { left: `${point.x / 3.2}%`, top: `${point.y / 2}%` };
+  game?.setPointer(cursor.value);
 }
 function itemStyle(item: InventoryItemId) {
   const tile = itemDefinitions.get(item)!.tileIndex;
@@ -155,10 +150,6 @@ function interact(point: Vec2) {
   game.setPointer(point);
   if (!game.handleClick(point)) game.setTarget(point);
   syncControls();
-  if (touchPointer) game.setPointer(null);
-}
-function takeExit(portal: RoomPortal) {
-  interact({ x: portal.rect.x + portal.rect.w / 2, y: portal.rect.y + portal.rect.h / 2 });
 }
 function useInventorySlot(index: number) {
   const slot = getInventorySlotPositions()[index];
@@ -311,7 +302,7 @@ const gameHint = computed(() => {
   if (navigationError.value) return navigationError.value;
   if (introPanelVisible.value) return "Your journey begins here.";
   if (subtitleVisible.value) return "Click or tap to skip this line.";
-  return introActive.value || sequenceActive.value ? "The story is unfolding…" : `${locationName.value} · Tap to walk. Choose an item to use it.`;
+  return introActive.value || sequenceActive.value ? "The story is unfolding…" : `${locationName.value} · Swipe to move the cursor. Tap to interact.`;
 });
 
 async function launchIntro(startIndex: number, autoStartGame: boolean) {
@@ -378,6 +369,7 @@ function fadeOutIntroPanel(durationMs: number) {
 }
 
 function handleClick(event: MouseEvent) {
+  if (touchPointer) return; // Touch activation is handled on pointerup, never after a swipe.
   if (introActive.value) {
     intro?.skipLine();
     return;
@@ -389,26 +381,38 @@ function handleClick(event: MouseEvent) {
 
 function handlePointerDown(event: PointerEvent) {
   touchPointer = event.pointerType !== 'mouse';
-  handleMove(event);
+  if (!touchPointer) { handleMove(event); return; }
+  if (!event.isPrimary) { cancelGesture(); return; }
+  gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, travel: 0 };
+  canvasRef.value?.setPointerCapture(event.pointerId);
 }
 
 function handleMove(event: PointerEvent) {
   if (introActive.value) return;
   if (!canvasRef.value || !game) return;
-  const point = mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY);
-  game.setPointer(point);
-  hoveredExit.value = portalAtPoint(portals.value, point)?.id;
+  if (event.pointerType !== 'mouse') {
+    if (!gesture || gesture.id !== event.pointerId) return;
+    const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
+    gesture.travel += Math.hypot(dx, dy);
+    gesture.x = event.clientX; gesture.y = event.clientY;
+    const rect = canvasRef.value.getBoundingClientRect();
+    cursor.value = { x: Math.max(0, Math.min(319, cursor.value.x + dx * 320 / rect.width)), y: Math.max(0, Math.min(199, cursor.value.y + dy * 200 / rect.height)) };
+  } else cursor.value = mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY);
+  game.setPointer(cursor.value);
 }
 
-function handleLeave() {
-  hoveredExit.value = undefined;
-  if (introActive.value) return;
-  if (!game) return;
-  game.setPointer(null);
+function handlePointerUp(event: PointerEvent) {
+  if (!gesture || gesture.id !== event.pointerId) return;
+  const tap = gesture.travel < 6;
+  cancelGesture();
+  if (tap) {
+    if (introActive.value) intro?.skipLine();
+    else interact(cursor.value);
+  }
 }
+function cancelGesture() { gesture = null; }
 
 onMounted(() => {
-  showExits.value = window.matchMedia('(any-pointer: coarse)').matches;
   fullscreenAvailable.value = document.fullscreenEnabled;
   document.addEventListener("fullscreenchange", updateFullscreen);
   void boot();

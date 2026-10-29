@@ -5,6 +5,7 @@ export type Vec2 = { x: number; y: number };
 export type GameConfig = {
   scene: SceneConfig;
   world?: string;
+  transitionImage?: HTMLCanvasElement;
   signal?: AbortSignal;
   backgroundPack?: import("../resources/scenePack").ScenePack;
   entry?: Vec2 & { facing: number };
@@ -29,7 +30,7 @@ export type GameConfig = {
 
 export type RoomPortal = { id: string; target: number; side: "north" | "east" | "south" | "west";
   rect: { x: number; y: number; w: number; h: number }; point: Vec2; entry?: Vec2 | null };
-export type RoomSnapshot = { pos: Vec2; facing?: number; inventorySlots: (InventoryItemId | null)[]; itemInHand: InventoryItemId | null;
+export type RoomSnapshot = { pos: Vec2; facing?: number; walkDelayTicks?: number; inventorySlots: (InventoryItemId | null)[]; itemInHand: InventoryItemId | null;
   sceneItems: SceneItem[]; overlays: SceneOverlayState[]; treeSpoken: boolean };
 
 export type MaskData = {

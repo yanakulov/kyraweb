@@ -15,11 +15,45 @@ import {
   updateSceneAnims,
 } from "../src/engine/scene/sceneAnims";
 import { RoomScript, type RoomAction } from "../src/engine/gameplay/roomScript";
+import { shufflePixels } from "../src/engine/gameplay/sceneShuffle";
 import type { RoomSnapshot, SceneAnimDef } from "../src/engine/core/types";
 
 const data = JSON.parse(
   gunzipSync(readFileSync("public/assets/forest/forest.json.gz")).toString(),
 ) as ForestData;
+test('scene shuffle replaces every pixel exactly once in 128 DOS ticks', () => {
+  const passes = shufflePixels(304, 128, () => 0.37);
+  assert.equal(passes.length, 128);
+  assert.ok(passes.every(pass => pass.length === 304));
+  assert.equal(new Set(passes.flat().map(p => p.y * 304 + p.x)).size, 304 * 128);
+});
+test('fastest accelerates NPC steps while preserving dialogue and movie timing', () => {
+  for (const tempo of [0.5, 1, 11 / 6]) {
+    const applied: RoomAction[] = [];
+    const script = new RoomScript([
+      { op: 'wait', ms: 100, movement: true },
+      { op: 'flag', flag: 1, value: true },
+      { op: 'wait', ms: 200 },
+      { op: 'flag', flag: 2, value: true },
+    ], { apply: a => applied.push(a), walking: () => false, frames: () => 0, movementTempo: () => tempo });
+    script.update(100 * tempo - 1);
+    assert.equal(applied.length, 0);
+    script.update(1);
+    assert.equal(applied.length, 1);
+    script.update(199);
+    assert.equal(applied.length, 1);
+    script.update(1);
+    assert.equal(applied.length, 2);
+  }
+});
+
+test('Herman hidden frames never create a second actor', () => {
+  const q = quest();
+  q.enter('BROKEN');
+  const hidden = q.all.filter(a => a.op === 'npc' && a.shape === 88);
+  assert.ok(hidden.length);
+  assert.ok(hidden.every(a => a.op === 'npc' && !a.visible));
+});
 function quest() {
   const state = createForestState(),
     snapshot: RoomSnapshot = {
