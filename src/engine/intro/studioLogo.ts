@@ -16,6 +16,8 @@ export function drawStudioLogo(ctx: CanvasRenderingContext2D, image: CanvasImage
   const frame = studioLogoFrame(elapsedMs);
   if (!frame) return;
   ctx.save();
+  // The artwork's letters start at y=82; Westwood's wordmark starts at y=46.
+  ctx.translate(0, -36);
   ctx.imageSmoothingEnabled = false;
   if (!reducedMotion && frame < 9) {
     ctx.beginPath();
