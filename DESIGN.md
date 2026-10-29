@@ -73,7 +73,7 @@ Gold marks actionable edges and emphasis. Paper carries primary text; muted carr
 
 ## Typography
 
-The bundled Kyrandia font serves game buttons and small control labels and includes Cyrillic. Georgia supplies chapter text, help prose and the book menu: 16px body, 19px main choices and a 25px small-caps heading in dark brown ink. Main menu branding is a restrained book frontispiece; no separate page wordmark surrounds the game.
+The bundled Kyrandia font serves game buttons and small control labels and includes Cyrillic. Germanica by Peter Wiegel supplies the prologue's Gothic Cyrillic and Latin: 22px text with compact 1.1 leading and a 32px heading. Its red initial stays inline with the first word, without paragraph wrapping. The font is hosted locally as WOFF2 under OFL 1.1. Georgia supplies help prose and the book menu: 16px body, 19px main choices and a 25px small-caps heading in dark brown ink. Main menu branding is a restrained book frontispiece; no separate page wordmark surrounds the game.
 
 ## Layout
 
