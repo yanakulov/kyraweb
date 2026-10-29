@@ -1,16 +1,17 @@
 <template>
   <section class="fantasy-book" :class="{ 'is-opening': opening, 'is-options': isOptions, 'is-rendered': rendered, 'is-fallback': fallback }" :aria-label="t('Fables and Fiends, Book One')" @pointermove="move" @pointerdown="move" @pointerleave="rest">
-    <div ref="host" class="book-table" @click="openBook">
+    <div ref="host" class="book-table" @click="openCover">
       <img v-if="fallback && !isOptions" class="book-fallback" :src="`${base}assets/interface/book-cover.webp`" :alt="t('The original Kyrandia cover embossed into leather')" />
       <span v-if="!ready && !fallback && !isOptions" class="book-loading" role="status">{{ t('Preparing your story…') }}</span>
     </div>
     <div ref="letterbox" class="book-letterbox" aria-hidden="true"></div>
-    <div v-if="hasReadingPage" ref="pageLayer" class="book-ui">
-      <div ref="pageMenu" class="book-page-menu" data-book-page :class="{ 'is-visible': menuVisible }" :inert="!menuVisible" @click.stop @pointerdown.stop><slot /></div>
-    </div>
-    <div v-if="!isOptions" class="book-invitation">
-      <button class="pixel-button book-open" type="button" :disabled="opening || (!ready && !fallback)" @click="openBook">{{ t('Open the book') }}</button>
-      <slot name="invitation" />
+    <canvas ref="handoff" class="book-handoff" width="320" height="200" aria-hidden="true"></canvas>
+    <div ref="pageLayer" class="book-ui">
+      <div v-if="hasReadingPage" ref="pageMenu" class="book-page-menu" data-book-page :class="{ 'is-visible': menuVisible }" :inert="!menuVisible" @click.stop @pointerdown.stop><slot /></div>
+      <div v-if="!isOptions" ref="coverInvitation" class="book-cover-invitation" :class="{ 'is-visible': (rendered || fallback) && !opening }" :inert="opening || (!ready && !fallback)" @click.stop @pointerdown.stop>
+        <button class="book-open" type="button" :disabled="opening || (!ready && !fallback)" @click="openBook"><span aria-hidden="true">✧</span> {{ t('Open the book') }} <span aria-hidden="true">✧</span></button>
+        <slot name="invitation" />
+      </div>
     </div>
     <p v-if="opening" class="sr-only" role="status">{{ t('The story begins…') }}</p>
   </section>
@@ -28,17 +29,18 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { CSS3DObject, CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
-import { bookTransition, candleMotion, optionsTransition, pageCameraDistance } from './bookTransition';
+import { bookTransition, candleMotion, optionsTransition, pageCameraFraming } from './bookTransition';
 import { inscribePage, storybookFilm } from './storybookInk';
 import { t } from '../i18n';
 
-const props = withDefaults(defineProps<{ mode?: 'opening' | 'options'; snapshot?: HTMLCanvasElement; returning?: boolean; prologue?: boolean }>(), { mode: 'opening', returning: false, prologue: false });
-const emit = defineEmits<{ open: []; ready: []; resume: [] }>();
+const props = withDefaults(defineProps<{ mode?: 'opening' | 'options'; gameCanvas?: HTMLCanvasElement; snapshot?: HTMLCanvasElement; returning?: boolean; prologue?: boolean }>(), { mode: 'opening', returning: false, prologue: false });
+const emit = defineEmits<{ begin: []; open: []; ready: []; resume: [] }>();
 const isOptions = props.mode === 'options';
 const hasReadingPage = isOptions || props.prologue;
 const base = import.meta.env.BASE_URL;
 const host = ref<HTMLDivElement | null>(null), letterbox = ref<HTMLDivElement | null>(null);
 const pageLayer = ref<HTMLDivElement | null>(null), pageMenu = ref<HTMLDivElement | null>(null);
+const handoff = ref<HTMLCanvasElement | null>(null), coverInvitation = ref<HTMLDivElement | null>(null);
 const opening = ref(false), ready = ref(false), rendered = ref(false), fallback = ref(false), menuVisible = ref(false);
 const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
 let reduced = motionPreference.matches;
@@ -50,12 +52,14 @@ let renderer: T.WebGLRenderer | undefined, scene: T.Scene | undefined;
 let camera: T.PerspectiveCamera, cover: T.Object3D;
 let composer: EffectComposer | undefined, ao: GTAOPass | undefined, bloom: UnrealBloomPass | undefined, film: ShaderPass | undefined;
 let uiRenderer: CSS3DRenderer | undefined, uiScene: T.Scene | undefined, menu: CSS3DObject | undefined;
+let coverPrompt: CSS3DObject | undefined;
 let flamePivot: T.Group | undefined, candle: T.PointLight | undefined, cursorLight: T.PointLight | undefined;
 let flameMaterial: T.MeshStandardMaterial | undefined;
 let pageImage: ReturnType<typeof inscribePage> | undefined, introImage: T.Texture | undefined;
 let portal: T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>;
 let observer: ResizeObserver | undefined, environment: T.WebGLRenderTarget | undefined;
-let pointerX = 0, pointerY = 0, viewX = 0, viewY = 0, width = 1, height = 1, gameHeight = 1;
+let pointerX = 0, pointerY = 0, viewX = 0, viewY = 0, width = 1, height = 1;
+let endView = { distance: 1, offsetX: 0, offsetY: 0 };
 let pointerInside = false;
 const pointer = new T.Vector2(), pointerRay = new T.Raycaster();
 const pagePlane = new T.Plane(new T.Vector3(0,1,0), -.54), pointerPoint = new T.Vector3();
@@ -69,10 +73,15 @@ function prepareImage(texture: T.Texture) {
   texture.magFilter = T.NearestFilter; texture.minFilter = T.NearestFilter;
   textures.add(texture); return texture;
 }
+function drawHandoff(texture: T.Texture) {
+  const context = handoff.value?.getContext('2d');
+  if (context) { context.imageSmoothingEnabled = false; context.drawImage(texture.image as CanvasImageSource, 0, 0, 320, 200); }
+}
 watch(() => props.snapshot, snapshot => {
   if (disposed || fallback.value || !pageImage || !portal || (!snapshot && !introImage)) return;
   const previous = pageImage.value, next = snapshot ? prepareImage(new T.CanvasTexture(snapshot)) : introImage!;
   pageImage.update(next,!!snapshot); portal.material.map = next;
+  drawHandoff(next);
   if (previous !== introImage) { textures.delete(previous); previous.dispose(); }
   schedule();
 });
@@ -87,11 +96,20 @@ function openBook() {
   if (!ready.value && !fallback.value) { queuedOpen = true; return; }
   queuedOpen = false;
   opening.value = true; started = performance.now();
+  emit('begin');
   if (reduced || fallback.value) {
     if (!props.prologue) { enterGame(); return; }
     menuVisible.value = true; optionsReady();
   }
   schedule();
+}
+
+function openCover(event: MouseEvent) {
+  if (fallback.value) { openBook(); return; }
+  if (isOptions || opening.value || !cover || !camera || !host.value) return;
+  const rect = host.value.getBoundingClientRect();
+  pointerRay.setFromCamera(new T.Vector2((event.clientX-rect.left)/rect.width*2-1, 1-(event.clientY-rect.top)/rect.height*2), camera);
+  if (pointerRay.intersectObject(cover, true).length) openBook();
 }
 defineExpose({ openBook });
 watch(() => props.prologue, reading => {
@@ -172,10 +190,11 @@ function draw(now: number) {
     const tilt = portrait ? .18 : .36;
     from.lerp(focus.clone().add(new T.Vector3(0, Math.cos(tilt)*distance, Math.sin(tilt)*distance)),readingView);
   }
-  const end = new T.Vector3(0, pageCentre.y + pageCameraDistance(height, gameHeight, camera.fov), pageCentre.z + .00001);
+  const end = new T.Vector3(0, pageCentre.y + endView.distance, pageCentre.z);
   camera.position.lerpVectors(from, end, t.zoom);
   camera.up.set(0, 1 - t.zoom, -t.zoom).normalize();
   camera.lookAt(focus.lerp(pageCentre, t.zoom));
+  camera.setViewOffset(width, height, endView.offsetX*t.zoom, endView.offsetY*t.zoom, width, height);
   if (cursorLight) {
     pointerRay.setFromCamera(pointer,camera);
     if (pointerInside && pointerRay.ray.intersectPlane(pagePlane,pointerPoint)) {
@@ -184,6 +203,8 @@ function draw(now: number) {
     } else cursorLight.intensity = 0;
   }
   if (letterbox.value) letterbox.value.style.opacity = String(Math.max(0, (t.zoom - .72) / .28));
+  // At the handoff use the same 320×200 pixels and CSS bounds as the live canvas.
+  if (handoff.value) handoff.value.style.opacity = t.zoom === 1 ? '1' : '0';
   const flicker = candleMotion(flameTime);
   if (flamePivot) {
     flamePivot.rotation.set(flicker.bendX, 0, flicker.bendZ);
@@ -199,6 +220,7 @@ function draw(now: number) {
   rendered.value = true;
   menuVisible.value = isOptions ? t.done && !props.returning : props.prologue && opening.value && t.ink === 1;
   if (menu) menu.visible = menuVisible.value;
+  if (coverPrompt) coverPrompt.visible = !opening.value;
   if (uiRenderer && uiScene) uiRenderer.render(uiScene, camera);
   if (isOptions && t.done) {
     if (props.returning) { resumeGame(); return; }
@@ -263,18 +285,26 @@ onMounted(async () => {
     if (!hinge) throw new Error('The Blender book is missing its cover hinge');
     cover = hinge;
     prepareImage(landscape);
+    drawHandoff(landscape);
     const page = model.scene.getObjectByName('Blank_right_parchment') as T.Mesh<T.BufferGeometry,T.MeshStandardMaterial> | undefined;
     if (!page?.isMesh) throw new Error('The Blender book is missing its parchment');
     if (hasReadingPage) {
       model.scene.traverse(object => { if (/^(Inside_folio_bookplate|Original_Fables_and_Fiends_bookplate|Original_Book_One_bookplate)$/.test(object.name)) object.visible = false; });
       const lining = model.scene.getObjectByName('Front_board_suede_lining') as T.Mesh<T.BufferGeometry,T.MeshStandardMaterial> | undefined;
       if (lining?.isMesh) { lining.material.dispose(); lining.material = page.material.clone(); }
-      if (pageMenu.value && pageLayer.value) {
-        uiRenderer = new CSS3DRenderer(); uiRenderer.domElement.className = 'book-projection';
-        // Focusing a page must not scroll its projection away from the book mesh.
-        uiRenderer.domElement.style.overflow = 'clip'; pageLayer.value.append(uiRenderer.domElement);
-        uiScene = new T.Scene(); menu = new CSS3DObject(pageMenu.value);
+    }
+    if (pageLayer.value) {
+      uiRenderer = new CSS3DRenderer(); uiRenderer.domElement.className = 'book-projection';
+      // Focusing the projected cover or a page must never scroll it away from the mesh.
+      uiRenderer.domElement.style.overflow = 'clip'; pageLayer.value.append(uiRenderer.domElement);
+      uiScene = new T.Scene();
+      if (pageMenu.value) {
+        menu = new CSS3DObject(pageMenu.value);
         menu.position.set(-3.1,.528,-.03); menu.rotation.x = -Math.PI/2; menu.scale.setScalar(2.55/320); menu.visible = false; uiScene.add(menu);
+      }
+      if (coverInvitation.value) {
+        coverPrompt = new CSS3DObject(coverInvitation.value);
+        coverPrompt.position.set(0,.54,1.4); coverPrompt.rotation.x = -Math.PI/2; coverPrompt.scale.setScalar(2.5/288); uiScene.add(coverPrompt);
       }
     }
     page.material = page.material.clone();
@@ -313,18 +343,27 @@ onMounted(async () => {
     const candlestick = model.scene.getObjectByName('CandleRoot');
     const resize = () => {
       if (!host.value || !renderer) return;
-      ({ width, height } = host.value.getBoundingClientRect());
+      const bounds = host.value.getBoundingClientRect();
+      ({ width, height } = bounds);
       const portrait = width / height < .85;
       candlestick?.position.set(portrait ? 1.7 : 3.6, -.14, portrait ? -3.3 : -1.8);
       candle?.position.set(portrait ? 1.7 : 3.6, 1.96, portrait ? -3.3 : -1.8);
-      gameHeight = (host.value.closest('.app')?.getBoundingClientRect().width ?? Math.min(width - 8, 1280, (height - 8) * 1.6)) / 1.6;
-      if (letterbox.value) { letterbox.value.style.width = `${gameHeight * 1.6}px`; letterbox.value.style.height = `${gameHeight}px`; }
+      const target = props.gameCanvas?.getBoundingClientRect();
+      const fallbackWidth = Math.min(width - 8, 1280, (height - 8)*1.6);
+      const gameRect = target?.width && target.height
+        ? { left: target.left-bounds.left, top: target.top-bounds.top, width: target.width, height: target.height }
+        : { left: (width-fallbackWidth)/2, top: (height-fallbackWidth/1.6)/2, width: fallbackWidth, height: fallbackWidth/1.6 };
+      endView = pageCameraFraming({ width, height }, gameRect, camera.fov);
+      for (const element of [letterbox.value, handoff.value]) if (element) Object.assign(element.style, {
+        left: `${gameRect.left}px`, top: `${gameRect.top}px`, width: `${gameRect.width}px`, height: `${gameRect.height}px`,
+      });
       renderer.setSize(width, height); composer?.setSize(width, height);
       uiRenderer?.setSize(width,height);
       ao?.setSize(Math.ceil(width*renderer.getPixelRatio()/2), Math.ceil(height*renderer.getPixelRatio()/2));
       camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); schedule();
     };
     ready.value = true; observer = new ResizeObserver(resize); observer.observe(host.value);
+    if (props.gameCanvas) observer.observe(props.gameCanvas);
     resize(); schedule();
     if (queuedOpen) openBook();
   } catch (error) {
@@ -340,8 +379,10 @@ onMounted(async () => {
 
 function release() {
   cancelAnimationFrame(frame); frame = 0; ready.value = false;
-  if (pageMenu.value && pageLayer.value) { pageLayer.value.append(pageMenu.value); pageMenu.value.style.transform = ''; pageMenu.value.style.display = ''; }
-  uiRenderer?.domElement.remove(); uiRenderer = undefined; uiScene = undefined; menu = undefined;
+  for (const element of [pageMenu.value, coverInvitation.value]) if (element && pageLayer.value) {
+    pageLayer.value.append(element); element.style.transform = ''; element.style.display = '';
+  }
+  uiRenderer?.domElement.remove(); uiRenderer = undefined; uiScene = undefined; menu = undefined; coverPrompt = undefined;
   scene?.traverse(object => {
     if (object instanceof T.PointLight || object instanceof T.DirectionalLight) object.shadow.dispose();
     if (!(object instanceof T.Mesh)) return;
@@ -372,11 +413,14 @@ onBeforeUnmount(() => {
 .book-table :deep(canvas) { display: block; width: 100%; height: 100%; touch-action: pan-y; }
 .book-fallback { position: absolute; inset: 8% 0 22%; display: block; height: 70%; max-width: 80%; object-fit: contain; margin: auto; filter: drop-shadow(0 20px 20px #000); transform: rotate(-5deg); }
 .book-loading { position: absolute; inset: 45% 0 auto; text-align: center; color: #d8bb7b; font-size: 13px; }
-.book-letterbox { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 0 100vmax #080a09; opacity: 0; pointer-events: none; }
-.book-invitation { position: absolute; left: 0; right: 0; bottom: max(30px, env(safe-area-inset-bottom)); text-align: center; transition: opacity 300ms; }
-.book-invitation { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 12px; padding-inline: 16px; }
-.book-open { min-width: 220px; min-height: 54px; font-size: 15px; background: #252519ee; border-color: #a78849; box-shadow: 0 3px 0 #090b08, inset 0 0 0 3px #383324; }
-.is-opening .book-invitation { opacity: 0; pointer-events: none; }
-@media (max-width: 600px) { .book-invitation { bottom: max(36px, env(safe-area-inset-bottom)); } }
-@media (prefers-reduced-motion: reduce) { .book-invitation { transition: none; } }
+.book-letterbox { position: absolute; box-shadow: 0 0 0 100vmax var(--game-surround, #080a09); opacity: 0; pointer-events: none; }
+.book-handoff { position: absolute; display: block; image-rendering: pixelated; opacity: 0; pointer-events: none; }
+.book-cover-invitation { width: 288px; text-align: center; visibility: hidden; pointer-events: none !important; backface-visibility: hidden; }
+.book-cover-invitation.is-visible { visibility: visible; pointer-events: auto !important; }
+.book-open { display: block; width: 100%; min-height: 46px; padding: 9px 4px; color: #e8cc8b; font: 22px/1.2 Georgia,serif; font-variant: small-caps; letter-spacing: .03em; background: linear-gradient(90deg,transparent,#201007d9 15%,#201007d9 85%,transparent); border: 0; text-shadow: 0 1px 2px #000; transition: color 180ms, text-shadow 180ms; }
+.book-open span { display: inline-block; font-size: 16px; transition: transform 180ms; }
+.book-open:hover, .book-open:focus-visible { color: #fff0bd; text-shadow: 0 0 12px #edbe6688,0 1px 2px #000; }
+.book-open:hover span { transform: scale(1.2); }
+.is-fallback .book-cover-invitation { position: absolute; left: 50%; top: 63%; transform: translate(-50%,-50%) !important; width: min(288px,70vw); }
+@media (prefers-reduced-motion: reduce) { .book-open, .book-open span { transition: none; } }
 </style>

@@ -1,6 +1,6 @@
 import { startRoom, type RoomGame } from "./game";
 import { withBase } from "../core/assets";
-import { IndexedClip, loadScenePack } from "../resources/scenePack";
+import { IndexedClip, loadScenePack, type ScenePack } from "../resources/scenePack";
 import { isWalkable } from "../scene/masks";
 import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneMeta, Vec2, WorldSave } from "../core/types";
 import type { RoomAction } from "./roomScript";
@@ -65,13 +65,34 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   const saved = new Map<number, RoomSnapshot>(restored ? Object.entries(restored.rooms).map(([id, room]) => [Number(id), room]) : []);
   const settings = { atmosphere: restored?.settings.atmosphere ?? true, walkSpeed: restored?.settings.walkSpeed ?? "fast", interval: restored?.settings.animStepInterval ?? 1,
     debug: {} as Parameters<RoomGame["setDebug"]>[0] };
+  const packs = new Map<string, Promise<ScenePack>>();
+  controller.signal.addEventListener('abort', () => packs.clear(), { once: true });
+  function roomSource(id: number) {
+    const original = rooms.find(r => r.id === id);
+    const questRoom = forest.rooms[quest.files[id] ?? (id === 24 ? 'CAVEB' : original?.name ?? '')];
+    return { meta: questRoom ?? original, questRoom,
+      src: withBase(questRoom ? `assets/forest/${questRoom.name.toLowerCase()}.kyr.gz` : `assets/world/${id}.kyr.gz`) };
+  }
+  function prepare(src: string) {
+    let pending = packs.get(src);
+    if (!pending) {
+      pending = loadScenePack(src, config.signal).catch(error => { packs.delete(src); throw error; });
+      packs.set(src, pending);
+    }
+    return pending;
+  }
+  function prepareNeighbours(portals: RoomPortal[]) {
+    for (const id of new Set(portals.map(portal => portal.target))) {
+      const { meta, src } = roomSource(id);
+      // A failed speculative request is retried by the real entrance, with its normal error UI.
+      if (meta) void prepare(src).catch(() => {});
+    }
+  }
 
   async function load(id: number, from?: RoomPortal, previous?: number, restoring = false) {
-    const original=rooms.find(r=>r.id===id);
-    const questRoom=forest.rooms[quest.files[id]??(id===24?'CAVEB':original?.name??'')];
-    const meta = questRoom ?? original;
+    const { meta, questRoom, src } = roomSource(id);
     if (!meta) throw new Error(`Unknown room ${id}`);
-    const src = withBase(questRoom?`assets/forest/${questRoom.name.toLowerCase()}.kyr.gz`:`assets/world/${id}.kyr.gz`), pack = await loadScenePack(src, config.signal);
+    const pack = await prepare(src);
     config.signal?.throwIfAborted();
     const clip = new IndexedClip(pack, pack.clips.mask);
     const mask = { width: clip.info.width, height: clip.info.height, pixels: Array.from(clip.frame(0)) };
@@ -119,6 +140,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       transitionImage.width = 320; transitionImage.height = 200;
       transitionImage.getContext('2d')!.drawImage(canvas, 0, 0);
     }
+    const portals = roomPortals(meta, mask);
     try { game = await startRoom(canvas, { ...config, world: undefined, saveState: undefined, paused, backgroundPack: pack, transitionImage,
       scene: { ...config.scene, name: meta.title, indexedBackground: { src, clip: "room" }, maskClip: "mask",
         indexedUi: { src: withBase("assets/packs/kallak-room.kyr.gz"), clip: "hud" }, meta, emc: { sceneAnimShapes: meta.shapes }, actorScale: meta.actorScale,
@@ -126,7 +148,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
         overlays: id === 0 && !questRoom ? config.scene.overlays : [], sceneMetaSrc: undefined, sceneEmcSrc: undefined, maskSrc: undefined },
       resume: continued ? { ...continued, runtime: restoring ? continued.runtime : undefined } : undefined,
       entry: from || restoring ? { ...arrival, facing } : undefined,
-      playOpening: !restoring && !from && config.playOpening !== false, entryActions, setupActions, amulet:quest.flags.has(45), npcFrames:questRoom?.npcFrames, portals: roomPortals(meta, mask),
+      playOpening: !restoring && !from && config.playOpening !== false, entryActions, setupActions, amulet:quest.flags.has(45), npcFrames:questRoom?.npcFrames, portals,
       onScriptAction: action=>{applyForestState(quest,action);if(action.op==='mask')changeMask(action);},
       onActorInteract: snapshot => snapshot.itemInHand === 'letter'
         ? forest.letter[quest.flags.has(129) ? 'readable' : 'sealed'].map(action => action.op === 'say' ? { ...action, x: snapshot.pos.x, y: snapshot.pos.y - 56 } : action)
@@ -151,7 +173,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     }); } catch (error) { callbackOwner = oldOwner; throw error; }
     game.setAtmosphere(settings.atmosphere); game.setWalkSpeed(settings.walkSpeed);
     game.setAnimStepInterval(settings.interval); game.setDebug(settings.debug);
-    return { game, meta };
+    return { game, meta, portals };
   }
 
   async function navigate(portal: RoomPortal) {
@@ -163,6 +185,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       current.stop(); current = next.game; currentId = portal.target;
       config.onLocationChange?.(next.meta.title, currentId);
       config.onNavigationError?.("");
+      prepareNeighbours(next.portals);
     } catch (error) {
       if (active) {
         current.runSequence([{ op: "visible", visible: true }]);
@@ -181,6 +204,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   }
   const first = await load(currentId, undefined, undefined, !!restored); current = first.game;
   config.onLocationChange?.(first.meta.title, currentId);
+  prepareNeighbours(first.portals);
   return {
     setTarget: point => { if (!busy && !paused) current.setTarget(point); },
     handleClick: point => busy || paused || current.handleClick(point),
