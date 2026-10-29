@@ -40,9 +40,6 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
   if (!context) throw new Error("Canvas 2D context not available");
   const ctx = context;
 
-  canvas.width = LOGICAL_WIDTH;
-  canvas.height = LOGICAL_HEIGHT;
-
   const scene = config.scene;
 
   const packedBackground = scene.indexedBackground
@@ -79,6 +76,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const anims = sceneMeta?.anims ?? [];
     const spriteDefMap = spriteDefs.length ? buildSpriteDefMap(spriteDefs) : null;
     const sceneAnims = anims.length ? buildSceneAnimStates(anims) : [];
+    let sceneTicks = 0, sceneAccumulatorMs = 0;
     const sceneAnimShapes = sceneEmc?.sceneAnimShapes ?? [];
     const overlayDefinitions = initSceneOverlays(scene.overlays);
     const sceneOverlays = config.resume?.overlays ?? overlayDefinitions;
@@ -188,10 +186,15 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         state.statusMessage = null;
       }
       if (sceneAnims.length) {
-        updateSceneAnims(sceneAnims, nowMs,(op,value)=>{
-          if(op===0xFFAD)state.pos.x=value;if(op===0xFFAE)state.pos.y=value;
-          if(op===0xFFAF)actorShape=value;
-        });
+        // DAT instructions run on the game clock, independently of display Hz.
+        sceneAccumulatorMs += dt * 1000;
+        while (sceneAccumulatorMs + 1e-7 >= TICK_MS) {
+          sceneAccumulatorMs = Math.max(0, sceneAccumulatorMs - TICK_MS);
+          updateSceneAnims(sceneAnims, ++sceneTicks * TICK_MS,(op,value)=>{
+            if(op===0xFFAD)state.pos.x=value;if(op===0xFFAE)state.pos.y=value;
+            if(op===0xFFAF)actorShape=value;
+          });
+        }
       }
       if (ambientWait !== null && !sceneAnims[ambientWait]?.play) ambientWait = null;
       if (state.drops.length) {
@@ -429,20 +432,20 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       animationFrame = requestAnimationFrame(loop);
     }
 
-    let animationFrame = requestAnimationFrame(loop);
+    let animationFrame = 0;
 
     function setTarget(point: Vec2) {
       if (transition?.active || dead || sequence || point.y >= scene.uiMaskY || state.drops.length) return;
       pendingPortal = null;
       actorShape = null;
       const path = findClickPath(state.pos, point, p => isWalkable(p, scene, mask));
-      stopWalking();
-      if (!path.length) return;
+      if (!path.length) { stopWalking(); return; }
+      // Retargeting a walk must not grant another immediate first step.
+      if (!state.moving) state.stepAccumulatorMs = state.walkDelayTicks * TICK_MS;
       state.path = path;
+      state.pathIndex = 0;
       state.target = path[path.length - 1];
       state.moving = true;
-      // LoK takes its first step before waiting for timer 5.
-      state.stepAccumulatorMs = state.walkDelayTicks * TICK_MS;
     }
 
     function stop() {
@@ -505,13 +508,14 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         if (state.target || (Math.abs(state.pos.x - portal.point.x) <= 4 && Math.abs(state.pos.y - portal.point.y) <= 2)) pendingPortal = portal;
         return true;
       }
+      pendingPortal = null;
       if (point.y < scene.uiMaskY && findSceneItemAt(point,state.sceneItems) === -1) {
         const actions=config.onInteract?.(point,getSnapshot());
         if(actions){playScript(actions);return true;}
       }
-      stopWalking();
       const sceneItemIndex = point.y < scene.uiMaskY ? findSceneItemAt(point, state.sceneItems) : -1;
       if (sceneItemIndex === -1 && !state.itemInHand && point.y < scene.uiMaskY && isPointOnBrandon(point)) {
+        stopWalking();
         const line = getNpcTextLine(100, "Why do I have to do everything?");
         setStatusMessage(line);
         return true;
@@ -519,18 +523,21 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (point.y < scene.uiMaskY) {
         const overlay = findOverlayAt(point, state.overlays, spriteDefMap);
         if (overlay && !state.itemInHand && sceneItemIndex === -1) {
+          stopWalking();
           pickOverlayItem(overlay);
           return true;
         }
       }
       const slot = findInventorySlot(point);
       if (slot !== -1) {
+        stopWalking();
         exchangeInventorySlot(slot);
         return true;
       }
       if (point.y < scene.uiMaskY) {
         const itemIndex = sceneItemIndex;
         if (itemIndex !== -1) {
+          stopWalking();
           const item = state.sceneItems[itemIndex];
           if (state.itemInHand) {
             const heldItem = state.itemInHand;
@@ -545,6 +552,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         }
       }
       if (state.itemInHand) {
+        stopWalking();
         if(noDropRegions.some(r=>point.x>=r.x&&point.x<r.x+r.w&&point.y>=r.y&&point.y<r.y+r.h))return true;
         const droppedItem = state.itemInHand;
         if (dropItemAt(point, state.itemInHand, state.drops, state.sceneItems, scene, mask)) {
@@ -554,7 +562,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         // A failed drop keeps the item in hand and must not trigger walking/pickup.
         return true;
       }
-      if (point.y >= scene.uiMaskY) return true;
+      if (point.y >= scene.uiMaskY) { stopWalking(); return true; }
       return false;
     }
 
@@ -735,6 +743,12 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     if (openingScript && config.playOpening !== false) playScript(openingScript.opening);
     else if (config.entryActions?.length) playScript(config.entryActions);
+
+    config.signal?.throwIfAborted();
+    // Resizing clears the shared canvas; keep the previous room during loading.
+    if (canvas.width !== LOGICAL_WIDTH) canvas.width = LOGICAL_WIDTH;
+    if (canvas.height !== LOGICAL_HEIGHT) canvas.height = LOGICAL_HEIGHT;
+    animationFrame = requestAnimationFrame(loop);
 
     function getSnapshot() { return { pos: { ...state.pos }, walkDelayTicks: state.walkDelayTicks, facing:state.dir==="right"?3:state.dir==="left"?5:state.dir==="up"?0:4, inventorySlots: state.inventorySlots, itemInHand: state.itemInHand,
       sceneItems: state.sceneItems, overlays: state.overlays, treeSpoken }; }
