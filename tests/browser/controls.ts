@@ -1,24 +1,65 @@
 import { createApp, nextTick } from 'vue';
 import App from '../../src/App.vue';
+import { readSaveSlots } from '../../src/engine/gameplay/saveStorage';
 import '../../src/styles.css';
 
 // Real application and rendering, with a visible clock for reproducible review.
-let now = performance.now(), id = 0;
+let now = performance.now(), id = 0, busy = false;
 const frames = new Map<number, FrameRequestCallback>();
 performance.now = () => now;
 window.requestAnimationFrame = callback => { frames.set(++id, callback); return id; };
 window.cancelAnimationFrame = handle => { frames.delete(handle); };
 async function advance(ms: number) {
   for (let elapsed = 0; elapsed < ms; elapsed += 50) {
-    now += 50;
+    now += Math.min(50, ms - elapsed);
     const batch = [...frames.values()]; frames.clear();
     batch.forEach(callback => callback(now));
+    await nextTick();
     if (elapsed % 500 === 0) await new Promise(resolve => setTimeout(resolve, 0));
   }
 }
-document.querySelector('#second')!.addEventListener('click', () => void advance(1000));
-document.querySelector('#half')!.addEventListener('click', () => void advance(500));
-document.querySelector('#minute')!.addEventListener('click', () => void advance(60000));
+const aside = document.querySelector('aside')!;
+const status = document.querySelector<HTMLOutputElement>('#verification-status')!;
+function details() { return [...document.querySelectorAll('.folio-message,.game-error,.scene-notice')].map(el=>el.textContent?.trim()).filter(Boolean).join('; '); }
+function assert(value: unknown, message: string): asserts value { if (!value) throw Error(message); }
+async function until(predicate: () => boolean, message: string, timeout = 45000) {
+  const deadline = Date.now()+timeout;
+  while (!predicate()) {
+    assert(Date.now()<deadline, `${message}. ${details() || 'Timed out waiting for asynchronous assets/state.'}`);
+    await advance(100); await new Promise(resolve=>setTimeout(resolve,25));
+  }
+  await nextTick();
+}
+async function runCheck(button: HTMLButtonElement, label: string, action: () => Promise<void>, pass = label) {
+  if (busy) return;
+  busy=true; status.textContent=`RUNNING — ${label}`; status.dataset.result='running';
+  aside.querySelectorAll<HTMLButtonElement>('button').forEach(b=>b.disabled=true);
+  try { await action(); status.textContent=`PASS — ${pass}`; status.dataset.result='pass'; if (!button.id) button.textContent=`PASS — ${pass}`; }
+  catch (error) { status.textContent=`FAIL — ${label}: ${error instanceof Error ? error.message : String(error)}`; status.dataset.result='fail'; console.error(`Controls verification failed: ${label}`,error); }
+  finally { busy=false; aside.querySelectorAll<HTMLButtonElement>('button').forEach(b=>b.disabled=false); }
+}
+for (const [selector, ms] of [['#second',1000],['#half',500],['#minute',60000]] as const) {
+  const button=document.querySelector<HTMLButtonElement>(selector)!;
+  button.onclick=()=>void runCheck(button,button.textContent!,()=>advance(ms));
+}
+const book = () => document.querySelector<HTMLElement>('.fantasy-book.is-options');
+function menu() { const el=document.querySelector<HTMLElement>('.book-page-menu.is-visible .folio-menu'); assert(el,'Options page is not visible'); return el; }
+function hud() { const el=document.querySelector<HTMLButtonElement>('.hud-options'); assert(el&&!el.disabled,'Reach gameplay and let Brandon finish the current sequence first.'); return el; }
+async function click(label: string, scope: ParentNode = document) {
+  const button=[...scope.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent?.trim()===label||b.getAttribute('aria-label')===label);
+  assert(button&&!button.matches(':disabled'),`Missing or disabled control: ${label}. ${details()}`);
+  button.focus(); button.click(); await nextTick();
+}
+async function bookReady() {
+  await until(()=>!!document.querySelector('.book-page-menu.is-visible .folio-menu[aria-busy="false"]'),'Options did not finish its pullback');
+  assert(menu().contains(document.activeElement),'Options did not receive keyboard focus after its pullback');
+}
+async function openOptions() { assert(!book(),'Close Options before starting this check'); const trigger=hud(); trigger.focus(); trigger.click(); await bookReady(); return trigger; }
+async function closeOptions() { menu().dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await until(()=>!book(),'Options did not finish its return zoom'); }
+function addCheck(label: string, action: () => Promise<void>, pass = label) {
+  const button=document.createElement('button'); button.textContent=label; aside.insertBefore(button,status);
+  button.onclick=()=>void runCheck(button,label,action,pass);
+}
 // Hide the clock for clean captures without changing the rendered application.
 document.addEventListener('keydown', event => {
   if (event.key.toLowerCase() !== 'h' || (event.target as HTMLElement).matches('input, select, textarea')) return;
@@ -26,10 +67,29 @@ document.addEventListener('keydown', event => {
   controls.hidden = !controls.hidden;
 });
 createApp(App).mount('#app');
+addCheck('Reach gameplay',async()=>{
+  if (book()) await closeOptions();
+  if (document.querySelector('.hud-options:not(:disabled)')) return;
+  const open=document.querySelector<HTMLButtonElement>('.book-open');
+  if(open) { await until(()=>!open.disabled,'The opening book did not load'); open.click(); await nextTick(); }
+  const deadline=Date.now()+120000;
+  for(let elapsed=0;elapsed<240000;elapsed+=1000) {
+    const start=document.querySelector<HTMLButtonElement>('.intro-menu .start-button');
+    if(start&&!start.disabled) { start.click(); await nextTick(); }
+    const next=document.querySelector<HTMLButtonElement>('.continue-button');
+    if(next&&!next.disabled) { next.click(); await nextTick(); }
+    if(document.querySelector('.hud-options:not(:disabled)')) return;
+    assert(Date.now()<deadline,`Gameplay preparation exceeded two real minutes. ${details()}`);
+    assert(!document.querySelector('.game-error'),details());
+    await advance(1000); await new Promise(resolve=>setTimeout(resolve,30));
+  }
+  throw Error(`Gameplay did not become interactive within 240 logical seconds. ${details()}`);
+},'gameplay ready');
 const verify = document.createElement('button');
 verify.textContent = 'Verify swipe cursor';
-document.querySelector('aside')!.append(verify);
-verify.onclick = async () => {
+aside.insertBefore(verify,status);
+verify.onclick = () => void runCheck(verify,'Verify swipe cursor',async () => {
+  hud(); assert(!book(),'Close Options before checking gestures');
   const canvas = document.querySelector<HTMLCanvasElement>('canvas[aria-label="Kyrandia game scene"]')!;
   const cursor = document.querySelector<HTMLElement>('.game-cursor');
   if (!cursor || !document.querySelector('.hud-options')) throw Error('Finish the opening before checking gestures');
@@ -63,38 +123,70 @@ verify.onclick = async () => {
     await nextTick();
     if (document.querySelector('[role="dialog"]')) throw Error('A swipe activated Options without a tap');
     send('pointerdown', x, y); send('pointerup', x, y);
-    await nextTick(); await nextTick();
-    const options = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Game settings"]');
-    if (!options) throw Error('Tap must activate OPTIONS at the persistent cursor, not at the finger');
-    if (!options.contains(document.activeElement)) throw Error('Cursor-opened Options did not receive focus');
-    options.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    await nextTick();
-    if (document.querySelector('[role="dialog"]')) throw Error('Options did not close with Escape');
-    verify.textContent = 'PASS — relative swipe and HUD Options';
+    await nextTick(); assert(book(),'Tap must activate OPTIONS at the persistent cursor, not at the finger');
+    await bookReady(); await closeOptions();
+    assert(!document.querySelector('.folio-menu'),'Options remained after its return zoom');
   } finally { canvas.setPointerCapture = capture; }
-};
+},'relative swipe and book Options');
 
 const panelCheck = document.createElement('button');
 panelCheck.textContent = 'Verify in-game panels';
-document.querySelector('aside')!.append(panelCheck);
-panelCheck.onclick = async () => {
-  const stage = document.querySelector<HTMLElement>('.stage')!;
-  const trigger = document.querySelector<HTMLButtonElement>('.hud-options') ?? [...stage.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Settings');
-  if (!trigger) throw Error('Reach the main menu or gameplay first');
-  trigger.focus(); trigger.click(); await nextTick(); await nextTick();
-  if (document.querySelector('.masthead, .game-toolbar') || !stage.contains(document.querySelector('.credits'))) throw Error('Interface remains outside the game');
-  for (const label of ['Options', 'How to play']) {
-    if (label === 'How to play') {
-      [...stage.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(b => b.textContent === label)!.click();
-      await nextTick(); await nextTick();
-    }
-    const dialog = stage.querySelector<HTMLElement>('[role="dialog"]')!;
-    const box = dialog.getBoundingClientRect(), bounds = stage.getBoundingClientRect();
-    if (box.left < bounds.left || box.right > bounds.right || box.top < bounds.top || box.bottom > bounds.bottom) throw Error(`${label} escapes the game`);
-    if (!dialog.contains(document.activeElement)) throw Error('Panel does not own keyboard focus');
+aside.insertBefore(panelCheck,status);
+panelCheck.onclick = () => void runCheck(panelCheck,'Verify in-game panels',async () => {
+  const trigger=await openOptions();
+  assert(!document.querySelector('.masthead,.game-toolbar'),'External interface remains');
+  for(const label of ['Options','How to play','Settings']) {
+    if(label!=='Options') await click(label,menu());
+    const dialog=menu(),page=dialog.closest<HTMLElement>('[data-book-page]')!;
+    const box=dialog.getBoundingClientRect(),bounds=page.getBoundingClientRect();
+    assert(box.width>150&&box.height>150,`${label} is too small to read`);
+    assert(box.left>=-2&&box.right<=innerWidth+2&&box.top>=-2&&box.bottom<=innerHeight+2,`${label} escapes the viewport`);
+    assert(box.left>=bounds.left-2&&box.right<=bounds.right+2&&box.top>=bounds.top-2&&box.bottom<=bounds.bottom+2,`${label} escapes its book page`);
+    assert(dialog.contains(document.activeElement),`${label} lost keyboard focus`);
+    if(label==='Settings') assert(dialog.contains(document.querySelector('.folio-credits')),'Credits are outside the book');
+    const controls=[...dialog.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),a[href]')].filter(el=>el.getClientRects().length);
+    assert(controls.length,`${label} has no usable controls`);
+    controls.at(-1)!.focus(); controls.at(-1)!.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true}));
+    assert(document.activeElement===controls[0],`${label} lets Tab leave its page`);
+    controls[0].dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true}));
+    assert(document.activeElement===controls.at(-1),`${label} lets Shift+Tab leave its page`);
+    if(label!=='Options') await click('Back to Options',dialog);
   }
-  stage.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  await nextTick();
-  if (stage.querySelector('[role="dialog"]') || document.activeElement !== trigger) throw Error('Escape did not close the panel and restore focus');
-  panelCheck.textContent = 'PASS — panels stay inside game';
-};
+  await closeOptions(); assert(document.activeElement===trigger,'Returning from the book did not restore focus');
+},'book pages contain controls and focus');
+
+const TEST_NAME='Codex UI round-trip (test)';
+function safeTestSlot() {
+  const slot=readSaveSlots()[2];
+  assert(!slot.error,`Chapter 3 is damaged; it was left untouched. ${slot.error}`);
+  assert(!slot.save||slot.save.name===TEST_NAME,'Chapter 3 contains a user save; it was left untouched. Use an empty third slot to run this check.');
+}
+addCheck('Verify saved chapter round trip',async()=>{
+  hud(); safeTestSlot();
+  const untouched=[localStorage.getItem('kyrandia.save.1'),localStorage.getItem('kyrandia.save.2')];
+  await openOptions(); await click('Settings',menu());
+  const originalSpeed=menu().querySelector('select')!.value;
+  await click('Back to Options',menu()); await click('Save game',menu());
+  const name=menu().querySelector('input')!; name.value=TEST_NAME; name.dispatchEvent(new Event('input',{bubbles:true})); await nextTick();
+  safeTestSlot();
+  let slot=menu().querySelectorAll<HTMLElement>('.folio-saves li')[2]; assert(slot,'Chapter 3 is absent');
+  await click('Save here',slot);
+  if([...slot.querySelectorAll('button')].some(b=>b.textContent?.trim()==='Replace')) { safeTestSlot(); await click('Replace',slot); }
+  const record=readSaveSlots()[2].save;
+  assert(record?.name===TEST_NAME&&menu().querySelector('.folio-message')?.textContent?.includes('saved.'),`Saving failed: ${details()}`);
+  assert(record.state.settings.walkSpeed===originalSpeed,'Saved walk speed differs from the displayed setting');
+  const savedBytes=localStorage.getItem('kyrandia.save.3');
+  await click('Back to Options',menu()); await click('Settings',menu());
+  const speed=menu().querySelector('select')!;
+  speed.value=originalSpeed==='slowest'?'fastest':'slowest'; speed.dispatchEvent(new Event('change',{bubbles:true})); await nextTick();
+  assert(speed.value!==originalSpeed,'Walk speed did not change');
+  await click('Back to Options',menu()); await click('Load game',menu());
+  slot=menu().querySelectorAll<HTMLElement>('.folio-saves li')[2];
+  assert(slot.querySelector('strong')?.textContent===TEST_NAME,'Load targeted the wrong chapter');
+  await click('Load chapter',slot); await until(()=>!book(),'Saved chapter did not load and return to gameplay');
+  assert(localStorage.getItem('kyrandia.save.3')===savedBytes,'Loading unexpectedly rewrote the saved chapter');
+  await openOptions(); await click('Settings',menu());
+  assert(menu().querySelector('select')!.value===originalSpeed,'Loading did not restore the saved walk speed');
+  assert(localStorage.getItem('kyrandia.save.1')===untouched[0]&&localStorage.getItem('kyrandia.save.2')===untouched[1],'Another save slot changed');
+  await closeOptions();
+},'chapter 3 saved, changed and restored through UI');

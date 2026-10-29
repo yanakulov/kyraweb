@@ -1,8 +1,15 @@
 <template>
   <main class="app" :class="{ 'book-is-closed': !bookOpened }" ref="appRef">
-    <FantasyBook v-if="!bookOpened" @open="openBook" />
-    <div v-show="bookOpened" class="game-frame">
-      <div class="stage" @keydown="handlePanelKey">
+    <FantasyBook v-if="!bookOpened" ref="openingBook" :snapshot="openingSnapshot ?? undefined" :inert="bookBusy" @open="openBook">
+      <template #invitation><button v-if="latestSave" class="pixel-button book-continue" type="button" :disabled="bookBusy" @click.stop="continueJourney">Continue journey</button><p v-if="bookBusy || bookMessage" class="book-status" role="status">{{ bookBusy ? 'Opening your saved chapter…' : bookMessage }}</p></template>
+    </FantasyBook>
+    <FantasyBook v-if="bookSnapshot" mode="options" :snapshot="bookSnapshot" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
+      <BookMenu :gameplay="!introActive" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookMessage" :slots="bookSlots" :initial-view="bookInitialView"
+        v-model:walk-speed="walkSpeed" v-model:atmosphere="atmosphere" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen" :inventory="bookInventory" :held-item-name="heldItem ? itemDefinitions.get(heldItem)?.name ?? '' : ''"
+        @resume="resumeBook" @save="saveChapter" @load="loadChapter" @inventory="chooseBookItem" @fullscreen="toggleFullscreen" @main-menu="leaveBook('menu')" @replay-intro="leaveBook('intro')" />
+    </FantasyBook>
+    <div v-show="bookOpened" class="game-frame" :inert="!!bookSnapshot">
+      <div class="stage">
         <SubtitleOverlay
           :lines="subtitleLines"
           :scale="subtitleScale"
@@ -41,6 +48,7 @@
               :disabled="introPanelClosing"
               @click="handleIntroPanelClick"
             ><span class="button-gem" aria-hidden="true"></span>Start game</button>
+            <button v-if="latestSave" class="pixel-button menu-secondary" type="button" :disabled="introPanelClosing" @click="showBookOptions('load')">Load game</button>
             <button class="pixel-button menu-secondary" type="button" :disabled="introPanelClosing" :aria-expanded="helpOpen" @click="showHelp">How to play</button>
             <button class="pixel-button menu-secondary" type="button" :disabled="introPanelClosing" :aria-expanded="panelOpen" @click="showSettings">Settings</button>
             </div>
@@ -50,11 +58,12 @@
         <div v-if="gameError" class="game-error" role="alert">
           <p>{{ gameError }}</p>
           <button class="pixel-button" type="button" @click="boot">Try again</button>
+          <button v-if="latestSave" class="pixel-button" type="button" @click="showBookOptions('load')">Load game</button>
         </div>
         <button v-if="!introActive && !gameError && !sequenceActive && !loading" class="hud-options" type="button" aria-label="Options" @click="showSettings"><span class="sr-only">Options</span></button>
         <p class="sr-only" role="status">{{ gameHint }}</p>
         <p v-if="loading || navigationError" class="scene-notice" role="status">{{ loading ? 'Loading…' : navigationError }}</p>
-        <div v-if="overlayOpen" class="dialog-shade" @click.self="closePanels">
+        <div v-if="legacyPanelsOpen" class="dialog-shade" @click.self="closePanels">
     <section v-if="inventoryOpen && !introActive" class="touch-inventory in-game-dialog" role="dialog" aria-modal="true" aria-label="Inventory" tabindex="-1">
       <div class="panel-heading"><h2>Inventory</h2><button class="text-button" type="button" @click="closePanels">Close</button></div>
       <p aria-live="polite">{{ heldItem ? `In hand: ${itemDefinitions.get(heldItem)?.name}` : 'Choose an item, then tap where to use it.' }}</p>
@@ -122,14 +131,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 const FantasyBook = defineAsyncComponent(() => import('./components/FantasyBook.vue'));
+import BookMenu from './components/BookMenu.vue';
+import { readSaveSlots, writeSaveSlot, type SaveRecord, type SaveSlot } from './engine/gameplay/saveStorage';
 const bookOpened = ref(false);
+const openingBook = ref<{ openBook: () => void } | null>(null);
+const openingSnapshot = shallowRef<HTMLCanvasElement | null>(null), bookSnapshot = shallowRef<HTMLCanvasElement | null>(null);
+const bookReturning = ref(false), bookReady = ref(false), bookBusy = ref(false), canSave = ref(false);
+const bookMessage = ref(''), bookInitialView = ref<'main' | 'load'>('main');
+const saveSlots = shallowRef<SaveSlot[]>([]);
+const latestSave = computed(() => saveSlots.value.filter(slot => slot.save).sort((a,b) => b.save!.savedAt.localeCompare(a.save!.savedAt))[0]);
+const bookSlots = computed(() => saveSlots.value.map(slot => ({ index: slot.index, ...slot.save, error: slot.error })));
+const bookInventory = computed(() => inventorySlots.value.map(id => ({ id, name: id ? itemDefinitions.get(id)?.name ?? id : '', style: id ? itemStyle(id) : undefined })));
+let afterBookResume: (() => void) | null = null;
 const helpOpen = ref(false);
-function openBook() { void boot(); }
-function closePanels() { helpOpen.value = panelOpen.value = inventoryOpen.value = false; }
+function openBook() { bookBusy.value = false; if (openingSnapshot.value && game) { bookOpened.value = true; openingSnapshot.value = null; game.setPaused(false); syncControls(); } else void boot(); }
+function closePanels() { if (bookSnapshot.value) { resumeBook(); return; } helpOpen.value = panelOpen.value = inventoryOpen.value = false; }
 function showHelp() { closePanels(); helpOpen.value = true; }
-function showSettings() { closePanels(); panelOpen.value = true; }
+function showSettings() { if (!introActive.value) { showBookOptions(); return; } closePanels(); panelOpen.value = true; }
 function showInventory() { closePanels(); inventoryOpen.value = true; }
 import { mapPointerToCanvas, startGame } from "./engine/gameplay/game";
 import { LOGICAL_WIDTH } from "./engine/core/constants";
@@ -165,7 +185,7 @@ function itemStyle(item: InventoryItemId) {
   return { backgroundPosition: `${-(tile % 20) * 32}px ${-Math.floor(tile / 20) * 32}px` };
 }
 function interact(point: Vec2) {
-  if (!game || loading.value || gameError.value) return;
+  if (!game || loading.value || gameError.value || bookSnapshot.value) return;
   // Touch aims a persistent cursor; activating the original HUD must use it too.
   if (!sequenceActive.value && point.x >= 12.8 && point.x < 73.6 && point.y >= 154 && point.y < 198) { showSettings(); return; }
   game.setPointer(point);
@@ -186,6 +206,7 @@ const isFullscreen = ref(false);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 let game: Awaited<ReturnType<typeof startGame>> | null = null;
 let gameLoadController: AbortController | null = null;
+let restoreController: AbortController | null = null;
 const showMask = ref(false);
 const showLayerInfo = ref(false);
 const maskOpacity = ref(0.35);
@@ -194,20 +215,22 @@ const animStepInterval = ref(1);
 const introActive = ref(true);
 let intro: IntroPlayback | null = null;
 const panelOpen = ref(false);
-const overlayOpen = computed(() => panelOpen.value || helpOpen.value || inventoryOpen.value);
+const legacyPanelsOpen = computed(() => panelOpen.value || helpOpen.value || inventoryOpen.value);
+const overlayOpen = computed(() => legacyPanelsOpen.value || !!bookSnapshot.value);
 let panelTrigger: HTMLElement | null = null;
-watch([panelOpen, helpOpen, inventoryOpen], async () => {
+watch(overlayOpen, async () => {
   if (overlayOpen.value) {
     if (!panelTrigger) panelTrigger = document.activeElement as HTMLElement;
     await nextTick();
-    appRef.value?.querySelector<HTMLElement>('[role="dialog"]')?.focus();
+    if (!bookSnapshot.value) appRef.value?.querySelector<HTMLElement>('[role="dialog"]')?.focus();
   } else {
-    panelTrigger?.focus(); panelTrigger = null;
+    await nextTick(); panelTrigger?.focus(); panelTrigger = null;
   }
 });
+watch(legacyPanelsOpen, value => { if (!bookSnapshot.value) { intro?.setPaused(value); game?.setPaused(value); } });
 function handlePanelKey(event: KeyboardEvent) {
   if (!overlayOpen.value) return;
-  if (event.key === 'Escape') { event.preventDefault(); closePanels(); }
+  if (event.key === 'Escape') { event.preventDefault(); if (!bookBusy.value) closePanels(); }
   if (event.key !== 'Tab') return;
   const panel = appRef.value?.querySelector<HTMLElement>('[role="dialog"]');
   const controls = [...panel?.querySelectorAll<HTMLElement>('button:not(:disabled), select, input, summary, a[href]') ?? []].filter(el => el.getClientRects().length);
@@ -251,6 +274,105 @@ const config = {
   onSubtitleChange: (lines: import('./engine/intro/types').IntroSubtitle[]) => { subtitleLines.value = lines; },
   onSequenceChange: (active: boolean) => { sequenceActive.value = active; queueMicrotask(syncControls); }
 };
+
+function refreshSaveSlots() {
+  try { saveSlots.value = readSaveSlots(); return true; }
+  catch (error) { bookMessage.value = error instanceof Error ? error.message : 'Saved chapters are unavailable.'; return false; }
+}
+function captureFrame() {
+  const copy = document.createElement('canvas'); copy.width = 320; copy.height = 200;
+  if (canvasRef.value) copy.getContext('2d')!.drawImage(canvasRef.value, 0, 0);
+  return copy;
+}
+function showBookOptions(view: 'main' | 'load' = 'main') {
+  if (bookSnapshot.value || loading.value || sequenceActive.value || !canvasRef.value) return;
+  syncControls(); cancelGesture();
+  intro?.setPaused(true); game?.setPaused(true);
+  bookMessage.value = ''; refreshSaveSlots();
+  canSave.value = !!game?.getSaveState();
+  if (!introActive.value && !canSave.value && !gameError.value && !bookMessage.value) bookMessage.value = 'Resume to finish the current action before saving.';
+  bookInitialView.value = view; bookReady.value = false; bookReturning.value = false;
+  helpOpen.value = panelOpen.value = inventoryOpen.value = false;
+  bookSnapshot.value = captureFrame();
+}
+async function bookOptionsReady() {
+  bookReady.value = true; await nextTick();
+  appRef.value?.querySelector<HTMLElement>('.folio-menu')?.focus();
+}
+function resumeBook() { if (bookBusy.value || !bookSnapshot.value || bookReturning.value) return; bookReturning.value = true; }
+function finishBookResume() {
+  bookSnapshot.value = null; bookReady.value = false; bookReturning.value = false;
+  intro?.setPaused(false); game?.setPaused(false); syncControls();
+  const action = afterBookResume; afterBookResume = null; action?.();
+}
+function chooseBookItem(index: number) { afterBookResume = () => useInventorySlot(index); resumeBook(); }
+function leaveBook(destination: 'menu' | 'intro') {
+  if (bookBusy.value) return;
+  bookSnapshot.value = null; bookReturning.value = false; afterBookResume = null;
+  if (destination === 'menu') openMenu(); else replayIntro();
+}
+function saveChapter(index: number, name: string) {
+  if (bookBusy.value) return;
+  const state = game?.getSaveState();
+  if (!state) { canSave.value = false; bookMessage.value = 'Resume to finish the current action before saving.'; return; }
+  try {
+    writeSaveSlot(index, { name, location: locationName.value, thumbnail: captureFrame().toDataURL('image/webp', .8), state });
+    refreshSaveSlots(); bookMessage.value = `“${name}” saved.`;
+  } catch (error) { bookMessage.value = error instanceof Error ? error.message : 'The chapter could not be saved.'; }
+}
+async function restoreChapter(record: SaveRecord) {
+  if (!canvasRef.value) throw new Error('The game is not ready.');
+  const controller = new AbortController();
+  restoreController = controller;
+  let committed = false, restoredLocation = record.location;
+  const oldFrame = captureFrame();
+  try {
+    const candidate = await startGame(canvasRef.value, { ...config, saveState: record.state, paused: true, signal: controller.signal,
+      onDeath: () => { if (committed) config.onDeath(); },
+      onContinueChange: value => { if (committed) config.onContinueChange(value); },
+      onLocationChange: name => { restoredLocation = name; if (committed) config.onLocationChange(name); },
+      onLoadingChange: value => { if (committed) config.onLoadingChange(value); },
+      onNavigationError: message => { if (committed) config.onNavigationError(message); },
+      onSubtitleChange: lines => { if (committed) config.onSubtitleChange(lines); },
+      onSequenceChange: active => { if (committed) config.onSequenceChange(active); }
+    });
+    introRunId++; cancelAnimationFrame(panelFadeFrame);
+    intro?.stop(); intro = null; game?.stop(); gameLoadController?.abort();
+    gameLoadController = controller; game = candidate; committed = true;
+    introActive.value = false; introPanelClosing.value = false; introPanelDismissed.value = true;
+    gameError.value = ''; navigationError.value = ''; loading.value = false;
+    sequenceActive.value = awaitingContinue.value = false; subtitleLines.value = []; subtitleAlpha.value = 1;
+    locationName.value = restoredLocation;
+    walkSpeed.value = record.state.settings.walkSpeed; atmosphere.value = record.state.settings.atmosphere;
+    animStepInterval.value = record.state.settings.animStepInterval;
+    game.setDebug({ showMask: showMask.value, maskOpacity: maskOpacity.value, showLayerInfo: showLayerInfo.value });
+    syncControls();
+  } catch (error) {
+    controller.abort(); canvasRef.value?.getContext('2d')?.drawImage(oldFrame, 0, 0);
+    throw error;
+  } finally { if (restoreController === controller) restoreController = null; }
+}
+async function loadChapter(index: number) {
+  if (bookBusy.value || !refreshSaveSlots()) return;
+  const record = saveSlots.value[index]?.save;
+  if (!record) { bookMessage.value = saveSlots.value[index]?.error || 'This page has no saved chapter.'; return; }
+  bookBusy.value = true; bookMessage.value = 'Opening your saved chapter…';
+  try {
+    await restoreChapter(record);
+    bookSnapshot.value = captureFrame();
+    await nextTick(); bookBusy.value = false; bookMessage.value = ''; resumeBook();
+  } catch (error) { bookMessage.value = error instanceof Error ? error.message : 'This chapter could not be opened.'; }
+  finally { bookBusy.value = false; }
+}
+async function continueJourney() {
+  if (bookBusy.value || !refreshSaveSlots() || !latestSave.value?.save) return;
+  bookBusy.value = true; bookMessage.value = '';
+  try {
+    await restoreChapter(latestSave.value.save);
+    openingSnapshot.value = captureFrame(); await nextTick();
+    openingBook.value?.openBook();
+  } catch (error) { bookBusy.value = false; bookMessage.value = error instanceof Error ? error.message : 'This chapter could not be opened.'; }
+}
 
 async function boot() {
   if (!canvasRef.value) return;
@@ -415,6 +537,7 @@ function fadeOutIntroPanel(durationMs: number) {
 }
 
 function handleClick(event: MouseEvent) {
+  if (overlayOpen.value) return;
   if (touchPointer) return; // Touch activation is handled on pointerup, never after a swipe.
   if (introActive.value) {
     intro?.skipLine();
@@ -426,6 +549,7 @@ function handleClick(event: MouseEvent) {
 }
 
 function handlePointerDown(event: PointerEvent) {
+  if (overlayOpen.value) return;
   touchPointer = event.pointerType !== 'mouse';
   if (!touchPointer) { handleMove(event); return; }
   if (!event.isPrimary) { cancelGesture(); return; }
@@ -434,7 +558,7 @@ function handlePointerDown(event: PointerEvent) {
 }
 
 function handleMove(event: PointerEvent) {
-  if (introActive.value) return;
+  if (introActive.value || overlayOpen.value) return;
   if (!canvasRef.value || !game) return;
   if (event.pointerType !== 'mouse') {
     if (!gesture || gesture.id !== event.pointerId) return;
@@ -459,6 +583,8 @@ function handlePointerUp(event: PointerEvent) {
 function cancelGesture() { gesture = null; }
 
 onMounted(() => {
+  refreshSaveSlots();
+  document.addEventListener('keydown', handlePanelKey);
   fullscreenAvailable.value = document.fullscreenEnabled;
   document.addEventListener("fullscreenchange", updateFullscreen);
   document.title = 'Fables & Fiends — The Legend of Kyrandia';
@@ -469,6 +595,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   introRunId++;
+  document.removeEventListener('keydown', handlePanelKey);
+  restoreController?.abort();
   gameLoadController?.abort();
   cancelAnimationFrame(panelFadeFrame);
   subtitleResizeObserver?.disconnect();

@@ -10,6 +10,9 @@ colors:
   stone: "#162a25"
   edge: "#786447"
   panel: "#14231d"
+  folio-ink: "#38200d"
+  folio-focus: "#82511d"
+  folio-fallback: "#d1b885"
 typography:
   controls:
     fontFamily: "Kyrandia, Georgia, serif"
@@ -25,6 +28,11 @@ typography:
     fontFamily: "Georgia, serif"
     fontSize: "22px"
     fontWeight: 400
+  folio:
+    fontFamily: "Georgia, Times New Roman, serif"
+    fontSize: "16px"
+    fontWeight: 400
+    lineHeight: 1.4
 rounded:
   square: "0px"
 spacing:
@@ -57,7 +65,7 @@ The user's preferred material reference is the earlier coarse, aged table: horiz
 **Key Characteristics:**
 - Original cover art and pixel game scenes, with a physical Blender-modeled book as the entrance.
 - Warm candlelight, cool moonlight, parchment lettering and deep green controls.
-- Motion for opening the story and acknowledging input, not perpetual decoration.
+- Camera motion links the game to its book; a restrained living candle gives the visible table atmosphere.
 
 ## Colors
 
@@ -65,7 +73,7 @@ Gold marks actionable edges and emphasis. Paper carries primary text; muted carr
 
 ## Typography
 
-The bundled Kyrandia font serves buttons and small control labels. Georgia supplies chapter text, help prose and readable instructions. The generated `kyrandia-title.webp` supplies the Kallak menu wordmark inside the stage, avoiding a separate page heading.
+The bundled Kyrandia font serves game buttons and small control labels. Georgia supplies chapter text, help prose and the book menu: 16px body, 19px main choices and a 26px small-caps heading in dark brown ink. The generated `kyrandia-title.webp` supplies the Kallak menu wordmark inside the stage, avoiding a separate page heading.
 
 ## Layout
 
@@ -73,17 +81,21 @@ The opening table fills the viewport. Its book stays framed as the cover opens, 
 
 The game page is centered with a maximum width of 1280px and also follows `calc((100svh - 8px) * 1.6)` to fit the available height. The stage retains its 8:5 ratio against a quiet dark backdrop, without a second decorative frame. Fullscreen uses the available 8:5 area.
 
-At 600px, help becomes one column, settings stack, Options actions share available width and the ornamental menu copy disappears. Settings, help and inventory are scrollable overlays constrained to the stage; their headings remain visible while scrolling. Safe-area padding and pinch zoom remain intact.
+In gameplay, Options fills the viewport with the open book. The left page carries scrollable controls; the right page carries the captured game frame, treated as ink on parchment while pulled back. Portrait framing favors the control page. Controls become interactive once the pullback finishes, and the underlying game stays inert and paused. If WebGL fails, a centered parchment panel retains the same controls.
 
-Buttons, selects and summary rows have a minimum 44px height. Inventory cells are at least 44px wide and 48px high. Focus uses a 2px pale-gold outline with a 4px offset.
+At 600px, the Kallak help and settings overlays stack and ornamental menu copy disappears; these introductory overlays remain constrained to the stage. Safe-area padding and pinch zoom remain intact.
+
+Keep displayed touch targets at least 44px. The folio uses 50px-high buttons, 46px inputs/selects and 52px inventory rows before projection. Its focus outline is 2px brown with a −2px offset. The original in-stage controls retain their pale-gold 2px outline with a 4px offset.
 
 ## Elevation & Depth
 
-The original game artwork supplies the frame and HUD; open dialogs dim the stage behind a deep green panel. Buttons use inset strokes rather than rounded card elevation. Blender supplies beveled, smoothly shaded book and table geometry, with embossed original cover detail, a page block, hinged cover, spine and brass fittings. The spine stays fixed to the back board below the page surface. The candle stands behind the book on its right, outside the cover's opening arc.
+The original game artwork supplies the frame and HUD; introductory dialogs dim the stage behind a deep green panel. The gameplay Options menu instead sits on the left parchment page, with fine brown rules and transparent buttons. Blender supplies beveled, smoothly shaded book and table geometry, with embossed original cover detail, a page block, hinged cover, spine and brass fittings. The spine stays fixed to the back board below the page surface. The candle stands behind the book on its right, outside the cover's opening arc.
 
 The aged walnut map includes its own board seams and covers one solid tabletop. Preserve its coarse grain, knots and wear instead of adding a second set of geometric seams.
 
-Warm candlelight and cool moonlight separate the book from the table. Half-resolution GTAO supplies contact depth (radius 0.22, thickness 0.12, blend intensity 0.65); restrained bloom uses threshold 2.8, strength 0.12 and radius 0.25. Film grading and a soft vignette shape the 3D scene. AO, bloom and grading fade away between 55% and 95% of the zoom; the final frame renders directly with the original landscape's exact pixel colors. Three.js renders on demand when loading, resizing, opening or following mouse movement, with no idle animation loop.
+Warm candlelight and cool moonlight separate the book from the table. Half-resolution GTAO supplies contact depth (radius 0.22, thickness 0.12, blend intensity 0.65); restrained bloom uses threshold 2.8, strength 0.12 and radius 0.25. Film grading and a soft vignette shape the 3D scene. AO, bloom and grading fade away between 55% and 95% of the zoom; the final frame renders directly with the original image's exact pixel colors.
+
+The visible candle bends and changes height gently while its emissive glow and point light vary together. Settled book views render at up to 30fps; camera transitions use the display refresh rate. Hidden documents suspend rendering and transition clocks. Reduced motion freezes the candle, removes mouse parallax and bypasses opening/return motion; rendering stops after the static view settles.
 
 ## Shapes
 
@@ -92,11 +104,12 @@ Controls and panels have square corners. Borders are thin, layered and material-
 ## Components
 
 - **Book:** one clear Open the book action, also available by clicking the book surface. The 8.9-second sequence opens the hinge at 0–2.2 seconds, traces contours at 1.8–4.2 seconds, washes in color at 4.5–6.2 seconds and zooms into the picture at 6.5–8.9 seconds. The page begins bare; contours, sparse hatching and a small gold drawing trace appear on its physical, lit parchment. The source is exactly `assets/intro/logo_bg.png`, interpreted as ink rather than a grayscale photo on a flat plane. Only the final camera approach blends into the unlit original game frame. The completed book view remains visible until `onFirstFrame` confirms that the intro has drawn. Reduced motion bypasses the opening and mouse parallax. The embossed-cover image remains the fallback when WebGL or model loading fails.
-- **Kallak menu:** a generated emerald-and-gold panel in the lower 32% of the stage. Start game is primary; How to play and Settings are secondary. Decorative text is removed on small screens.
+- **Kallak menu:** a generated emerald-and-gold panel in the lower 32% of the stage. Start game is primary; Load game appears when a valid save exists, alongside How to play and Settings. Decorative text is removed on small screens.
 - **Intro:** the book picture, Westwood and the transparent AkulaFlow mark share the original `assets/intro/logo_bg.png` landscape. Westwood and AkulaFlow retain their reveal and fade inside the canvas sequence; the remaining original intro leads to Kallak.
 - **Buttons:** green beveled fill, parchment labels, brass outline; lighter hover, darker pressed state and visible keyboard focus. Disabled controls lower opacity.
-- **Options/help:** the original HUD Options button opens deep green bordered dialogs inside the stage. Options contains settings, inventory, help, fullscreen, main menu and credits; developer controls remain inside a disclosure. Close or Resume and Escape dismiss a dialog; keyboard focus stays within it and returns to its launcher.
-- **Inventory:** an internal overlay with five columns of labeled slots and a live description of the held item. Choosing a slot returns to the game. During sequences or loading, interaction is disabled.
+- **Options:** the HUD button immediately pauses the game, then pulls the exact captured frame back onto the right book page over 1.4 seconds. The left page offers Resume, Save game, Load game, Inventory, Settings and How to play. Settings includes fullscreen, main menu, replay intro and credits. Resume or Escape zooms back over 1.2 seconds, beginning at the current zoom if dismissed early; the engine resumes only after the handoff, without advancing by elapsed menu time. Focus stays in the menu and returns to its launcher. Kallak's introductory settings/help retain their smaller stage overlays.
+- **Saved chapters:** three manual slots show name, location, local date/time and a pixel thumbnail. Replacing an occupied or damaged slot requires confirmation. Saves retain the full world state, not just the current picture; saving is unavailable during unfinished scripted actions, transitions or drops. Continue journey on the closed book opens the newest valid save through its captured scene; Load game chooses a slot. Invalid slots display their own errors without hiding usable slots, and storage failures preserve existing saves. Saves remain local to this browser/device.
+- **Inventory:** the book page has five columns of labeled slots and the held item's name. Choosing a slot returns through the captured frame before applying the inventory interaction. During sequences or loading, interaction is disabled.
 
 Interface assets live in `public/assets/interface/`:
 
@@ -125,4 +138,5 @@ Measure the complete production build and packed book model separately after cha
 - Do draw the illustration into the physical parchment and remove scene effects before the final original game frame.
 - Do keep props outside the cover's hinge arc.
 - Don't replace generated material art with generic gradients or decorative cards.
-- Don't add continuous book rendering, oversized downloads or ornamental controls without a functional reason.
+- Don't render the candle while hidden or under reduced motion, advance game clocks behind Options, or replace the captured scene with a generic book illustration.
+- Don't add oversized downloads or ornamental controls without a functional reason.

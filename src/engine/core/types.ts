@@ -7,6 +7,8 @@ export type GameConfig = {
   world?: string;
   transitionImage?: HTMLCanvasElement;
   signal?: AbortSignal;
+  saveState?: WorldSave;
+  paused?: boolean;
   backgroundPack?: import("../resources/scenePack").ScenePack;
   entry?: Vec2 & { facing: number };
   resume?: RoomSnapshot;
@@ -31,7 +33,29 @@ export type GameConfig = {
 export type RoomPortal = { id: string; target: number; side: "north" | "east" | "south" | "west";
   rect: { x: number; y: number; w: number; h: number }; point: Vec2; entry?: Vec2 | null };
 export type RoomSnapshot = { pos: Vec2; facing?: number; walkDelayTicks?: number; inventorySlots: (InventoryItemId | null)[]; itemInHand: InventoryItemId | null;
-  sceneItems: SceneItem[]; overlays: SceneOverlayState[]; treeSpoken: boolean };
+  sceneItems: SceneItem[]; overlays: SceneOverlayState[]; treeSpoken: boolean; runtime?: RoomRuntimeSnapshot };
+
+export type SavedNpc = { x: number; y: number; facing: number; shape: number; room: number };
+export type SavedLayer = { clip: string; index: number; x: number; y: number; permanent: boolean };
+export type RoomRuntimeSnapshot = {
+  clockMs: number; sceneTicks: number; sceneAccumulatorMs: number;
+  actorVisible: boolean; actorShape: number | null; hasAmulet: boolean;
+  sceneAnims: Omit<SceneAnimState, "script">[];
+  npcs: (SavedNpc & { character: number; visible: boolean })[];
+  heldNpcPoses: (SavedNpc & { character: number; visible: boolean })[];
+  masks: { x: number; y: number; w: number; h: number; blocked: boolean }[];
+  shapes: { shape: number; x: number; y: number; flags: number }[];
+  noDrop: { x: number; y: number; w: number; h: number }[];
+  layers: SavedLayer[];
+  palette?: number[];
+};
+export type WorldSave = {
+  version: 1;
+  currentRoom: number;
+  rooms: Record<number, RoomSnapshot>;
+  quest: { flags: number[]; files: Record<number, string>; phasing: boolean; vase: number; merith: SavedNpc; herman: SavedNpc };
+  settings: { atmosphere: boolean; walkSpeed: "slowest" | "slow" | "fast" | "fastest"; animStepInterval: number };
+};
 
 export type MaskData = {
   width: number;

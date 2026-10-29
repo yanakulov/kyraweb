@@ -10,7 +10,8 @@
       { "name": "book-opening", "value": "8900ms total; hinge 0-2200ms; ink 1800-4200ms; color 4500-6200ms; zoom 6500-8900ms", "purpose": "Open onto bare physical parchment, trace landscape contours with sparse hatching and a small gold trace, wash in color and enter the original picture; bypass under reduced motion." },
       { "name": "book-effects", "value": "fade from zoom 0.55 to 0.95", "purpose": "Fade half-resolution GTAO (radius 0.22, thickness 0.12, blend 0.65), bloom (threshold 2.8, strength 0.12, radius 0.25), film grading and vignette to zero; render the final original frame directly." },
       { "name": "book-handoff", "value": "onFirstFrame", "purpose": "Keep the final book view until the intro draws; Westwood and AkulaFlow continue on the same original landscape." },
-      { "name": "book-rendering", "value": "requestAnimationFrame on demand", "purpose": "Render loading, resize, pointer movement and opening; stop when settled." }
+      { "name": "book-options", "value": "1400ms pullback; 1200ms return", "purpose": "Pause the adventure before capturing its frame; reveal controls on the left page and the scene on the right. Reverse from the current zoom on early dismissal; resume game clocks only after the return." },
+      { "name": "book-rendering", "value": "up to 30fps settled; full refresh during transitions", "purpose": "Animate the visible candle and its light together. Suspend rendering and transition clocks while hidden; reduced motion uses a static candle and bypasses book transitions." }
     ],
     "breakpoints": [
       { "name": "mobile", "value": "600px" }
@@ -25,13 +26,13 @@
     },
     {
       "name": "Options action", "kind": "button",
-      "description": "Menu, fullscreen, inventory and help controls inside the Options dialog, opened from the original HUD button.",
+      "description": "Controls on the left parchment page of fullscreen Options, opened from the original HUD button while the game is paused.",
       "html": "<button class=\"ds-toolbar\">Settings</button>",
-      "css": ".ds-toolbar{min-height:44px;padding:10px 12px;font:11px/1.5 Kyrandia,Georgia,serif;color:var(--gold,#d8bc7b);background:#1e231a;border:1px solid #655535;border-radius:0;cursor:pointer}.ds-toolbar:hover{background:var(--stone,#162a25);color:#fff3d2}.ds-toolbar:focus-visible{outline:2px solid #f5d88f;outline-offset:4px}"
+      "css": ".ds-toolbar{width:100%;min-height:50px;padding:8px;font:16px/1.4 Georgia,'Times New Roman',serif;color:#38200d;background:transparent;border:0;border-bottom:1px solid #77502145;border-radius:0;cursor:pointer}.ds-toolbar:hover{background:#6c360e12;color:#4a1708}.ds-toolbar:focus-visible{outline:2px solid #82511d;outline-offset:-2px}"
     },
     {
-      "name": "Settings panel", "kind": "custom", "refersTo": "panel",
-      "description": "Scrollable settings, help and inventory dialogs constrained to the game stage, with focus containment and Escape dismissal. Credits live inside Options.",
+      "name": "Introductory settings panel", "kind": "custom", "refersTo": "panel",
+      "description": "Kallak menu settings/help remain scrollable stage overlays. Gameplay Options uses the fullscreen book spread, with focus containment and Escape dismissal.",
       "html": "<section class=\"ds-panel\"><h2>Options</h2><p>Choose your walk speed.</p></section>",
       "css": ".ds-panel{padding:24px;background:var(--panel,#14231d);color:var(--paper,#e7dcba);border:1px solid var(--edge,#786447);font:15px/1.6 Georgia,serif}.ds-panel h2{font:25px Georgia,serif;color:#e4ce97;margin:0 0 24px}.ds-panel p{margin:0}"
     },
@@ -55,10 +56,11 @@
       "Original cover art and pixel game scenes, with a physical Blender-modeled book as the entrance.",
       "User-preferred coarse horizontal walnut boards with knots and scars, rich oxblood leather, worn gilding and brass patina.",
       "Warm candlelight, cool moonlight, parchment lettering and deep green controls.",
-      "Motion for opening the story and acknowledging input, not perpetual decoration."
+      "Camera motion links the game to its book; a restrained living candle gives the visible table atmosphere."
     ],
     "rules": [
-      "Use the original HUD Options button to launch internal dialogs; keep credits inside Options.",
+      "Use the original HUD Options button to pause the game and pull its captured frame back into a fullscreen book spread. Put controls on the left page and the current scene on the right; keep credits inside Options.",
+      "Offer three named local manual save slots with location, date and thumbnail; preserve the complete world state and settings. Continue journey selects the latest valid save. Confirm replacement and report damaged/full/blocked storage without silently erasing data.",
       "Show the transparent AkulaFlow intro mark over the original Kyrandia landscape used by Westwood, preserving the existing reveal and fade.",
       "Use the original supplied retail cover as embossed leather on the Blender model; export via extractor/model_storybook.py to public/assets/interface/storybook.glb.gz and retain the editable .blend in ignored .reference/.",
       "Use extractor/materials/aged-walnut.webp, restored from the generated desk.webp in d675c1e, on one solid tabletop: its board seams are already in the image. Embed the texture in the GLB without a duplicate runtime download.",
@@ -79,7 +81,8 @@
     ],
     "donts": [
       "Don't replace generated material art with generic gradients or decorative cards.",
-      "Don't add continuous book rendering, oversized downloads or ornamental controls without a functional reason."
+      "Don't render the candle while hidden or under reduced motion, advance game clocks behind Options, or replace the captured scene with a generic book illustration.",
+      "Don't add oversized downloads or ornamental controls without a functional reason."
     ]
   }
 }

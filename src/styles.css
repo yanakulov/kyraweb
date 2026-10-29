@@ -90,6 +90,10 @@ body {
 
 .chapter-title { margin: 0; font: clamp(12px, 2.2cqw, 22px) Georgia, serif; color: #e8d6aa; }
 .intro-choices { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; }
+.intro-choices:has(> :nth-child(4)) { flex-wrap: wrap; gap: 6px; }
+.intro-choices:has(> :nth-child(4)) .start-button { width: auto; }
+.book-continue { display: block; margin: 10px auto 0; min-width: 220px; font-size: 13px; }
+.book-status { margin: 10px auto 0; max-width: 400px; padding: 0 16px; font: 14px/1.4 Georgia,serif; color: #e8d6aa; }
 .menu-footnote { margin: 0; color: #b7ba97; font-size: clamp(8px, 1cqw, 10px); }
 
 button, select, input { font: inherit; }

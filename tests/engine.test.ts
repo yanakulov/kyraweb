@@ -1,6 +1,8 @@
 import test from "node:test";
 import './forest.test';
 import './studio-logo.test';
+import './book-motion.test';
+import './save-storage.test';
 import assert from "node:assert/strict";
 import { playIntro, frameAtTime } from "../src/engine/intro/player";
 import { buildIntroSteps } from "../src/engine/intro/steps";
@@ -30,6 +32,8 @@ import openingPixels from "./fixtures/opening-pixels.json";
 import { roomPortals, nearestFloor, type WorldRoom } from "../src/engine/gameplay/world";
 import worldData from "../public/assets/world/world.json";
 import { portalAtPoint, portalMarker } from "../src/engine/gameplay/navigation";
+import { gemCutScene } from "../src/engine/scenes/gemCut";
+import { validateWorldSave } from "../src/engine/gameplay/saveStorage";
 
 test("skipping a line releases speech waits without skipping movies, walks or decisions", () => {
   const applied: RoomAction[] = [];
@@ -286,6 +290,27 @@ function introHarness() {
   };
 }
 const subtitle = { text: "Hello", startMs: 20, endMs: 80, y: 180 };
+
+test("book pause freezes intro frames and subtitles without consuming elapsed time", async () => {
+  const h = introHarness();
+  try {
+    const events: string[][] = [];
+    const playback = playIntro(h.canvas, [{ id: 'talk', durationMs: 200, subtitles: [subtitle] }], { onSubtitleChange: p => events.push(p.lines.map(l => l.text)) });
+    await settleLoads(); h.tick(30); await settleLoads();
+    assert.deepEqual(events.at(-1), ['Hello']);
+    playback.setPaused(true);
+    const drawCount = h.draws.length;
+    h.tick(10000); playback.skipLine();
+    assert.equal(h.pending(), 0);
+    assert.equal(h.draws.length, drawCount);
+    assert.deepEqual(events.at(-1), ['Hello']);
+    playback.setPaused(false); h.tick(10020);
+    assert.deepEqual(events.at(-1), ['Hello']);
+    h.tick(10060); assert.deepEqual(events.at(-1), []);
+    playback.stop(); await playback.done;
+    assert.equal(h.pending(), 0);
+  } finally { h.restore(); }
+});
 
 test("intro click skips the current subtitle but preserves the following scene", async () => {
   const h = introHarness();
@@ -702,4 +727,127 @@ test("loading or cancelling the next room leaves the current canvas intact", asy
     assert.equal(beforeCancel, 0, "resizing clears the old scene before new assets are ready");
     assert.equal(resized, 0); assert.equal(h.pending(), 0);
   } finally { Object.assign(globalThis, original); h.restore(); }
+});
+
+test('pausing freezes movement, ambient animation, script waits and input without a resume time jump', async () => {
+  const h = introHarness(), original = { Image: globalThis.Image, fetch: globalThis.fetch };
+  class FakeImage {
+    onload = () => {}; width = 320; height = 200;
+    set src(_: string) { queueMicrotask(() => this.onload()); }
+  }
+  Object.assign(globalThis, { Image: FakeImage, fetch: async () => ({ ok: true, json: async () => ({}) }) });
+  try {
+    const game = await startGame(h.canvas, { scene: { ...scene, meta: worldData.rooms[0] }, paused: true });
+    assert.ok(h.draws.length, 'the paused first frame is drawn before startGame resolves');
+    assert.equal(h.pending(), 0);
+    game.setTarget({ x: 40, y: 120 });
+    h.tick(20000);
+    assert.deepEqual(game.getSnapshot().pos, { x: 160, y: 120 }, 'paused input cannot move Brandon');
+    game.setPaused(false);
+    game.setTarget({ x: 40, y: 120 });
+    h.tick(20100);
+    game.setPaused(true);
+    const before = game.getSnapshot(), draws = h.draws.length;
+    h.tick(90000); game.handleClick({ x: 100, y: 165 });
+    assert.deepEqual(game.getSnapshot(), before);
+    assert.equal(h.draws.length, draws, 'a paused game does not keep rendering');
+    game.setPaused(false); h.tick(90010);
+    assert.equal(game.getSnapshot().runtime!.clockMs, before.runtime!.clockMs + 10);
+    assert.deepEqual(game.getSnapshot().pos, before.pos, 'the menu duration cannot become movement time');
+    game.runSequence([{ op: 'wait', ms: 500 }, { op: 'actor', x: 88, y: 120, facing: 5, visible: true }]);
+    h.tick(90110); game.setPaused(true);
+    assert.equal(game.getSaveSnapshot(), null, 'a transient script cannot be saved, even while paused');
+    const duringScript = game.getSnapshot();
+    h.tick(190000); assert.deepEqual(game.getSnapshot(), duringScript);
+    game.setPaused(false); h.tick(190010);
+    assert.notEqual(game.getSnapshot().pos.x, 88, 'the script wait survives the pause');
+    for (let i = 1; i <= 4; i++) h.tick(190010 + i * 100);
+    assert.equal(game.getSnapshot().pos.x, 88);
+    assert.ok(game.getSaveSnapshot());
+    const detached = game.getSnapshot(); detached.pos.x = 0; detached.runtime!.sceneAnims[0].sprite = 65000;
+    assert.equal(game.getSnapshot().pos.x, 88);
+    assert.notEqual(game.getSnapshot().runtime!.sceneAnims[0].sprite, 65000);
+    game.stop();
+  } finally { Object.assign(globalThis, original); h.restore(); }
+});
+
+test('world saves restore visited props, quest files, NPCs and inventory without replay; failed loading preserves the old game', async () => {
+  const h = introHarness(), original = { Image: globalThis.Image, fetch: globalThis.fetch, document: globalThis.document };
+  let now = 0, blockedPath = '', location = -1, sequence = false;
+  class FakeImage {
+    onload = () => {}; width = 320; height = 200;
+    set src(_: string) { queueMicrotask(() => this.onload()); }
+  }
+  function internalCanvas() {
+    const context = new Proxy({}, { get: (_, key) => key === 'createImageData' || key === 'getImageData'
+      ? (...args: number[]) => ({ data: new Uint8ClampedArray((args.length === 2 ? args[0] * args[1] : args[2] * args[3]) * 4) })
+      : key === 'measureText' ? (value: string) => ({ width: value.length * 6 }) : () => {} });
+    return { width: 320, height: 200, addEventListener() {}, removeEventListener() {}, getContext: (kind: string) => kind === '2d' ? context : null };
+  }
+  Object.assign(globalThis, { Image: FakeImage, document: { createElement: internalCanvas }, fetch: async (url: string, options?: RequestInit) => {
+    options?.signal?.throwIfAborted();
+    if (blockedPath && url.includes(blockedPath)) throw new Error('Simulated network failure');
+    return new Response(new Uint8Array(readFileSync(`public/${url.replace(/^\//, '')}`)));
+  } });
+  const tick = () => h.tick(now += 100);
+  async function until(check: () => boolean, message: string) {
+    for (let i = 0; i < 1000; i++) { await settleLoads(); tick(); if (check()) return; }
+    assert.fail(message);
+  }
+  const config = { scene: gemCutScene, world: '/assets/world/world.json', playOpening: false,
+    onLocationChange: (_: string, id?: number) => { location = id!; }, onSequenceChange: (value: boolean) => { sequence = value; } };
+  const games: Awaited<ReturnType<typeof startGame>>[] = [];
+  try {
+    const game = await startGame(h.canvas, config); games.push(game);
+    game.handleClick({ x: 248, y: 82 }); game.handleClick({ x: 100, y: 165 });
+    assert.equal(game.getSnapshot().inventorySlots[0], 'ruby');
+    game.handleClick({ x: 150, y: 50 });
+    await until(() => { if (sequence) game.handleClick({ x: 160, y: 100 }); return !sequence; }, 'tree conversation did not finish');
+    assert.equal(game.getSnapshot().treeSpoken, true);
+    game.runSequence([
+      { op: 'flag', flag: 53, value: true }, { op: 'flag', flag: 45, value: true }, { op: 'vase', item: 42 },
+      { op: 'sceneFile', room: 7, name: 'BRIDGE' }, { op: 'sceneFile', room: 13, name: 'XEDGEC' },
+      { op: 'npc', character: 2, room: 7, x: 224, y: 94, facing: 5, shape: 87, visible: false },
+      { op: 'npc', character: 1, room: 10, x: 40, y: 110, facing: 3, shape: 41, visible: false },
+    ]); tick();
+    game.setAtmosphere(false); game.setWalkSpeed('slow'); game.setAnimStepInterval(3);
+    game.runSequence([{ op: 'exit', target: 7, entry: { x: 280, y: 110 } }]);
+    await until(() => location === 7 && !sequence && !!game.getSaveState(), 'bridge did not become ready');
+    game.runSequence([{ op: 'hand', item: 'marble' }, { op: 'item', item: 'saw', x: 270, y: 115 }]); tick();
+    game.setPaused(true);
+    const saved = validateWorldSave(game.getSaveState());
+    assert.deepEqual(Object.keys(saved.rooms), ['0', '7']);
+    assert.equal(saved.rooms[0].treeSpoken, true);
+    assert.ok(!saved.rooms[0].sceneItems.some(item => item.id === 'ruby'));
+    assert.equal(saved.rooms[7].inventorySlots[0], 'ruby'); assert.equal(saved.rooms[7].itemInHand, 'marble');
+    assert.equal(saved.quest.vase, 42); assert.equal(saved.quest.files[7], 'BRIDGE'); assert.equal(saved.quest.files[13], 'XEDGEC');
+    assert.ok(saved.quest.flags.includes(45));
+    assert.deepEqual(saved.settings, { atmosphere: false, walkSpeed: 'slow', animStepInterval: 3 });
+    const detached = game.getSaveState()!; detached.quest.flags.length = 0; detached.rooms[0].sceneItems.push({ id: 'ruby', x: 0, y: 0 });
+    assert.deepEqual(game.getSaveState(), saved, 'saving returns isolated room and quest data');
+
+    const events: string[] = [], firstFrameDraws = h.draws.length;
+    const loaded = await startGame(h.canvas, { ...config, saveState: saved, paused: true,
+      onSequenceChange: active => { if (active) events.push('sequence'); }, onSubtitleChange: lines => { if (lines.length) events.push('dialogue'); } });
+    games.push(loaded);
+    assert.ok(h.draws.length > firstFrameDraws, 'the restored first frame is ready before returning');
+    assert.deepEqual(events, [], 'loading runs no opening or entry dialogue');
+    assert.deepEqual(loaded.getSaveState(), saved);
+    assert.equal(new Set(loaded.getSnapshot().runtime!.npcs.map(npc => npc.character)).size, loaded.getSnapshot().runtime!.npcs.length, 'each NPC has one draw state');
+    const oldState = game.getSaveState(), oldDraws = h.draws.length;
+    blockedPath = '/assets/forest/bridge.kyr.gz';
+    await assert.rejects(startGame(h.canvas, { ...config, saveState: saved, paused: true }), /Simulated network failure/);
+    blockedPath = '';
+    const incompatible = structuredClone(saved);
+    incompatible.rooms[7].runtime!.sceneAnims.push(structuredClone(saved.rooms[0].runtime!.sceneAnims[0]));
+    await assert.rejects(startGame(h.canvas, { ...config, saveState: incompatible, paused: true }), /room's animations/);
+    assert.deepEqual(game.getSaveState(), oldState); assert.equal(h.draws.length, oldDraws, 'failed loading leaves the paused scene intact');
+    loaded.setPaused(false);
+    loaded.runSequence([{ op: 'exit', target: 0, entry: { x: 160, y: 120 } }]);
+    await until(() => location === 0 && !!loaded.getSaveState(), 'return to the saved home did not finish');
+    assert.equal(loaded.getSnapshot().treeSpoken, true);
+    assert.ok(!loaded.getSnapshot().sceneItems.some(item => item.id === 'ruby'), 'collected props cannot respawn across a save/load and return');
+    assert.equal(loaded.getSnapshot().inventorySlots[0], 'ruby');
+    assert.equal(loaded.getSnapshot().itemInHand, 'marble');
+  } finally { for (const game of games) game.stop(); Object.assign(globalThis, original); h.restore(); }
 });

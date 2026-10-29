@@ -1,15 +1,16 @@
 import type { MeshStandardMaterial, Texture } from 'three';
 
 /** Ink is part of the parchment's lit surface, not a picture floating above it. */
-export function inscribePage(material: MeshStandardMaterial, landscape: Texture, ink: { value: number }, colour: { value: number }) {
+export function inscribePage(material: MeshStandardMaterial, landscape: Texture, ink: { value: number }, colour: { value: number }, fullFrame = false) {
+  const storyImage = { value: landscape, wholeFrame: { value: fullFrame } };
   material.onBeforeCompile = shader => {
-    Object.assign(shader.uniforms, { storyImage: { value: landscape }, ink, colour });
+    Object.assign(shader.uniforms, { storyImage, ink, colour, wholeFrame: storyImage.wholeFrame });
     shader.vertexShader = 'varying vec2 storyUV;\n' + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
       vec4 pageWorld = modelMatrix * vec4(transformed, 1.0);
       storyUV = vec2(pageWorld.x / 2.6 + .5, .5 - (pageWorld.z + .15) / 1.625);`);
     shader.fragmentShader = `
-      uniform sampler2D storyImage; uniform float ink; uniform float colour; varying vec2 storyUV;
+      uniform sampler2D storyImage; uniform float ink; uniform float colour; uniform bool wholeFrame; varying vec2 storyUV;
       float inkNoise(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float valueAt(vec2 p) { return dot(texture2D(storyImage, p).rgb, vec3(.2126, .7152, .0722)); }
     ` + shader.fragmentShader;
@@ -24,7 +25,7 @@ export function inscribePage(material: MeshStandardMaterial, landscape: Texture,
       float contour = smoothstep(.075, .32, length(vec2(gx,gy)));
       float hatch = (1.0-smoothstep(.035,.13,abs(fract((uv.x+uv.y*.7)*180.0)-.5))) * clamp((.25-grey)*3.0,0.0,.28);
       // Irregular margins let the paper show through; the original letterbox isn't ink.
-      float edge = min(min(storyUV.x, 1.0-storyUV.x), min(storyUV.y-.12, .96-storyUV.y));
+      float edge = min(min(storyUV.x, 1.0-storyUV.x), min(storyUV.y-(wholeFrame ? .02 : .12), (wholeFrame ? .98 : .96)-storyUV.y));
       float feather = smoothstep(.015, .07, edge + (inkNoise(floor(uv*160.0))-.5)*.02);
       float arrival = uv.x*.48 + (1.0-uv.y)*.34 + inkNoise(floor(uv*vec2(90.0,60.0)))*.12;
       float drawn = smoothstep(arrival, arrival+.06, ink);
@@ -37,6 +38,7 @@ export function inscribePage(material: MeshStandardMaterial, landscape: Texture,
       totalEmissiveRadiance += vec3(1.7,.72,.17) * drawingTip;`);
   };
   material.customProgramCacheKey = () => 'storybook-ink-v1';
+  return storyImage;
 }
 
 export const storybookFilm = {
