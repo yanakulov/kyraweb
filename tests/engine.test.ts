@@ -615,3 +615,77 @@ test("game walking advances equally at different display rates and retargets wit
   assert.deepEqual(await simulate(60), await simulate(144));
   assert.deepEqual((await simulate(60)).endpoint, { x: 40, y: 80 });
 });
+
+test("repeated movement clicks preserve pace and inventory cancels a pending exit", async () => {
+  const h = introHarness(), original = { Image: globalThis.Image, fetch: globalThis.fetch };
+  class FakeImage {
+    onload = () => {}; width = 320; height = 200;
+    set src(_: string) { queueMicrotask(() => this.onload()); }
+  }
+  Object.assign(globalThis, { Image: FakeImage, fetch: async () => ({ ok: true, json: async () => ({}) }) });
+  try {
+    const positions: Vec2[] = [];
+    for (const repeated of [false, true]) {
+      const game = await startGame(h.canvas, { scene });
+      const start = performance.now();
+      game.setTarget({ x: 40, y: 120 });
+      for (let i = 1; i <= 60; i++) {
+        if (repeated && !game.handleClick({ x: 40, y: 120 })) game.setTarget({ x: 40, y: 120 });
+        h.tick(start + i * 1000 / 60);
+      }
+      positions.push(game.getSnapshot().pos); game.stop();
+    }
+    assert.deepEqual(positions[1], positions[0], "clicking every frame must not accelerate Brandon");
+    let exits = 0;
+    const portal = { id: 'east', side: 'east' as const, target: 1, point: { x: 168, y: 120 }, rect: { x: 300, y: 8, w: 20, h: 128 } };
+    const game = await startGame(h.canvas, { scene, portals: [portal], onExit: () => exits++ });
+    const start = performance.now();
+    game.handleClick({ x: 310, y: 120 }); h.tick(start + 1);
+    assert.equal(game.getSnapshot().pos.x, 164);
+    game.handleClick({ x: 100, y: 165 }); h.tick(start + 2);
+    assert.equal(exits, 0, "an inventory click cancels the exit even one step from its point");
+    game.stop();
+  } finally { Object.assign(globalThis, original); h.restore(); }
+});
+
+test("the original falling leaf has the same entry animation at 30, 60 and 144 Hz", async () => {
+  const forest = JSON.parse(gunzipSync(readFileSync('public/assets/forest/forest.json.gz')).toString());
+  const poses: unknown[][] = [];
+  for (const hz of [30, 60, 144]) {
+    const h = introHarness(), original = { Image: globalThis.Image, fetch: globalThis.fetch };
+    class FakeImage {
+      onload = () => {}; width = 320; height = 200; source = '';
+      set src(value: string) { this.source = value; queueMicrotask(() => this.onload()); }
+    }
+    Object.assign(globalThis, { Image: FakeImage, fetch: async () => ({ ok: true, json: async () => ({}) }) });
+    try {
+      const game = await startGame(h.canvas, { scene: { ...scene, meta: forest.rooms.FORESTA }, entryActions: [{ op: 'ambientRun', index: 0 }] });
+      for (let i = 1; i <= hz * 4; i++) h.tick(i * 1000 / hz);
+      const leaf = h.draws.filter(a => (a[0] as FakeImage).source === 'background' && a.length === 9).at(-1);
+      assert.ok(leaf); poses.push(leaf.slice(1)); game.stop();
+    } finally { Object.assign(globalThis, original); h.restore(); }
+  }
+  assert.deepEqual(poses[0], poses[1]); assert.deepEqual(poses[1], poses[2]);
+});
+
+test("loading or cancelling the next room leaves the current canvas intact", async () => {
+  const h = introHarness(), original = { Image: globalThis.Image, fetch: globalThis.fetch };
+  let resized = 0;
+  Object.defineProperties(h.canvas, { width: { set: () => resized++ }, height: { set: () => resized++ } });
+  const images: { onload: () => void }[] = [];
+  class FakeImage {
+    onload = () => {};
+    set src(_: string) { images.push(this); }
+  }
+  Object.assign(globalThis, { Image: FakeImage, fetch: async () => ({ ok: true, json: async () => ({}) }) });
+  try {
+    const controller = new AbortController();
+    const loading = startGame(h.canvas, { scene, signal: controller.signal });
+    await settleLoads();
+    const beforeCancel = resized;
+    controller.abort(); images.forEach(image => image.onload());
+    await assert.rejects(loading, { name: 'AbortError' });
+    assert.equal(beforeCancel, 0, "resizing clears the old scene before new assets are ready");
+    assert.equal(resized, 0); assert.equal(h.pending(), 0);
+  } finally { Object.assign(globalThis, original); h.restore(); }
+});
