@@ -1,12 +1,13 @@
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
-// Open, let the engraving read, restore its colour, then enter the picture.
+// Open onto bare paper, trace the landscape in ink, wash in colour, then enter it.
 export function bookTransition(ms: number) {
   return {
     hinge: smooth(ms / 2200),
-    colour: smooth((ms - 2900) / 1400),
-    zoom: smooth((ms - 4600) / 2400),
-    done: ms >= 7000,
+    ink: smooth((ms - 1800) / 2400),
+    colour: smooth((ms - 4500) / 1700),
+    zoom: smooth((ms - 6500) / 2400),
+    done: ms >= 8900,
   };
 }
 

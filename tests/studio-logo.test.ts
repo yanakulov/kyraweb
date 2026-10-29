@@ -5,18 +5,34 @@ import { studioLogoFrame, drawStudioLogo } from '../src/engine/intro/studioLogo'
 import { WESTWOOD_RLE, WESTWOOD_TOTAL_MS } from '../src/engine/intro/introTiming';
 import { playIntro } from '../src/engine/intro/player';
 import { bookTransition, pageCameraDistance } from '../src/components/bookTransition';
+import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 
-test('the book opens before its picture colours and zooms into the game viewport', () => {
-  assert.deepEqual(bookTransition(0), { hinge: 0, colour: 0, zoom: 0, done: false });
-  assert.deepEqual(bookTransition(2600), { hinge: 1, colour: 0, zoom: 0, done: false });
-  assert.deepEqual(bookTransition(4500), { hinge: 1, colour: 1, zoom: 0, done: false });
-  assert.deepEqual(bookTransition(7000), { hinge: 1, colour: 1, zoom: 1, done: true });
+test('the page starts blank, draws in ink before colour, then zooms into the game viewport', () => {
+  assert.deepEqual(bookTransition(0), { hinge: 0, ink: 0, colour: 0, zoom: 0, done: false });
+  assert.equal(bookTransition(1800).ink, 0);
+  assert.ok(bookTransition(3000).ink > 0 && bookTransition(3000).ink < 1);
+  assert.deepEqual(bookTransition(4400), { hinge: 1, ink: 1, colour: 0, zoom: 0, done: false });
+  assert.deepEqual(bookTransition(6400), { hinge: 1, ink: 1, colour: 1, zoom: 0, done: false });
+  assert.deepEqual(bookTransition(8900), { hinge: 1, ink: 1, colour: 1, zoom: 1, done: true });
   for (const [width, height] of [[1280, 720], [390, 844], [320, 700]]) {
     const gameHeight = Math.min(width - 8, 1280, (height - 8) * 1.6) / 1.6;
     const distance = pageCameraDistance(height, gameHeight, 35);
     const projectedHeight = 1.625 / (2 * distance * Math.tan(35 * Math.PI / 360)) * height;
     assert.ok(Math.abs(projectedHeight - gameHeight) < .001, 'the last 3D frame matches the 2D game rectangle');
   }
+});
+
+test('the binding stays on the book instead of rotating into a fin above the open page', () => {
+  const bytes = gunzipSync(readFileSync('public/assets/interface/storybook.glb.gz'));
+  const gltf = JSON.parse(bytes.subarray(20, 20+bytes.readUInt32LE(12)).toString());
+  const hinge = gltf.nodes.find((node: { name: string }) => node.name === 'CoverHinge');
+  const moving = new Set<number>();
+  const visit = (index: number) => { moving.add(index); for (const child of gltf.nodes[index].children ?? []) visit(child); };
+  for (const child of hinge.children) visit(child);
+  const binding = gltf.nodes.map((node: { name: string }, index: number) => ({ node, index })).filter(({ node }: { node: { name: string } }) => /Rounded leather spine|Raised spine band/.test(node.name));
+  assert.equal(binding.length, 5);
+  for (const { node, index } of binding) assert.equal(moving.has(index), false, `${node.name} must not rotate with the cover`);
 });
 
 test('AkulaFlow follows Westwood inside the intro and uses the original reveal clock', () => {

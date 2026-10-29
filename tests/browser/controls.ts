@@ -17,7 +17,14 @@ async function advance(ms: number) {
   }
 }
 document.querySelector('#second')!.addEventListener('click', () => void advance(1000));
+document.querySelector('#half')!.addEventListener('click', () => void advance(500));
 document.querySelector('#minute')!.addEventListener('click', () => void advance(60000));
+// Hide the clock for clean captures without changing the rendered application.
+document.addEventListener('keydown', event => {
+  if (event.key.toLowerCase() !== 'h' || (event.target as HTMLElement).matches('input, select, textarea')) return;
+  const controls = document.querySelector('aside')!;
+  controls.hidden = !controls.hidden;
+});
 createApp(App).mount('#app');
 const verify = document.createElement('button');
 verify.textContent = 'Verify swipe cursor';
