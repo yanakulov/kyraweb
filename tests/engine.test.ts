@@ -1,5 +1,6 @@
 import test from "node:test";
 import './forest.test';
+import './studio-logo.test';
 import assert from "node:assert/strict";
 import { playIntro, frameAtTime } from "../src/engine/intro/player";
 import { buildIntroSteps } from "../src/engine/intro/steps";
@@ -301,14 +302,27 @@ test("intro click skips the current subtitle but preserves the following scene",
 test("intro masks sprite overflow from row 136, while full-screen logos remain uncovered", async () => {
   const h = introHarness();
   try {
-    for (const id of ["kallak_writing", "kallak_malcolm", "tree_anim_1", "westwood", "shore_anim"]) {
+    for (const id of ["kallak_writing", "kallak_malcolm", "tree_anim_1", "westwood", "akulaflow", "shore_anim"]) {
       h.rectangles.length = 0;
       const playback = playIntro(h.canvas, [{ id, durationMs: 1000 }]);
       await settleLoads(); h.tick(30); await settleLoads();
       const mask = h.rectangles.filter(r => r[1] !== 0);
-      assert.deepEqual(mask, ["westwood", "shore_anim"].includes(id) ? [] : [[0, 136, 320, 64]], id);
+      assert.deepEqual(mask, ["westwood", "akulaflow", "shore_anim"].includes(id) ? [] : [[0, 136, 320, 64]], id);
       playback.stop(); await playback.done;
     }
+  } finally { h.restore(); }
+});
+
+test("clicking the AkulaFlow logo advances to the story without skipping the cutscene", async () => {
+  const h = introHarness();
+  try {
+    const visited: string[] = [];
+    const playback = playIntro(h.canvas, [{ id: 'akulaflow', durationMs: 12476 }, { id: 'story', durationMs: 500 }], { onStepChange: id => visited.push(id) });
+    await settleLoads(); h.tick(30); await settleLoads();
+    playback.skipLine(); h.tick(31); await settleLoads();
+    assert.deepEqual(visited, ['akulaflow', 'story']);
+    assert.equal(h.pending(), 1);
+    playback.stop(); await playback.done;
   } finally { h.restore(); }
 });
 
