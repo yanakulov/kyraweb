@@ -80,14 +80,17 @@ export class RoomScript {
   private index = 0;
   private wait = 0;
   private voice = 0;
-  private waitingForVoice = false;
   private clearAfterWait = false;
   private cancelled = false;
+  private lineActive = false;
+  private skipTalkAnimation = false;
   /** Dismiss only the current line; movement, movies and choices still complete. */
   skipLine() {
-    if (this.cancelled || this.awaiting || this.voice <= 0) return false;
+    if (this.cancelled || this.awaiting || !this.lineActive) return false;
     this.voice = 0;
-    if (this.waitingForVoice) this.wait = 0;
+    this.skipTalkAnimation = !this.clearAfterWait;
+    this.wait = 0;
+    this.lineActive = false;
     this.clearAfterWait = false;
     this.host.apply({ op: "clearText" });
     return true;
@@ -161,8 +164,8 @@ export class RoomScript {
       budget -= used;
       this.voice = Math.max(0, this.voice - used);
       if (this.wait > 1e-6) return;
-      this.waitingForVoice = false;
       if (this.clearAfterWait) {
+        this.lineActive = false;
         this.host.apply({ op: "clearText" });
         this.clearAfterWait = false;
       }
@@ -171,7 +174,6 @@ export class RoomScript {
       // customPrintTalkString waits for the previous CD voice before replacing it.
       if (action.op === "say" && this.voice > 0) {
         this.wait = this.voice;
-        this.waitingForVoice = true;
         continue;
       }
       this.index++;
@@ -186,17 +188,19 @@ export class RoomScript {
         this.host.apply(action);
         return;
       }
-      if (action.op === "waitVoice") { this.wait = this.voice; this.waitingForVoice = true; }
-      else if (action.op === "wait") this.wait = action.ms * (action.movement ? (this.host.movementTempo?.() ?? 1) : 1);
+      if (action.op === "waitVoice") { this.wait = this.voice; }
+      else if (action.op === "wait") this.wait = this.skipTalkAnimation && !action.movement ? 0 : action.ms * (action.movement ? (this.host.movementTempo?.() ?? 1) : 1);
       else {
         this.host.apply(action);
         if (action.op === "frame" || action.op === "palette")
-          this.wait = action.ms;
+          this.wait = action.op === 'frame' && this.skipTalkAnimation ? 0 : action.ms;
+        if (action.op === 'clearText') { this.lineActive = false; this.skipTalkAnimation = false; }
         if (action.op === "say") {
+          this.lineActive = true;
+          this.skipTalkAnimation = false;
           this.voice = action.ms;
           if (action.blocking) {
             this.wait = action.ms;
-            this.waitingForVoice = true;
             this.clearAfterWait = true;
           }
         }

@@ -106,6 +106,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const questShapes: {shape:number;x:number;y:number;flags:number}[] = [];
     const noDropRegions: {x:number;y:number;w:number;h:number}[] = [];
     const npcs = new Map<number,Extract<RoomAction,{op:'npc'}>>();
+    const heldNpcPoses = new Map<number,Extract<RoomAction,{op:'npc'}>>();
     let speaker = 0;
     let hasAmulet=config.amulet??false;
     let dead=false;
@@ -264,7 +265,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       // Composite them behind Brandon while he approaches the speaking tree.
       for (const [name, layer] of scriptLayers) if (name === "face" || name === "face2") ctx.drawImage(layer.image, layer.x, layer.y);
 
-      const drawNpcs = (front: boolean) => { for (const npc of [...npcs.values()].sort((a,b)=>a.y-b.y)) { if ((npc.y > state.pos.y) !== front || npc.shape === 88 || !npc.visible || npc.character===2&&(scriptLayers.has("advice")||scriptLayers.has("balance2"))) continue;
+      const drawNpcs = (front: boolean) => { for (const npc of [...npcs.values()].map(n=>heldNpcPoses.get(n.character)??n).sort((a,b)=>a.y-b.y)) { if ((npc.y > state.pos.y) !== front || npc.shape === 88 || !npc.visible || (npc.character===2 ? ['needsaw1','advice','balance2'] : ['tag','tag-0']).some(name=>scriptLayers.has(name))) continue;
         const scale=actorScaleAt(npc.y,scene.actorScale);
         const drawNpc=(shape:number,x:number,y:number,flip:boolean)=>{
           const animation=scriptRenderers.get(`npc-${shape}`),def=config.npcFrames?.[shape];
@@ -323,7 +324,6 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         ctx.drawImage(br, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
       }
 
-      drawNpcs(true);
       let actorLayer = 1;
       if (backgroundName === "room" && mask) {
         actorLayer = resolveActorLayer(state.pos, drawLayerTable, mask);
@@ -346,8 +346,13 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           foregroundContext.globalCompositeOperation = 'source-over';
           foregroundFrames.set(actorLayer, fg);
         }
-        if (fg) ctx.drawImage(fg, 0, 0);
+        if (fg && actorVisible) {
+          // A character's background restoration belongs only to its own rectangle.
+          ctx.save(); ctx.beginPath(); ctx.rect(drawX, drawY, drawW, drawH); ctx.clip();
+          ctx.drawImage(fg, 0, 0); ctx.restore();
+        }
       }
+      drawNpcs(true);
       if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
       for (const [name, layer] of scriptLayers) if (name !== "face" && name !== "face2") ctx.drawImage(layer.image, layer.x, layer.y);
 
@@ -634,9 +639,15 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         case 'confirm':config.onContinueChange?.(true);break;
         case 'walkDelay':state.walkDelayTicks=Math.max(1,action.ticks);break;
         case 'npc':
+          // Deactivating an original animator does not erase its already drawn pose.
+          // Keep it until the replacement movie draws, avoiding a blank dialogue gap.
+          if(!action.visible && action.room===-1 && [51,87].includes(action.shape)) {
+            const previous=npcs.get(action.character);
+            if(previous?.visible)heldNpcPoses.set(action.character,previous);
+          } else heldNpcPoses.delete(action.character);
           npcs.set(action.character,action);
           // Refreshing Herman transfers drawing from the WSA to the walking actor.
-          if(action.character===2 && action.visible && action.shape!==88)scriptLayers.delete('advice');
+          if(action.visible && action.shape!==88)for(const name of action.character===2?['needsaw1','advice','balance2']:['tag','tag-0'])scriptLayers.delete(name);
           break;
         case 'hand':state.itemInHand=action.item;break;
         case 'item':state.sceneItems.push({id:action.item,x:action.x,y:action.y});break;
@@ -672,17 +683,22 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         }
         case "face": face(action.facing); actorShape = action.shape < 0 ? null : action.shape;if(action.shape===88)actorVisible=false;break;
         case "frame": {
+          if(['needsaw1','advice','balance2'].includes(action.clip))heldNpcPoses.delete(2);
+          if(['tag','tag-0'].includes(action.clip))heldNpcPoses.delete(1);
+          if(action.clip==='tag')scriptLayers.delete('tag-0');
           const animation = scriptRenderers.get(action.clip);
           if (!animation) throw new Error(`Missing script animation ${action.clip}`);
           const pixels=animation.clip.frame(action.index);
           if(action.permanent || action.clip === 'face' || action.clip === 'face2') foregroundFrames.clear();
-          if(action.permanent)permanentLayers.set(action.clip,{image:buildIndexedCanvas(animation.clip.info,pixels),x:action.x,y:action.y});
+          if(action.permanent){scriptLayers.delete(action.clip);permanentLayers.set(action.clip,{image:buildIndexedCanvas(animation.clip.info,pixels),x:action.x,y:action.y});}
           else {scriptLayers.delete(action.clip);scriptLayers.set(action.clip, { image: animation.renderer.render(pixels), x: action.x, y: action.y });}
           if (["brantree", "touch", "brynn1", "brynn2", "brynn3", "raindrop", "wow", "tag", "agile", "balance2"].includes(action.clip)) actorVisible = false;
           break;
         }
         case "close":
-          scriptLayers.delete(action.clip);
+          // Closing the movie releases its decoder, not its last screen pixels.
+          // TAG-0 is the resting boy while Brandon walks to the next TAG movie.
+          if(action.clip!=='tag-0')scriptLayers.delete(action.clip);
           if(action.clip === 'face' || action.clip === 'face2') foregroundFrames.clear();
           if (["brantree", "touch", "brynn1", "brynn2", "brynn3", "raindrop", "wow", "tag", "agile", "balance2"].includes(action.clip)) actorVisible = true;
           break;
@@ -719,6 +735,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     if (config.entry) face(config.entry.facing);
     for(const action of config.setupActions??[])applyScript(action);
+    for(const anim of sceneAnims)anim.visible=anim.play;
 
     if (openingScript && config.playOpening !== false) playScript(openingScript.opening);
     else if (config.entryActions?.length) playScript(config.entryActions);
