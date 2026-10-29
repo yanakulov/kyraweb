@@ -1,42 +1,44 @@
 <template>
   <section class="fantasy-book" :class="{ 'is-opening': opening }" aria-label="Fables and Fiends, Book One">
     <div ref="host" class="book-table" @pointermove="move" @pointerleave="rest" @click="openBook">
-      <img v-if="fallback" class="book-fallback" :src="`${base}assets/interface/book-cover.webp`" alt="A leather-bound copy of The Legend of Kyrandia" />
+      <img v-if="fallback" class="book-fallback" :src="`${base}assets/interface/book-cover.webp`" alt="The original Kyrandia cover embossed into leather" />
       <span v-if="!ready && !fallback" class="book-loading" role="status">Preparing your story…</span>
-      <div class="page-light" aria-hidden="true"></div>
     </div>
+    <div ref="letterbox" class="book-letterbox" aria-hidden="true"></div>
     <div class="book-invitation">
-      <p>A forgotten kingdom. A legend waiting to be told.</p>
-      <button class="pixel-button book-open" type="button" :disabled="opening" @click="openBook">
-        {{ opening ? 'The story begins…' : 'Open the book' }}
-      </button>
-      <span>Book I · The Legend of Kyrandia</span>
+      <button class="pixel-button book-open" type="button" :disabled="opening || (!ready && !fallback)" @click="openBook">Open the book</button>
     </div>
+    <p v-if="opening" class="sr-only" role="status">The story begins…</p>
   </section>
 </template>
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import * as T from 'three';
-import type * as Three from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { bookTransition, pageCameraDistance } from './bookTransition';
 
 const emit = defineEmits<{ open: [] }>();
 const base = import.meta.env.BASE_URL;
-const host = ref<HTMLDivElement | null>(null);
+const host = ref<HTMLDivElement | null>(null), letterbox = ref<HTMLDivElement | null>(null);
 const opening = ref(false), ready = ref(false), fallback = ref(false);
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-let disposed = false, frame = 0, started = 0;
-let renderer: Three.WebGLRenderer | undefined, scene: Three.Scene | undefined;
-let camera: Three.PerspectiveCamera, cover: Three.Group;
-let observer: ResizeObserver | undefined;
-let pointerX = 0, pointerY = 0, viewX = 0, viewY = 0;
-const textures: Three.Texture[] = [];
+let disposed = false, frame = 0, started = 0, entered = false;
+let renderer: T.WebGLRenderer | undefined, scene: T.Scene | undefined;
+let camera: T.PerspectiveCamera, cover: T.Object3D;
+let observer: ResizeObserver | undefined, environment: T.WebGLRenderTarget | undefined;
+let pointerX = 0, pointerY = 0, viewX = 0, viewY = 0, width = 1, height = 1, gameHeight = 1;
+const textures = new Set<T.Texture>();
+const assets = new AbortController();
+const colour = { value: 0 };
+const pageCentre = new T.Vector3(0, .386, -.15);
 
+function enterGame() { if (!entered) { entered = true; emit('open'); } }
 function openBook() {
-  if (opening.value) return;
-  opening.value = true;
-  started = performance.now();
-  if (reduced || !ready.value || fallback.value) { emit('open'); return; }
+  if (opening.value || (!ready.value && !fallback.value)) return;
+  opening.value = true; started = performance.now();
+  if (reduced || fallback.value) { enterGame(); return; }
   schedule();
 }
 function move(event: PointerEvent) {
@@ -51,138 +53,129 @@ function schedule() { if (!disposed && ready.value && !frame) frame = requestAni
 function draw(now: number) {
   frame = 0;
   if (disposed || !renderer || !scene) return;
-  viewX += (pointerX - viewX) * .12;
-  viewY += (pointerY - viewY) * .12;
-  const progress = opening.value ? Math.min(1, (now - started) / 1450) : 0;
-  const ease = 1 - Math.pow(1 - progress, 3);
-  cover.rotation.z = ease * 2.9;
-  camera.position.set(viewX * .45 - ease * .7, 7.1 - viewY * .3 - ease * 1.2, 5.7 - ease * .8);
-  camera.lookAt(-ease * .45, 0, .1);
+  viewX += (pointerX - viewX) * .12; viewY += (pointerY - viewY) * .12;
+  const t = bookTransition(opening.value ? now - started : 0);
+  cover.rotation.z = t.hinge * Math.PI;
+  colour.value = t.colour;
+  // Portrait framing pulls back as the cover opens, keeping the whole spread in view.
+  const fit = Math.max(1, (3.7 + t.hinge * 2.8) / (width / height * 5.4)) * (1 + .53 * Math.sin(t.hinge * Math.PI));
+  const focusX = -t.hinge * (width / height < .85 ? 1.55 : 1.25);
+  const from = new T.Vector3(focusX + viewX * .28, (7.8 - viewY * .2) * fit, 5.7 * fit);
+  const end = new T.Vector3(0, pageCentre.y + pageCameraDistance(height, gameHeight, camera.fov), pageCentre.z + .00001);
+  camera.position.lerpVectors(from, end, t.zoom);
+  camera.up.set(0, 1 - t.zoom, -t.zoom).normalize();
+  camera.lookAt(new T.Vector3(focusX, .1, 0).lerp(pageCentre, t.zoom));
+  if (letterbox.value) letterbox.value.style.opacity = String(Math.max(0, (t.zoom - .72) / .28));
   renderer.render(scene, camera);
-  if (progress === 1) { emit('open'); return; }
+  if (t.done) { enterGame(); return; }
   if (opening.value || Math.abs(viewX - pointerX) + Math.abs(viewY - pointerY) > .002) schedule();
 }
 
 onMounted(async () => {
   try {
-    if (disposed || !host.value) return;
-    renderer = new T.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = T.PCFShadowMap;
+    if (!host.value) return;
+    renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'low-power' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFShadowMap;
     renderer.outputColorSpace = T.SRGBColorSpace;
-    renderer.toneMapping = T.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25;
     renderer.domElement.setAttribute('aria-hidden', 'true');
     host.value.prepend(renderer.domElement);
-    scene = new T.Scene();
-    camera = new T.PerspectiveCamera(36, 1, .1, 50);
-    const loader = new T.TextureLoader();
-    const load = async (name: string) => {
-      const texture = await loader.loadAsync(`${base}assets/interface/${name}.webp`);
-      if (disposed) { texture.dispose(); return texture; }
-      texture.colorSpace = T.SRGBColorSpace;
-      texture.magFilter = T.NearestFilter;
-      texture.minFilter = T.LinearMipmapLinearFilter;
-      textures.push(texture);
-      return texture;
-    };
-    const [art, wood, title] = await Promise.all([load('book-cover'), load('desk'), load('kyrandia-title')]);
-    if (disposed) return;
-    wood.wrapS = wood.wrapT = T.RepeatWrapping;
-    wood.repeat.set(2, 2);
-    const leather = new T.MeshStandardMaterial({ color: 0x342117, roughness: .84 });
-    const brass = new T.MeshStandardMaterial({ color: 0xb28a43, roughness: .48, metalness: .72 });
-    const paper = new T.MeshStandardMaterial({ color: 0xd2bb83, roughness: .95 });
-    const book = new T.Group(); book.rotation.y = -.11; scene.add(book);
-    const box = (parent: Three.Object3D, width: number, height: number, depth: number, material: Three.Material, x: number, y: number, z: number) => {
-      const mesh = new T.Mesh(new T.BoxGeometry(width, height, depth), material);
-      mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh;
-    };
-    const desk = new T.Mesh(new T.PlaneGeometry(30, 30), new T.MeshStandardMaterial({ map: wood, color: 0x9a7454, roughness: .92 }));
-    desk.rotation.x = -Math.PI / 2; desk.position.y = -.19; desk.receiveShadow = true; scene.add(desk);
-    box(book, 2.7, .1, 3.9, leather, 0, -.12, 0);
-    box(book, 2.52, .34, 3.73, paper, .02, .10, 0);
-    const titlePage = new T.Mesh(new T.PlaneGeometry(2.1, .525), new T.MeshStandardMaterial({ map: title, transparent: true, roughness: 1, color: 0x9f764c }));
-    titlePage.rotation.x = -Math.PI / 2; titlePage.position.set(.02, .275, -.45); titlePage.receiveShadow = true; book.add(titlePage);
-    // Individual page edges give the volume a real silhouette without a heavy model.
-    for (let i = 0; i < 16; i++) box(book, 2.54, .006, 3.74, paper, .02, -.06 + i * .022, 0);
-    box(book, .15, .46, 3.9, leather, -1.31, .08, 0);
-    for (const z of [-1.4, -.75, .75, 1.4]) box(book, .18, .48, .07, brass, -1.32, .08, z);
-    cover = new T.Group(); cover.position.set(-1.35, .32, 0); book.add(cover);
-    box(cover, 2.7, .1, 3.9, leather, 1.35, 0, 0);
-    const coverArt = new T.Mesh(new T.PlaneGeometry(2.7, 3.9), new T.MeshStandardMaterial({ map: art, roughness: .77, metalness: .08 }));
-    coverArt.rotation.x = -Math.PI / 2; coverArt.position.set(1.35, .052, 0); coverArt.receiveShadow = true; cover.add(coverArt);
-    for (const x of [.05, 2.65]) for (const z of [-1.90, 1.90]) {
-      const inwardX = x < 1 ? 1 : -1, inwardZ = z < 0 ? 1 : -1;
-      box(cover, .24, .035, .055, brass, x + inwardX * .09, .065, z);
-      box(cover, .055, .035, .24, brass, x, .065, z + inwardZ * .09);
-    }
-    box(book, .13, .02, .75, new T.MeshStandardMaterial({ color: 0x65293c, roughness: .95 }), .72, -.03, 2.1);
-    const gemMaterial = new T.MeshStandardMaterial({ color: 0x0d8c76, emissive: 0x07382c, emissiveIntensity: .5, metalness: .3, roughness: .18 });
-    const gem = new T.Mesh(new T.OctahedronGeometry(.18), gemMaterial);
-    gem.position.set(2.35, -.02, .95); gem.rotation.set(.3, .5, .6); scene.add(gem);
-    const smallGem = new T.Mesh(new T.OctahedronGeometry(.11), new T.MeshStandardMaterial({ color: 0x695183, metalness: .3, roughness: .25 }));
-    smallGem.position.set(2.65, -.08, 1.2); scene.add(smallGem);
-    const candle = new T.Group(); candle.position.set(-2.55, -.16, -1.0); scene.add(candle);
-    const candleBrass = new T.MeshStandardMaterial({ color: 0x62482c, roughness: .72, metalness: .5 });
-    const wax = new T.MeshStandardMaterial({ color: 0xb8a77b, roughness: 1 });
-    for (const [radius, height, y] of [[.31, .07, .04], [.07, .43, .28], [.22, .06, .53], [.13, .52, .82]]) {
-      const mesh = new T.Mesh(new T.CylinderGeometry(radius, radius, height, 12), y > .6 ? wax : candleBrass);
-      mesh.position.y = y; mesh.castShadow = true; candle.add(mesh);
-    }
-    const flame = new T.Mesh(new T.OctahedronGeometry(.09), new T.MeshBasicMaterial({ color: 0xffd58a }));
-    flame.position.y = 1.16; flame.scale.set(.65, 1.8, .65); candle.add(flame);
-    scene.add(new T.HemisphereLight(0xc4d1bd, 0x2c160d, 2));
-    const key = new T.DirectionalLight(0xffd4a1, 3.2); key.position.set(-3, 6, 4); key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024); key.shadow.camera.left = -6; key.shadow.camera.right = 6; key.shadow.camera.top = 6; key.shadow.camera.bottom = -6; key.shadow.normalBias = .025; scene.add(key);
-    const candleLight = new T.PointLight(0xffa144, 7, 8, 2); candleLight.position.set(-2.55, 1.1, -1); scene.add(candleLight);
-    const moon = new T.PointLight(0x5b9c9c, 10, 9, 2); moon.position.set(3, 3, -3); scene.add(moon);
+    scene = new T.Scene(); scene.background = new T.Color(0x1b130c);
+    camera = new T.PerspectiveCamera(35, 1, .05, 100);
+    const [modelResult, landscapeResult] = await Promise.allSettled([
+      (async () => {
+        const response = await fetch(`${base}assets/interface/storybook.glb.gz`, { signal: assets.signal });
+        if (!response.ok) throw new Error(`Book model could not load (${response.status})`);
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        // GitHub serves the packed file; proxies may already have decompressed it.
+        const buffer = bytes[0] === 0x1f && bytes[1] === 0x8b
+          ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()
+          : bytes.buffer;
+        return new GLTFLoader().parseAsync(buffer, '');
+      })(),
+      new T.TextureLoader().loadAsync(`${base}assets/intro/logo_bg.png`),
+    ]);
+    // Own successful loads even if their sibling fails or the book was unmounted.
+    if (landscapeResult.status === 'fulfilled') textures.add(landscapeResult.value);
+    if (modelResult.status === 'fulfilled') scene.add(modelResult.value.scene);
+    scene.traverse(object => {
+      if (!(object instanceof T.Mesh)) return;
+      object.castShadow = true; object.receiveShadow = true;
+      for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+        for (const value of Object.values(material)) if (value instanceof T.Texture) { textures.add(value); value.anisotropy = 8; }
+      }
+    });
+    if (disposed) { release(); return; }
+    if (modelResult.status === 'rejected') throw modelResult.reason;
+    if (landscapeResult.status === 'rejected') throw landscapeResult.reason;
+    const model = modelResult.value, landscape = landscapeResult.value;
+    const hinge = model.scene.getObjectByName('CoverHinge');
+    if (!hinge) throw new Error('The Blender book is missing its cover hinge');
+    cover = hinge;
+    landscape.colorSpace = T.SRGBColorSpace;
+    landscape.magFilter = T.NearestFilter; landscape.minFilter = T.NearestFilter;
+    const picture = new T.Mesh(new T.PlaneGeometry(2.6, 1.625), new T.ShaderMaterial({
+      uniforms: { picture: { value: landscape }, colour },
+      vertexShader: 'varying vec2 pageUV; void main() { pageUV = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `uniform sampler2D picture; uniform float colour; varying vec2 pageUV;
+        void main() { vec4 ink = texture2D(picture, pageUV); float grey = dot(ink.rgb, vec3(.2126, .7152, .0722));
+          gl_FragColor = vec4(mix(vec3(grey), ink.rgb, colour), 1.0);
+          #include <colorspace_fragment>
+        }`,
+      toneMapped: false,
+    }));
+    picture.rotation.x = -Math.PI / 2; picture.position.copy(pageCentre); scene.add(picture);
+    const pmrem = new T.PMREMGenerator(renderer), room = new RoomEnvironment();
+    environment = pmrem.fromScene(room, .04); scene.environment = environment.texture;
+    scene.environmentIntensity = .4; room.dispose(); pmrem.dispose();
+    scene.add(new T.HemisphereLight(0xc6d0bf, 0x351b10, .8));
+    const key = new T.DirectionalLight(0xffd3a0, 3.5); key.position.set(-3, 7, 5); key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048); key.shadow.camera.left = -8; key.shadow.camera.right = 8;
+    key.shadow.camera.top = 8; key.shadow.camera.bottom = -8; key.shadow.normalBias = .015; scene.add(key);
+    const candle = new T.PointLight(0xffa34c, 13, 12, 2); candle.position.set(3.6, 1.96, -1.8); scene.add(candle);
+    const moon = new T.DirectionalLight(0x94b9c3, 1.1); moon.position.set(-5, 4, -6); scene.add(moon);
+    const candlestick = model.scene.getObjectByName('CandleRoot');
     const resize = () => {
       if (!host.value || !renderer) return;
-      const { width, height } = host.value.getBoundingClientRect();
-      renderer.setSize(width, height);
-      camera.aspect = width / Math.max(1, height);
-      camera.fov = width < 600 ? 44 : 32;
-      camera.updateProjectionMatrix(); schedule();
+      ({ width, height } = host.value.getBoundingClientRect());
+      const portrait = width / height < .85;
+      candlestick?.position.set(portrait ? 1.7 : 3.6, -.14, portrait ? -3.3 : -1.8);
+      candle.position.set(portrait ? 1.7 : 3.6, 1.96, portrait ? -3.3 : -1.8);
+      gameHeight = (host.value.closest('.app')?.getBoundingClientRect().width ?? Math.min(width - 8, 1280, (height - 8) * 1.6)) / 1.6;
+      if (letterbox.value) { letterbox.value.style.width = `${gameHeight * 1.6}px`; letterbox.value.style.height = `${gameHeight}px`; }
+      renderer.setSize(width, height); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); schedule();
     };
-    ready.value = true;
-    observer = new ResizeObserver(resize); observer.observe(host.value);
+    ready.value = true; observer = new ResizeObserver(resize); observer.observe(host.value);
     resize(); schedule();
   } catch (error) {
-    if (!disposed) {
-      renderer?.dispose(); renderer?.domElement.remove();
-      fallback.value = true; console.warn('Book preview unavailable', error);
-    }
+    release();
+    if (!disposed) { fallback.value = true; console.warn('Book preview unavailable', error); }
   }
 });
 
-onBeforeUnmount(() => {
-  disposed = true; cancelAnimationFrame(frame); observer?.disconnect();
+function release() {
   scene?.traverse(object => {
-    const mesh = object as Three.Mesh;
-    mesh.geometry?.dispose();
-    if (mesh.material) for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) material.dispose();
+    if (!(object instanceof T.Mesh)) return;
+    object.geometry.dispose();
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose();
   });
-  textures.forEach(texture => texture.dispose());
-  renderer?.dispose(); renderer?.domElement.remove();
-});
+  textures.forEach(texture => texture.dispose()); textures.clear();
+  environment?.dispose(); renderer?.dispose(); renderer?.domElement.remove();
+}
+onBeforeUnmount(() => { disposed = true; assets.abort(); cancelAnimationFrame(frame); observer?.disconnect(); release(); });
 </script>
 
 <style scoped>
-.fantasy-book { position: relative; overflow: hidden; isolation: isolate; }
-.book-table { height: clamp(320px, calc(100svh - 280px), 510px); position: relative; cursor: pointer; background: #1d1610; }
-.book-table::after { content: ''; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 110px 45px #0b0b09b0; }
+.fantasy-book { position: fixed; inset: 0; z-index: 20; overflow: hidden; isolation: isolate; background: #1b130c; }
+.book-table { position: absolute; inset: 0; cursor: pointer; }
 .book-table :deep(canvas) { display: block; width: 100%; height: 100%; touch-action: pan-y; }
-.book-fallback { display: block; height: 85%; max-width: 80%; object-fit: contain; margin: 0 auto; padding-top: 25px; image-rendering: pixelated; transform: rotate(-5deg); }
+.book-fallback { position: absolute; inset: 8% 0 22%; display: block; height: 70%; max-width: 80%; object-fit: contain; margin: auto; filter: drop-shadow(0 20px 20px #000); transform: rotate(-5deg); }
 .book-loading { position: absolute; inset: 45% 0 auto; text-align: center; color: #d8bb7b; font-size: 13px; }
-.book-invitation { position: relative; z-index: 1; margin-top: -42px; padding: 0 16px 28px; text-align: center; }
-.book-invitation p { font-size: 13px; color: #e7d2a0; text-shadow: 0 2px 8px #000; margin: 0 0 18px; }
-.book-open { min-width: 240px; min-height: 58px; font-size: 16px; }
-.book-invitation > span { display: block; font-size: 10px; color: #a99c7b; margin-top: 15px; }
-.page-light { position: absolute; z-index: 2; inset: 0; background: #f9e4af; pointer-events: none; opacity: 0; }
-.is-opening .page-light { animation: into-story 1450ms ease-in forwards; }
-@keyframes into-story { 0%, 65% { opacity: 0; } 100% { opacity: 1; } }
-@media (max-width: 600px) { .book-table { height: clamp(300px, calc(100svh - 300px), 460px); } .book-invitation { margin-top: -25px; } .book-invitation p { max-width: 260px; line-height: 1.8; margin-inline: auto; font-size: 11px; } }
-@media (prefers-reduced-motion: reduce) { .is-opening .page-light { animation: none; } }
+.book-letterbox { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 0 100vmax #080a09; opacity: 0; pointer-events: none; }
+.book-invitation { position: absolute; left: 0; right: 0; bottom: max(30px, env(safe-area-inset-bottom)); text-align: center; transition: opacity 300ms; }
+.book-open { min-width: 220px; min-height: 54px; font-size: 15px; background: #252519ee; border-color: #a78849; box-shadow: 0 3px 0 #090b08, inset 0 0 0 3px #383324; }
+.is-opening .book-invitation { opacity: 0; pointer-events: none; }
+@media (max-width: 600px) { .book-invitation { bottom: max(36px, env(safe-area-inset-bottom)); } }
+@media (prefers-reduced-motion: reduce) { .book-invitation { transition: none; } }
 </style>

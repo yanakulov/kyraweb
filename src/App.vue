@@ -1,12 +1,8 @@
 <template>
   <main class="app" :class="{ 'book-is-closed': !bookOpened }" ref="appRef">
-    <header class="masthead">
-      <h1><img :src="`${baseUrl}assets/interface/kyrandia-title.webp`" alt="The Legend of Kyrandia" width="600" height="200" /></h1>
-      <div class="edition"><span>Fables &amp; Fiends</span><small>Book One · A web reimagining</small></div>
-    </header>
     <FantasyBook v-if="!bookOpened" @open="openBook" />
     <div v-show="bookOpened" class="game-frame">
-      <div class="stage">
+      <div class="stage" @keydown="handlePanelKey">
         <SubtitleOverlay
           :lines="subtitleLines"
           :scale="subtitleScale"
@@ -25,7 +21,7 @@
           @pointercancel="cancelGesture"
           :class="{ 'cursor-controlled': !introActive }"
         ></canvas>
-        <div v-if="!introActive && !gameError" class="game-cursor" :style="{ left: `${(cursor.x - cursorShape.x) / 3.2}%`, top: `${(cursor.y - cursorShape.y) / 2}%`, width: `${cursorShape.w / 3.2}%`, height: `${cursorShape.h / 2}%` }" aria-hidden="true">
+        <div v-if="!introActive && !gameError && !overlayOpen" class="game-cursor" :style="{ left: `${(cursor.x - cursorShape.x) / 3.2}%`, top: `${(cursor.y - cursorShape.y) / 2}%`, width: `${cursorShape.w / 3.2}%`, height: `${cursorShape.h / 2}%` }" aria-hidden="true">
           <img v-if="cursorExit || !heldItem" :src="`${baseUrl}assets/cursors/${cursorExit?.side ?? 'pointer'}.svg`" alt="" />
         </div>
         <button v-if="awaitingContinue" class="pixel-button continue-button" type="button" @click="game?.handleClick({ x: 160, y: 100 })">Continue</button>
@@ -55,9 +51,12 @@
           <p>{{ gameError }}</p>
           <button class="pixel-button" type="button" @click="boot">Try again</button>
         </div>
-      </div>
-    </div>
-    <section v-if="inventoryOpen && !introActive" class="touch-inventory" aria-label="Inventory">
+        <button v-if="!introActive && !gameError && !sequenceActive && !loading" class="hud-options" type="button" aria-label="Options" @click="showSettings"><span class="sr-only">Options</span></button>
+        <p class="sr-only" role="status">{{ gameHint }}</p>
+        <p v-if="loading || navigationError" class="scene-notice" role="status">{{ loading ? 'Loading…' : navigationError }}</p>
+        <div v-if="overlayOpen" class="dialog-shade" @click.self="closePanels">
+    <section v-if="inventoryOpen && !introActive" class="touch-inventory in-game-dialog" role="dialog" aria-modal="true" aria-label="Inventory" tabindex="-1">
+      <div class="panel-heading"><h2>Inventory</h2><button class="text-button" type="button" @click="closePanels">Close</button></div>
       <p aria-live="polite">{{ heldItem ? `In hand: ${itemDefinitions.get(heldItem)?.name}` : 'Choose an item, then tap where to use it.' }}</p>
       <div class="inventory-grid">
         <button v-for="(item, index) in inventorySlots" :key="index" class="inventory-slot" type="button"
@@ -65,25 +64,18 @@
           @click="useInventorySlot(index)"><span v-if="item" class="item-icon" :style="itemStyle(item)"></span></button>
       </div>
     </section>
-    <div v-if="bookOpened" class="game-toolbar">
-      <p class="game-hint" aria-live="polite">{{ gameHint }}</p>
-      <nav class="game-actions" aria-label="Game controls">
-        <button v-if="!introActive" class="text-button" type="button" :aria-expanded="inventoryOpen" @click="inventoryOpen = !inventoryOpen">{{ heldItem ? 'Item in hand' : 'Inventory' }}</button>
-        <button v-if="!introPanelVisible" class="text-button" type="button" @click="openMenu">Menu</button>
-        <button v-if="fullscreenAvailable" class="text-button" type="button" @click="toggleFullscreen">
-          {{ isFullscreen ? "Exit full screen" : "Full screen" }}
-        </button>
-        <button v-if="!introPanelVisible" class="text-button" type="button" :aria-expanded="panelOpen" aria-controls="game-settings" @click="showSettings">
-          Settings
-        </button>
-      </nav>
-    </div>
-    <section v-if="helpOpen" id="game-help" class="settings help-panel" aria-labelledby="help-title">
-      <div class="panel-heading"><h2 id="help-title">Your adventure begins</h2><button class="text-button" type="button" @click="helpOpen = false">Close</button></div>
+    <section v-if="helpOpen" id="game-help" class="settings help-panel in-game-dialog" role="dialog" aria-modal="true" aria-labelledby="help-title" tabindex="-1">
+      <div class="panel-heading"><h2 id="help-title">Your adventure begins</h2><button class="text-button" type="button" @click="closePanels">Close</button></div>
       <div class="help-columns"><p><strong>Explore</strong>Click to walk. Move the cursor to an exit to reveal its arrow.</p><p><strong>Discover</strong>Click people to talk, or objects to take them. Choose an inventory item, then click where to use it.</p><p><strong>On a touch screen</strong>Swipe to guide the cursor. Tap to interact. During dialogue, tap to skip the current line.</p></div>
     </section>
-    <section v-if="panelOpen" id="game-settings" class="settings" aria-label="Game settings">
-      <div class="panel-heading"><h2>Adventure settings</h2><button class="text-button" type="button" @click="panelOpen = false">Close</button></div>
+    <section v-if="panelOpen" id="game-settings" class="settings in-game-dialog" role="dialog" aria-modal="true" aria-label="Game settings" tabindex="-1">
+      <div class="panel-heading"><h2>Options</h2><button class="text-button" type="button" @click="closePanels">Resume</button></div>
+      <nav class="game-actions" aria-label="Game controls">
+        <button v-if="!introActive" class="text-button" type="button" @click="showInventory">Inventory</button>
+        <button class="text-button" type="button" @click="showHelp">How to play</button>
+        <button v-if="fullscreenAvailable" class="text-button" type="button" @click="toggleFullscreen">{{ isFullscreen ? 'Exit full screen' : 'Full screen' }}</button>
+        <button v-if="!introPanelVisible" class="text-button" type="button" @click="openMenu">Main menu</button>
+      </nav>
       <div class="settings-main">
         <label class="check-field"><input type="checkbox" v-model="atmosphere" /> Window dust</label>
         <label class="setting-field">
@@ -118,11 +110,14 @@
           </label>
         </div>
       </details>
-    </section>
     <footer class="credits">
       <span>Original tale © 1992 Westwood Studios</span>
       <a href="https://github.com/yanakulov/kyraweb" target="_blank" rel="noopener noreferrer">Reimagined by AkulaFlow · Yan Akulov</a>
     </footer>
+    </section>
+        </div>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -131,9 +126,11 @@ import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, r
 const FantasyBook = defineAsyncComponent(() => import('./components/FantasyBook.vue'));
 const bookOpened = ref(false);
 const helpOpen = ref(false);
-async function openBook() { bookOpened.value = true; await nextTick(); void boot(); }
-function showHelp() { helpOpen.value = !helpOpen.value; panelOpen.value = false; }
-function showSettings() { panelOpen.value = !panelOpen.value; helpOpen.value = false; }
+function openBook() { void boot(); }
+function closePanels() { helpOpen.value = panelOpen.value = inventoryOpen.value = false; }
+function showHelp() { closePanels(); helpOpen.value = true; }
+function showSettings() { closePanels(); panelOpen.value = true; }
+function showInventory() { closePanels(); inventoryOpen.value = true; }
 import { mapPointerToCanvas, startGame } from "./engine/gameplay/game";
 import { LOGICAL_WIDTH } from "./engine/core/constants";
 import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
@@ -169,6 +166,8 @@ function itemStyle(item: InventoryItemId) {
 }
 function interact(point: Vec2) {
   if (!game || loading.value || gameError.value) return;
+  // Touch aims a persistent cursor; activating the original HUD must use it too.
+  if (!sequenceActive.value && point.x >= 12.8 && point.x < 73.6 && point.y >= 154 && point.y < 198) { showSettings(); return; }
   game.setPointer(point);
   if (!game.handleClick(point)) game.setTarget(point);
   syncControls();
@@ -176,6 +175,7 @@ function interact(point: Vec2) {
 function useInventorySlot(index: number) {
   const slot = getInventorySlotPositions()[index];
   interact({ x: slot.x + 8, y: slot.y + 8 });
+  closePanels();
 }
 const appRef = ref<HTMLElement | null>(null);
 const gameError = ref("");
@@ -194,6 +194,27 @@ const animStepInterval = ref(1);
 const introActive = ref(true);
 let intro: IntroPlayback | null = null;
 const panelOpen = ref(false);
+const overlayOpen = computed(() => panelOpen.value || helpOpen.value || inventoryOpen.value);
+let panelTrigger: HTMLElement | null = null;
+watch([panelOpen, helpOpen, inventoryOpen], async () => {
+  if (overlayOpen.value) {
+    if (!panelTrigger) panelTrigger = document.activeElement as HTMLElement;
+    await nextTick();
+    appRef.value?.querySelector<HTMLElement>('[role="dialog"]')?.focus();
+  } else {
+    panelTrigger?.focus(); panelTrigger = null;
+  }
+});
+function handlePanelKey(event: KeyboardEvent) {
+  if (!overlayOpen.value) return;
+  if (event.key === 'Escape') { event.preventDefault(); closePanels(); }
+  if (event.key !== 'Tab') return;
+  const panel = appRef.value?.querySelector<HTMLElement>('[role="dialog"]');
+  const controls = [...panel?.querySelectorAll<HTMLElement>('button:not(:disabled), select, input, summary, a[href]') ?? []].filter(el => el.getClientRects().length);
+  const first = controls[0], last = controls.at(-1);
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === panel)) { event.preventDefault(); last?.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+}
 const introSteps = buildIntroSteps();
 const introScene = ref(introSteps[0]?.id ?? "");
 let introRunId = 0;
@@ -247,6 +268,7 @@ function updateSubtitleScale() {
 
 async function startIntro(startIndex: number, autoStartGame: boolean) {
   if (!canvasRef.value) return;
+  closePanels();
   introRunId += 1;
   gameLoadController?.abort();
   cancelAnimationFrame(panelFadeFrame);
@@ -266,6 +288,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   const runId = introRunId;
   const steps = introSteps.slice(startIndex);
   intro = playIntro(canvasRef.value, steps, {
+    onFirstFrame: () => { bookOpened.value = true; },
     renderSubtitlesOnCanvas: false,
     atmosphere: () => atmosphere.value,
     onLoadingChange: (value) => { loading.value = value; },
@@ -336,18 +359,18 @@ async function launchIntro(startIndex: number, autoStartGame: boolean) {
     if (request !== introRunId) return;
     console.error("Failed to start game", error);
     gameError.value = "The game could not load. Please try again.";
+    bookOpened.value = true;
     loading.value = false;
   }
 }
 
 function openMenu() {
-  panelOpen.value = false;
-  helpOpen.value = false;
+  closePanels();
   void launchIntro(introSteps.findIndex(step => step.id === "kallak_writing"), true);
 }
 
 function replayIntro() {
-  panelOpen.value = false;
+  closePanels();
   void launchIntro(0, true);
 }
 
