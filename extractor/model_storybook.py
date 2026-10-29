@@ -174,13 +174,35 @@ original = np.array(source.pixels[:], dtype=np.float32).reshape(1024, 1024, 4)[:
 light = original @ np.array([.299, .587, .114])
 light = (light + np.roll(light, 1, 0) + np.roll(light, 1, 1))/3
 tonal = np.clip((light-.055)/.81, 0, 1)
-# A dark debossed base and bronze high points produce readable relief.
-gold = np.array([.66, .395, .145])
-dark = np.array([.065, .022, .008])
-cover_pixels = dark + (gold-dark) * tonal[:, :, None]**.80
+# Keep dark oxblood between the original details, with worn gold on the high
+# points and contours. The original red title lettering receives the same foil.
+dy,dx=np.gradient(light)
+edges=np.clip(np.hypot(dx,dy)*10,0,1)
+red_lettering=np.clip((original[:,:,0]-np.maximum(original[:,:,1],original[:,:,2]))*2.5,0,1)
+foil=np.clip(tonal**1.7*.72+edges*.65+red_lettering*.68,0,1)
+cover_rng=np.random.default_rng(1992)
+wear=cover_rng.random((1024,1024))
+gold=np.array([.91,.63,.25])
+dark=np.array([.10,.014,.008])
+cover_pixels=dark+(gold-dark)*foil[:,:,None]
+cover_pixels *= (.94+.06*wear)[:,:,None]
 cover_image = image("original-cover-tooling", cover_pixels, jpeg=True)
-cover_normal = image("original-cover-normal", normal_map(light[::2, ::2], 4))
-cover_mat = material("Original retail art - gold leather relief", (1,1,1), .48, .52, cover_image, cover_normal)
+cover_normal = image("original-cover-normal", normal_map(light[::2, ::2], 3.2))
+cover_mat = material("Original retail art - gold leather relief", (1,1,1), .48, .58, cover_image, cover_normal)
+# One small packed map: green is roughness, blue is metalness. Gold catches
+# grazing light while the recessed red leather stays matte and nonmetallic.
+small_foil=foil[::4,::4]
+pbr=np.ones((256,256,3))
+pbr[:,:,1]=.80-.31*small_foil
+pbr[:,:,2]=.06+.78*small_foil
+cover_pbr=image("worn-gold-material",pbr,jpeg=True)
+cover_pbr.colorspace_settings.name="Non-Color"
+tex=cover_mat.node_tree.nodes.new("ShaderNodeTexImage");tex.image=cover_pbr
+channels=cover_mat.node_tree.nodes.new("ShaderNodeSeparateColor")
+cover_mat.node_tree.links.new(tex.outputs["Color"],channels.inputs["Color"])
+bs=cover_mat.node_tree.nodes.get("Principled BSDF")
+cover_mat.node_tree.links.new(channels.outputs["Green"],bs.inputs["Roughness"])
+cover_mat.node_tree.links.new(channels.outputs["Blue"],bs.inputs["Metallic"])
 
 # Small repeatable material maps keep the GLB compact and work in glTF viewers.
 y, x = np.mgrid[0:256, 0:256]
@@ -195,17 +217,22 @@ for dx in [-1,0,1]:
         seed=cells[(iy+dy)%24,(ix+dx)%24]
         distance=np.minimum(distance,(gx-ix-dx-seed[:,:,0])**2+(gy-iy-dy-seed[:,:,1])**2)
 pebble=np.clip(1-distance*1.6,0,1)
-leather_image = image("oxblood-leather", np.array([.105,.032,.018])[None,None,:]*(.76+pebble[:,:,None]*.25), jpeg=True)
-leather_normal = image("leather-grain", normal_map(pebble, 1.8))
-leather_roughness=image("leather-roughness",np.repeat((.65+.23*pebble)[:,:,None],3,axis=2),jpeg=True)
-leather = material("Oxblood calf leather", (.13,.035,.016), 0, .72, leather_image, leather_normal, leather_roughness)
+age=grain.copy()
+for shift in [1,2,4,8,16]:
+    age=(age+np.roll(age,shift,0)+np.roll(age,shift,1))/3
+age=(age-age.min())/(age.max()-age.min())
+leather_pixels=np.array([.24,.035,.018])[None,None,:]*(.64+.58*age[:,:,None])*(.92+.12*pebble[:,:,None])
+leather_image = image("oxblood-leather",leather_pixels,jpeg=True)
+leather_normal = image("leather-grain",normal_map(pebble*.85+grain*.15,1.15))
+leather_roughness=image("leather-roughness",np.repeat((.79-.16*pebble+.09*age)[:,:,None],3,axis=2),jpeg=True)
+leather = material("Oxblood calf leather", (.24,.035,.018), 0, .72, leather_image, leather_normal, leather_roughness)
 marble = np.sin(x*.095 + 2.1*np.sin(y*.025) + .45*np.sin((x+y)*.035))
 marble = .88 + .055*marble + .02*np.sin(x*.8+y*.3) + .035*grain
 endpaper_image = image("marbled-endpaper", np.array([.32,.23,.15])[None,None,:]*marble[:,:,None], jpeg=True)
 paper_normal=image("paper-fibers-normal",normal_map(grain,.35))
 inside = material("Marbled inside endpaper", (.35,.19,.10), 0, .93, endpaper_image, paper_normal)
-brass = material("Antique brass", (.49,.29,.085), .76, .36)
-gold_edge = material("Old gilded tooling", (.67,.43,.16), .64, .44)
+brass = material("Antique brass", (.47,.28,.075), .78, .43)
+gold_edge = material("Old gilded tooling", (.74,.50,.19), .70, .42)
 paper_image = image("parchment-fibers", np.array([.72,.63,.46])[None,None,:]*(.93+.10*grain[:,:,None]), jpeg=True)
 parchment = material("Ivory parchment", (.68,.57,.38), 0, .89, paper_image)
 edge_grain = .8 + .10*np.sin(y*2.8) + grain*.08
@@ -213,17 +240,16 @@ page_image = image("leaf-edges", np.array([.56,.43,.27])[None,None,:]*edge_grain
 page_edge = material("Warm paper edges", (.47,.36,.20), 0, .85, page_image)
 ribbon_mat = material("Crimson silk bookmark", (.19,.016,.027), .08, .47)
 
-# The timber grain runs the length of the table, with irregular annual lines.
-y, x = np.mgrid[0:512, 0:512]
-wave = x*.13 + np.sin(y*.009)*1.3 + np.sin(y*.031+x*.008)*.45
-wave += 3*np.exp(-((x-180)/42)**2-((y-270)/75)**2)
-wood_grain = .66 + .08*np.sin(wave) + .06*np.sin(wave*4.3) - .14*np.abs(np.sin(wave*8.7))**18 + .035*rng.random((512,512))
-wood_image = image("walnut-table", np.array([.23,.105,.041])[None,None,:]*wood_grain[:,:,None], jpeg=True)
-wood_normal = image("walnut-grain",normal_map(wood_grain, .9))
-wood_roughness=image("walnut-roughness",np.repeat((.48+.27*wood_grain)[:,:,None],3,axis=2),jpeg=True)
-wood = material("Oiled dark walnut", (.13,.06,.022), 0, .59, wood_image, wood_normal, wood_roughness)
-for plank in range(25):
-    box(f"Walnut plank {plank+1}", ((plank-12)*2.2,-.37,0), (2.19,.42,72), wood, .035, uv_scale=(.55,.24),uv_offset=(plank*.371,plank*.193))
+# Reuse the first storybook's illustrated timber: knots, scars and worn grain.
+# The plank seams are already in this map, so use one solid tabletop beneath it.
+timber = bpy.data.images.load(str(ROOT / "extractor/materials/aged-walnut.webp"))
+wood_pixels = np.array(timber.pixels[:], dtype=np.float32).reshape(timber.size[1], timber.size[0], 4)[:,:,:3]
+wood_image = image("walnut-table", wood_pixels, jpeg=True)
+wood_grain = wood_pixels[::2,::2] @ np.array([.299,.587,.114])
+wood_normal = image("walnut-grain", normal_map(wood_grain, 2.2))
+wood_roughness = image("walnut-roughness", np.repeat(np.clip(.94-wood_grain*.30,.73,.94)[:,:,None],3,axis=2), jpeg=True)
+wood = material("Worn walnut tabletop", (.13,.06,.022), 0, .92, wood_image, wood_normal, wood_roughness)
+box("Walnut tabletop", (0,-.37,0), (55,.42,72), wood, .035, uv_scale=(1/15,1/15), uv_offset=(.5,.5))
 
 # Closed book; its hinge is an exported empty, never merged into the cover.
 box("Back leather board", (0,-.045,0), (3.13,.16,4.15), leather, .07, uv_scale=(1.2,1.2))
@@ -384,7 +410,7 @@ for pos,power,color,size in [((0,6,2),1000,(1,.78,.53),7),((-4,4,-4),650,(.48,.6
 scene.view_settings.view_transform="AgX"
 # A render of this same model replaces the invented fallback artwork.
 for obj in scene.objects:
-    obj.hide_render = obj.name.startswith("Walnut plank") or obj in candle_objects
+    obj.hide_render = obj.name.startswith("Walnut table") or obj in candle_objects
 scene.render.film_transparent=True
 scene.render.resolution_x=512; scene.render.resolution_y=680; scene.render.resolution_percentage=100
 scene.render.image_settings.file_format="WEBP"

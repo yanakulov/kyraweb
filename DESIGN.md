@@ -52,6 +52,8 @@ components:
 
 Old leather, wood, aged gold and emerald fittings make the browser feel part of Kyrandia. A Blender-modeled book carries the original retail cover embossed into leather; generated interface art supplies the surrounding fantasy controls. The original 320 × 200 game fills the stage once the camera enters the book, with no external masthead, toolbar or footer.
 
+The user's preferred material reference is the earlier coarse, aged table: horizontal boards, visible knots and scars. Match it with rich oxblood leather, worn gilding and brass patina so the book feels tactile and antique.
+
 **Key Characteristics:**
 - Original cover art and pixel game scenes, with a physical Blender-modeled book as the entrance.
 - Warm candlelight, cool moonlight, parchment lettering and deep green controls.
@@ -79,6 +81,8 @@ Buttons, selects and summary rows have a minimum 44px height. Inventory cells ar
 
 The original game artwork supplies the frame and HUD; open dialogs dim the stage behind a deep green panel. Buttons use inset strokes rather than rounded card elevation. Blender supplies beveled, smoothly shaded book and table geometry, with embossed original cover detail, a page block, hinged cover, spine and brass fittings. The spine stays fixed to the back board below the page surface. The candle stands behind the book on its right, outside the cover's opening arc.
 
+The aged walnut map includes its own board seams and covers one solid tabletop. Preserve its coarse grain, knots and wear instead of adding a second set of geometric seams.
+
 Warm candlelight and cool moonlight separate the book from the table. Half-resolution GTAO supplies contact depth (radius 0.22, thickness 0.12, blend intensity 0.65); restrained bloom uses threshold 2.8, strength 0.12 and radius 0.25. Film grading and a soft vignette shape the 3D scene. AO, bloom and grading fade away between 55% and 95% of the zoom; the final frame renders directly with the original landscape's exact pixel colors. Three.js renders on demand when loading, resizing, opening or following mouse movement, with no idle animation loop.
 
 ## Shapes
@@ -105,6 +109,8 @@ Interface assets live in `public/assets/interface/`:
 | `menu-panel.webp` | Generated Kallak menu inside the stage |
 
 Generated art provenance: **Generated with built-in ImageGen for this task, 29Oct2026**. Raster interface assets ship as compressed WebP. This attribution does not apply to the original retail cover or `public/assets/intro/logo_bg.png`; those remain original game artwork. AkulaFlow brand reference: `../akula-flow/public/brand/identity.png`. Original game packs and sprites retain their existing provenance.
+
+Blender material source `extractor/materials/aged-walnut.webp` restores the earlier generated `desk.webp` from commit `d675c1e` (Git blob `f3a77cada10d35981cae7d3aaec9335241801eb2`). Its texture is embedded in `storybook.glb.gz`, with no duplicate runtime image download.
 
 Measure the complete production build and packed book model separately after changes; neither has a fixed size promise.
 
