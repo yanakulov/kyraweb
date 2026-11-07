@@ -1,76 +1,61 @@
 # KyraWeb
 
-![Original game logo](https://upload.wikimedia.org/wikipedia/commons/6/6d/The_Legend_of_Kyrandia_Series_-_Logo.png?20210417191824)
+![The Legend of Kyrandia](public/assets/interface/kyrandia-title.webp)
 
-![CURRENT STAGE](https://img.shields.io/badge/CURRENT%20STAGE-Working%20with%20subtitles-green?style=for-the-badge)
+**English** · [Русский](README.ru.md)
 
-**Language:** English | [Русский](README.ru.md)
+[Play in your browser](https://yanakulov.github.io/kyraweb/)
 
----
+KyraWeb is an unofficial web remake of *The Legend of Kyrandia*, the first book of Westwood Studios’ *Fables & Fiends* series (1992). It pairs the original pixel art, animation, and game scripts with a new 3D storybook interface.
 
-**KyraWeb** is an independent web remake of *The Legend of Kyrandia* (Westwood Studios, 1992). The project recreates the original game logic and presentation using modern web tech (Vue 3 + Vite), while relying on the original game data for accuracy.
+## What you can play
 
-## Current status
+- Open the book to read the prologue and enter the intro. After the Westwood and AkulaFlow logos, the cutscene leads to Kallak’s desk and the **Start Journey** menu.
+- Follow Brandon into his home, discover what happened to Kallak, and speak to the tree. The tree conversation plays on your first attempt to leave if you haven’t spoken to it yet.
+- Explore the first forest region and complete the original quest chain through the bridge repair. Visit Brynn, heal the willow, follow Merith, find the amulet, and bring Herman the saw. You can cross the repaired bridge and return.
 
-- Playable intro with timing, fades, and scene-level animation control
-- Kalak’s Place (GEMCUT) scene with walkmask, walk logic, and sprite layering
-- Scene overlays (items on the desk, saw/letter replacement)
-- Inventory, item pickup/drop with bounce
-- Debug panel (mask, layer, walk speed, animation steps)
-- Intro demo loop on the writing scene with interactive UI overlay
-- Compact indexed graphics, streamed intro scenes, WebGL2 palette rendering and Canvas fallback
-- Original tree-lift opening and discovery of Kallak, followed by the complete 29-line tree conversation with original animations and text (without CD speech)
-- Original DOS CD XMIDI music with Munt/WebAssembly MT-32 / CM-32L synthesis; import your own ROM pair in Settings, stored only in this browser ([music setup](docs/music.md))
-  Local development/preview can automatically load a private pair from ignored `.local/mt32/`; firmware is never included in the published build.
-- Original item, intro and EMC/DAT sound effects; up to three simultaneous SFX with independent volume, including when music is off.
-- TinySoundFont with on-demand GeneralUser GS and local SF2 imports. It uses approximate MT-32-to-GM mapping ([setup and limitations](docs/soundfonts.ru.md)).
-- Original forest quests with Brynn, Merith and Herman: enchanted rose, healed willow, amulet and bridge repair
-- Restrained pixel stone interface with touch-sized controls
-- Exploration of the first 17-room forest region, including the cavern entrance and ruined bridge, with original masks, lift travel and persistent room/inventory state
+The game has English and Russian text. CD voice acting and the areas beyond the bridge landing are outside the current release.
 
-## Planned
+## Controls and saves
 
-- Credits system (in-game titles)
-- Expand scene library and scripts
-- More original UI/menus
-- Save/load and configuration
+On desktop, point and click to move or interact. On a touchscreen, swipe to guide the persistent cursor and tap to act at its position. The cursor becomes a directional arrow over an open exit. During dialogue, click or tap to advance the current line.
 
-## Documentation
+**Options** pauses the game and pulls the camera back to the book. Use it to resume, change language or walk speed, replay the intro, or save and load. The three save slots stay in the current browser and remember the room, inventory, quest progress, and items left behind.
 
-**English (default):**
-- Scene animations: `docs/animations.md`
-- Movement & walkmask: `docs/movement.md`
-- Resources, import and size budget: `docs/resources.md`
-- Forest region and navigation: `docs/world.md`
+## Music and sound effects
 
-**Русская версия:**
-- Анимации сцены: `docs/animations.ru.md`
-- Передвижение и walk-mask: `docs/movement.ru.md`
+Open **Settings → Music device** to choose a renderer.
 
-## Extractor tools
+- **Roland MT‑32 / CM‑32L** uses Munt to synthesize the original DOS CD XMIDI music and effects in real time. Import your own matching Control and PCM ROM pair. The browser stores it locally. For localhost development or preview, you can also use the private `.local/mt32/` directory. [MT‑32 setup](docs/music.md)
+- **GeneralUser GS** downloads on selection, with progress shown in Settings. You can also import an `.sf2` bank. This mode uses approximate General MIDI instrument mapping for the score. [SoundFont setup](docs/soundfonts.ru.md)
 
-The `extractor/` folder contains scripts used to convert original resources into JSON or PNG for the web engine. These are **required only locally** and should not be committed with original game data.
+Effects have a separate volume and work with music off. SoundFont mode and browsers without Roland ROMs use a compact recording of the original effects rendered with CM‑32L.
 
-Summary of available scripts (see `extractor/README.md`):
+## Run locally
 
-- `msc_unpack.py` — unpack `MSC.PAK`
-- `msc_to_json.py` — decode a single `.MSC` to JSON (walkmask)
-- `cps_to_json.py` — decode `.CPS` to JSON (pixels + palette)
-- `dat_to_json.py` / `dat_batch_to_json.py` — decode `.DAT` scene metadata
-- `emc_to_json.py` — extract scene animation commands
-- `emc_text_to_json.py` — extract text strings from `.EMC`
-- `wsa_to_png.py` — decode `.WSA` animations to PNG frames
+Use Node.js 20 and npm.
 
-## Font
-
-The in-game UI uses the **Kyrandia** font located at:
-
-```
-public/assets/font/kyrandia.otf
+```sh
+npm ci
+npm run dev
 ```
 
-Font author (reference):
+Open the URL printed by Vite, normally [localhost:5173/kyraweb/](http://localhost:5173/kyraweb/). The repository includes the converted assets needed to run the game. The GOG installation is needed only to rebuild those assets from the original files.
 
+```sh
+npm test
+npm run typecheck
+npm run build
+npm run check:size
 ```
-https://fontstruct.com/fontstructions/show/1132362/kyrandia_2
-```
+
+## Engine and resources
+
+The web app uses Vue, TypeScript, and Vite. Three.js renders the book and its transitions. Game scenes use indexed Westwood graphics with their original palettes, compressed into packs and loaded by scene. WebGL2 handles palette lookup, with Canvas 2D as a fallback.
+
+- [Forest map, room transitions, and quest scripts](docs/world.md)
+- [Movement and walk masks](docs/movement.md)
+- [Scene animation](docs/animations.md) and [subtitle timing](docs/subtitles.md)
+- [Indexed resource format](docs/resources.md) and [import tools](extractor/README.md)
+
+Original game by Westwood Studios, 1992. Web remake by AkulaFlow · Yan Akulov.
