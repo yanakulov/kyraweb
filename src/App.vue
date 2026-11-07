@@ -1,7 +1,9 @@
 <template>
   <main class="app" :class="{ 'book-is-closed': !bookOpened }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()">
     <FantasyBook v-if="!bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :snapshot="openingSnapshot ?? undefined" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="prepareOpening" @ready="openingReadingReady = true" @open="openBook">
-      <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" @continue="finishPrologue" />
+      <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" :show-story="!prologueSeen" @continue="finishPrologue">
+        <template #audio><MusicSettings v-if="musicState" :player="music" :state="musicState" /></template>
+      </BookPrologue>
       <template #invitation><button v-if="latestSave" class="book-continue" type="button" :disabled="bookBusy" @click.stop="continueJourney">{{ t('Continue journey') }}</button><p v-if="bookBusy || bookMessage" class="book-status" role="status">{{ t(bookBusy ? 'Opening your saved chapter…' : bookMessage) }}</p></template>
     </FantasyBook>
     <FantasyBook v-if="bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
@@ -35,6 +37,7 @@ import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, r
 const FantasyBook = defineAsyncComponent(() => import('./components/FantasyBook.vue'));
 import BookMenu from './components/BookMenu.vue';
 import BookPrologue from './components/BookPrologue.vue';
+import MusicSettings from './components/MusicSettings.vue';
 import { locale, t } from './i18n';
 import { MusicPlayer, type MusicState } from './engine/audio/music';
 const musicState = shallowRef<MusicState>();
@@ -43,7 +46,8 @@ musicState.value = { ...music.state };
 import { readSaveSlots, writeSaveSlot, type SaveRecord, type SaveSlot } from './engine/gameplay/saveStorage';
 const bookOpened = ref(false);
 function hasReadPrologue() { try { return localStorage.getItem('kyrandia.prologueSeen') === '1'; } catch { return false; } }
-const openingPrologue = ref(!hasReadPrologue()), openingReadingReady = ref(false), readingHistory = ref(false), kallakMenu = ref(false), noteVisible = ref(false);
+const prologueSeen = hasReadPrologue();
+const openingPrologue = ref(true), openingReadingReady = ref(false), readingHistory = ref(false), kallakMenu = ref(false), noteVisible = ref(false);
 function finishPrologue() { try { localStorage.setItem('kyrandia.prologueSeen', '1'); } catch { /* Reading remains available without storage. */ } openingPrologue.value = false; }
 const openingBook = ref<{ openBook: () => void } | null>(null);
 const openingSnapshot = shallowRef<HTMLCanvasElement | null>(null), bookSnapshot = shallowRef<HTMLCanvasElement | null>(null);

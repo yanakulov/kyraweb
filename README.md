@@ -24,7 +24,7 @@ On desktop, point and click to move or interact. On a touchscreen, swipe to guid
 
 ## Music and sound effects
 
-Open **Settings → Music device** to choose a renderer.
+After opening the book, choose **Sound settings** to adjust music and effects before the intro. In-game, the same controls are under **Settings**.
 
 - **Roland MT‑32 / CM‑32L** uses Munt to synthesize the original DOS CD XMIDI music and effects in real time. Import your own matching Control and PCM ROM pair. The browser stores it locally. For localhost development or preview, you can also use the private `.local/mt32/` directory. [MT‑32 setup](docs/music.md)
 - **GeneralUser GS** downloads on selection, with progress shown in Settings. You can also import an `.sf2` bank. This mode uses approximate General MIDI instrument mapping for the score. [SoundFont setup](docs/soundfonts.ru.md)

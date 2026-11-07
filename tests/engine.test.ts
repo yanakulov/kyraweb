@@ -881,8 +881,9 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     assert.fail(message);
   }
   const score: number[] = [];
+  let restartScore = false;
   const config = { scene: gemCutScene, world: '/assets/world/world.json', playOpening: false,
-    onScriptAction: (action: RoomAction) => { if (action.op === 'music') score.push(action.command); },
+    onScriptAction: (action: RoomAction) => { if (action.op === 'music') { score.push(action.command); restartScore = action.restart; } },
     onLocationChange: (_: string, id?: number) => { location = id!; }, onSequenceChange: (value: boolean) => { sequence = value; } };
   const games: Awaited<ReturnType<typeof startGame>>[] = [];
   try {
@@ -976,10 +977,23 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     loaded.runSequence([{ op: 'exit', target: 10, entry: { x: 280, y: 110 } }]);
     await until(() => location === 10 && !!loaded.getSaveState(), 'return to the forest did not finish');
     assert.equal(score.at(-1), 2, 'leaving the pool restores the shared forest score');
-    const scoreCount = score.length;
     loaded.runSequence([{ op: 'exit', target: 5, entry: { x: 280, y: 110 } }]);
     await until(() => location === 5 && !!loaded.getSaveState(), 'the trunk did not become ready');
-    assert.equal(score.length, scoreCount, 'ordinary forest transitions do not restart the score');
+    assert.equal(score.at(-1), 2);
+    assert.equal(restartScore, false, 'ordinary forest transitions request the shared score without restarting it');
+
+    async function leaveBridge(target: number, command: number) {
+      loaded.runSequence([{ op: 'exit', target: 7, entry: { x: 224, y: 110 } }]);
+      await until(() => location === 7 && !!loaded.getSaveState(), 'the repaired bridge did not become ready');
+      assert.equal(score.at(-1), 3);
+      const exit = loaded.getPortals().find(portal => portal.target === target)!;
+      loaded.runSequence([{ op: 'actor', ...exit.point, facing: 5, visible: true }]); tick();
+      loaded.handleClick({ x: exit.rect.x + exit.rect.w / 2, y: exit.rect.y + exit.rect.h / 2 });
+      await until(() => location === target && !!loaded.getSaveState(), `bridge exit to ${target} did not finish`);
+      assert.equal(score.at(-1), command);
+    }
+    await leaveBridge(24, 11);
+    await leaveBridge(9, 2);
 
     // Self-use follows the original _NPC.EMC branches, in any room.
     const heard: string[] = [], notes: boolean[] = [];

@@ -36,6 +36,8 @@ export const russian: Record<string, string> = {
   'Save game': 'Сохранить игру',
   'Load game': 'Загрузить игру',
   'Settings': 'Настройки',
+  'Sound settings': 'Настройки звука',
+  'Back to book': 'Назад к книге',
   'Music device': 'Музыкальное устройство',
   'Music off': 'Без музыки',
   'Music volume': 'Громкость музыки',
