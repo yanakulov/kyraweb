@@ -291,7 +291,7 @@ export class MusicPlayer {
   intro(step: string) { const cue = introCue(step); if (cue) { this.command = -1; this.play(cue, true); } }
   beginGame() { this.command = -1; this.play({ file: 'KYRA1B', track: 0 }, true); }
   /** Older saves have no audio position. Restart the room's score, not the intro. */
-  restoreRoom(id: number) { this.command = -1; this.wander(({ 0: 41, 1: 2, 2: 5, 7: 3, 8: 7 } as Record<number, number>)[id] ?? 2, true); }
+  restoreRoom(id: number) { this.command = -1; this.wander(({ 0: 41, 2: 5, 7: 3, 8: 7, 24: 11 } as Record<number, number>)[id] ?? 2, true); }
   wander(command: number, restart = false) {
     if (!restart && command === this.command) return;
     this.command = command;

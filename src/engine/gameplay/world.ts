@@ -8,7 +8,7 @@ import { createForestState, traceForest, applyForestState, loadForestData } from
 import { validateWorldSave } from './saveStorage';
 
 export const SIDES = ["north", "east", "south", "west"] as const;
-const SPECIAL_SCORE_ROOMS = new Set([0, 2, 7, 8, 24]);
+const EXIT_FACING = { north: 0, east: 2, south: 4, west: 6 };
 export type CursorTrack = Pick<RoomPortal, "side" | "rect">;
 export type WorldRoom = SceneMeta & { id: number; name: string; title: string; exits: (number | null)[];
   entryMusic?: Extract<RoomAction, { op: 'music' }>[];
@@ -144,10 +144,13 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       for(const action of announce)applyForestState(planned,action);
       entryActions=[...(entryActions??[]),...announce,...traceForest(questRoom,3,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions];
     }
-    // Ordinary forest rooms carry the shared score without restarting it at each edge.
-    if (previous !== undefined && SPECIAL_SCORE_ROOMS.has(previous) && !SPECIAL_SCORE_ROOMS.has(id) &&
-        ![...setupActions, ...(entryActions ?? [])].some(action => action.op === 'music')) {
-      setupActions.push({ op: 'music', command: 2, restart: false });
+    // A destination cue wins. Otherwise use the departing room's EMC score or the shared forest theme.
+    if (from && from.id !== 'phase' && previous !== undefined &&
+        ![...setupActions, ...(entryActions ?? [])].some(action => action.op === 'music' && action.command !== 1)) {
+      const departing = roomSource(previous).questRoom;
+      const leaving = departing && shared && traceForest(departing, 5, quest, { ...shared, facing: EXIT_FACING[from.side] });
+      const score = leaving && leaving.actions.filter(action => action.op === 'music' && action.command !== 1).at(-1);
+      setupActions.push(score || { op: 'music', command: 2, restart: false });
     }
     const token = ++tokenCounter, oldOwner = callbackOwner;
     callbackOwner = token;
