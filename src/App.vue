@@ -7,20 +7,22 @@
     <FantasyBook v-if="bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
       <BookPrologue v-if="readingHistory" :ready="bookReady" returning @continue="readingHistory = false" />
       <BookMenu v-else :gameplay="!introActive" :main-menu="kallakMenu" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookMessage" :slots="bookSlots" :initial-view="bookInitialView"
-        v-model:walk-speed="walkSpeed" v-model:atmosphere="atmosphere" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen" :music-player="music" :music-state="musicState"
+        v-model:walk-speed="walkSpeed" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen" :music-player="music" :music-state="musicState"
         @start-journey="startJourney" @read-prologue="readingHistory = true" @resume="resumeBook" @save="saveChapter" @load="loadChapter" @fullscreen="toggleFullscreen" @main-menu="leaveBook('menu')" @replay-intro="leaveBook('intro')" />
     </FantasyBook>
     <div class="game-frame" :class="{ 'is-concealed': !bookOpened }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot">
-      <div class="stage" :aria-busy="loading">
+      <div class="stage" :class="{ 'cursor-controlled': customCursor }" :aria-busy="loading"
+        @pointerenter="handleMove" @pointermove="handleMove" @pointerleave="leaveStage"
+        @pointerdown="handlePointerDown" @pointerup="handlePointerUp" @pointercancel="cancelGesture">
         <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :alpha="subtitleAlpha" :visible="subtitleVisible" />
-        <canvas ref="canvasRef" width="320" height="200" :aria-label="t('Kyrandia game scene')" @click="handleClick" @pointerdown="handlePointerDown" @pointermove="handleMove" @pointerup="handlePointerUp" @pointercancel="cancelGesture" :class="{ 'cursor-controlled': !introActive }"></canvas>
-        <div v-if="!introActive && !gameError && !overlayOpen" class="game-cursor" :style="{ left: `${(cursor.x - cursorShape.x) / 3.2}%`, top: `${(cursor.y - cursorShape.y) / 2}%`, width: `${cursorShape.w / 3.2}%`, height: `${cursorShape.h / 2}%` }" aria-hidden="true">
-          <img v-if="cursorExit || !heldItem" :src="`${baseUrl}assets/cursors/${cursorExit?.side ?? 'pointer'}.svg`" alt="" />
+        <canvas ref="canvasRef" width="320" height="200" :aria-label="t('Kyrandia game scene')" @click="handleClick"></canvas>
+        <div v-if="customCursor && (pointerInStage || touchPointer) && (cursorExit || !heldItem)" class="game-cursor" :style="{ left: `${(cursor.x - cursorShape.x) / 3.2}%`, top: `${(cursor.y - cursorShape.y) / 2}%`, width: `${cursorShape.w / 3.2}%`, height: `${cursorShape.h / 2}%` }" aria-hidden="true">
+          <img :src="`${baseUrl}assets/cursors/${cursorExit ?? 'pointer'}.svg`" alt="" />
         </div>
         <div v-if="noteVisible && locale === 'ru'" class="translated-letter" :style="{ transform: `scale(${subtitleScale})` }"><p>{{ t('Dear Brynn:') }}</p><p>{{ t('Malcolm has broken free. Soon he will come for me. Please help Brandon. Direct him toward the Amulet. Use the lavender rose to key the spells.') }}</p><p>{{ t("Darm and Zanthia should be able to help. Be careful, he'll try to get all of us.") }}</p><p>— {{ t('Kallak') }}</p></div>
         <button v-if="awaitingContinue" class="pixel-button continue-button" type="button" @click="game?.handleClick({ x: 160, y: 100 })">{{ t('Continue') }}</button>
         <div v-if="gameError" class="game-error" role="alert"><p>{{ t(gameError) }}</p><button class="pixel-button" type="button" @click="boot">{{ t('Try again') }}</button><button v-if="latestSave" class="pixel-button" type="button" @click="showBookOptions('load')">{{ t('Load game') }}</button></div>
-        <button v-if="!introActive && !gameError && !sequenceActive && !loading" class="hud-options cursor-controlled" type="button" :aria-label="t('Options')" @pointerdown="handlePointerDown" @pointermove="handleMove" @pointerup="handlePointerUp" @pointercancel="cancelGesture" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
+        <button v-if="!introActive && !gameError && !sequenceActive && !loading" class="hud-options" type="button" :aria-label="t('Options')" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
         <p class="sr-only" role="status">{{ gameHint }}</p>
         <p v-if="navigationError" class="scene-notice" role="status">{{ t(navigationError) }}</p>
       </div>
@@ -66,35 +68,41 @@ function openBook() {
 }
 function closePanels() { if (readingHistory.value) { readingHistory.value = false; return; } if (!kallakMenu.value) resumeBook(); }
 function showSettings() { showBookOptions(); }
-function activateOptions(event: MouseEvent) { if (event.detail === 0 || !touchPointer) showSettings(); }
+function activateOptions(event: MouseEvent) { if (event.detail === 0 || !touchPointer.value) showSettings(); }
 import { mapPointerToCanvas, startGame } from "./engine/gameplay/game";
 import { LOGICAL_WIDTH } from "./engine/core/constants";
 import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
 import { gemCutScene } from "./engine/scenes/gemCut";
 import SubtitleOverlay from "./components/SubtitleOverlay.vue";
-import { portalAtPoint } from "./engine/gameplay/navigation";
+import { exitCursor } from "./engine/gameplay/navigation";
 import type { RoomPortal, InventoryItemId, Vec2 } from "./engine/core/types";
 const portals = ref<RoomPortal[]>([]);
 const cursor = ref<Vec2>({ x: 160, y: 100 });
-const cursorExit = computed(() => sequenceActive.value || loading.value ? undefined : portalAtPoint(portals.value, cursor.value));
+const pointerInStage = ref(false);
+const customCursor = computed(() => !introActive.value && !gameError.value && !overlayOpen.value);
+const cursorExit = computed(() => sequenceActive.value || loading.value || isOptionsPoint(cursor.value) ? undefined : exitCursor(portals.value, cursor.value));
 const baseUrl = import.meta.env.BASE_URL;
 const cursorShape = computed(() => ({
   pointer: {x:1,y:1,w:8,h:10}, north: {x:5,y:1,w:16,h:9},
-  east: {x:7,y:5,w:16,h:11}, south: {x:5,y:7,w:16,h:9}, west: {x:1,y:5,w:16,h:11}
-})[cursorExit.value?.side ?? 'pointer']);
+  east: {x:7,y:5,w:16,h:11}, south: {x:5,y:7,w:16,h:9}, west: {x:1,y:5,w:16,h:11},
+  blocked: {x:4,y:4,w:16,h:10}
+})[cursorExit.value ?? 'pointer']);
 const heldItem = ref<InventoryItemId | null>(null);
-let touchPointer = false;
+const touchPointer = ref(typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
 let gesture: { id: number; x: number; y: number; travel: number } | null = null;
 function syncControls() {
   portals.value = game?.getPortals() ?? [];
   const snapshot = game?.getSnapshot();
   heldItem.value = snapshot?.itemInHand ?? null;
-  game?.setPointer(cursor.value);
+  game?.setPointer(pointerInStage.value || touchPointer.value ? cursor.value : null);
+}
+function isOptionsPoint(point: Vec2) {
+  return point.x >= 12.8 && point.x < 73.6 && point.y >= 154 && point.y < 198;
 }
 function interact(point: Vec2) {
   if (!game || loading.value || gameError.value || bookSnapshot.value) return;
   // Touch aims a persistent cursor; activating the original HUD must use it too.
-  if (!sequenceActive.value && point.x >= 12.8 && point.x < 73.6 && point.y >= 154 && point.y < 198) { showSettings(); return; }
+  if (!sequenceActive.value && isOptionsPoint(point)) { showSettings(); return; }
   game.setPointer(point);
   if (!game.handleClick(point)) game.setTarget(point);
   syncControls();
@@ -102,7 +110,6 @@ function interact(point: Vec2) {
 const appRef = ref<HTMLElement | null>(null);
 const gameError = ref("");
 const loading = ref(false);
-const atmosphere = ref(true);
 const fullscreenAvailable = ref(false);
 const isFullscreen = ref(false);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -241,7 +248,7 @@ async function restoreChapter(record: SaveRecord) {
     gameError.value = ''; navigationError.value = ''; loading.value = false;
     sequenceActive.value = awaitingContinue.value = false; subtitleLines.value = []; subtitleAlpha.value = 1;
     locationName.value = restoredLocation;
-    walkSpeed.value = record.state.settings.walkSpeed; atmosphere.value = record.state.settings.atmosphere;
+    walkSpeed.value = record.state.settings.walkSpeed;
     animStepInterval.value = record.state.settings.animStepInterval;
     game.setDebug({ showMask: showMask.value, maskOpacity: maskOpacity.value, showLayerInfo: showLayerInfo.value });
     syncControls();
@@ -312,7 +319,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
       else intro?.setPaused(true);
     },
     renderSubtitlesOnCanvas: false,
-    atmosphere: () => atmosphere.value,
+    atmosphere: () => true,
     onSoundEffect: track => { if (runId === introRunId) music.effect(track); },
     onLoadingChange: (value) => { loading.value = value; },
     onStepChange: (id) => {
@@ -361,7 +368,6 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   game = startedGame;
   syncControls();
   loading.value = false;
-  game.setAtmosphere(atmosphere.value);
   game.setDebug({
     showMask: showMask.value,
     maskOpacity: maskOpacity.value,
@@ -420,7 +426,7 @@ async function toggleFullscreen() {
 
 function handleClick(event: MouseEvent) {
   if (overlayOpen.value) return;
-  if (touchPointer) return; // Touch activation is handled on pointerup, never after a swipe.
+  if (touchPointer.value) return; // Touch activation is handled on pointerup, never after a swipe.
   if (introActive.value) {
     intro?.skipLine();
     return;
@@ -432,16 +438,15 @@ function handleClick(event: MouseEvent) {
 
 function handlePointerDown(event: PointerEvent) {
   if (overlayOpen.value) return;
-  touchPointer = event.pointerType !== 'mouse';
-  if (!touchPointer) { handleMove(event); return; }
+  touchPointer.value = event.pointerType !== 'mouse';
+  if (!touchPointer.value) { handleMove(event); return; }
   if (!event.isPrimary) { cancelGesture(); return; }
   gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, travel: 0 };
   canvasRef.value?.setPointerCapture(event.pointerId);
 }
 
 function handleMove(event: PointerEvent) {
-  if (introActive.value || overlayOpen.value) return;
-  if (!canvasRef.value || !game) return;
+  if (overlayOpen.value || !canvasRef.value) return;
   if (event.pointerType !== 'mouse') {
     if (!gesture || gesture.id !== event.pointerId) return;
     const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
@@ -449,8 +454,18 @@ function handleMove(event: PointerEvent) {
     gesture.x = event.clientX; gesture.y = event.clientY;
     const rect = canvasRef.value.getBoundingClientRect();
     cursor.value = { x: Math.max(0, Math.min(319, cursor.value.x + dx * 320 / rect.width)), y: Math.max(0, Math.min(199, cursor.value.y + dy * 200 / rect.height)) };
-  } else cursor.value = mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY);
-  game.setPointer(cursor.value);
+  } else {
+    touchPointer.value = false;
+    pointerInStage.value = true;
+    cursor.value = mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY);
+  }
+  game?.setPointer(cursor.value);
+}
+
+function leaveStage(event: PointerEvent) {
+  if (event.pointerType !== 'mouse') return;
+  pointerInStage.value = false;
+  game?.setPointer(null);
 }
 
 function handlePointerUp(event: PointerEvent) {
@@ -507,7 +522,6 @@ watch(introActive, (active) => {
 }, { immediate: true });
 
 
-watch(atmosphere, value => game?.setAtmosphere(value));
 function musicVisibility() { music.setHidden(document.hidden); }
 watch([bookOpened, bookSnapshot, loading, gameError], () => music.setPaused(!bookOpened.value || !!bookSnapshot.value || loading.value || !!gameError.value), { immediate: true, flush: 'sync' });
 </script>

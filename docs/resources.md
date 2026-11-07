@@ -26,7 +26,7 @@ WebGL2 performs exact palette lookup using an `R8UI` index texture and a 256-ent
 
 Canvas 2D provides an equivalent fallback when WebGL2 is unavailable or its context is lost. Palette changes work on both paths. Kallak's background, HUD and foreground masks are built directly from indexed data; they do not depend on Canvas pixel readback. This also avoids interference from browsers that modify readback data for fingerprint protection. The user's reported black speckles were not reproduced in the in-app browser; removing that dependency addresses a possible browser-specific cause rather than claiming a confirmed diagnosis.
 
-The optional **Window dust** effect draws twelve faint logical-pixel motes. It does not alter the simulation clock, masks or input. It is disabled when reduced motion is requested.
+The window dust effect draws twelve faint logical-pixel motes. It does not alter the simulation clock, masks or input. It is disabled when reduced motion is requested.
 
 ## Verification and budget
 

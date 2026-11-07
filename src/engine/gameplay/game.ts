@@ -15,7 +15,7 @@ import {
 } from "./inventory";
 import { buildMaskCanvas, buildForegroundFrame, isWalkable, resolveActorLayer } from "../scene/masks";
 import { findWalkPath, findClickPath } from "./pathfinding";
-import { getIdleFrame, getSequence, pickDirection } from "./movement";
+import { facingDirection, getIdleFrame, getSequence, stepFacing } from "./movement";
 import { filterSceneAnimShapes, findOverlayAt, initSceneOverlays, drawSceneOverlays } from "../scene/overlays";
 import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
 import { buildSceneShapesCanvas, buildSpriteDefMap, drawSceneAnimShapes } from "../scene/sceneShapes";
@@ -27,7 +27,7 @@ import { IndexedClip, loadScenePack } from "../resources/scenePack";
 import { RoomScript, type OpeningScript, type RoomAction } from "./roomScript";
 import { brandonTalkHead, actorScaleAt } from "../characters/brandonFrames";
 import { startWorldGame } from "./world";
-import { portalAtPoint } from "./navigation";
+import { exitCursor, portalAtPoint } from "./navigation";
 import type { DropAnim, GameConfig, InventoryItemId, RoomRuntimeSnapshot, RoomSnapshot, SceneItem, SceneOverlayState, Vec2, WorldSave } from "../core/types";
 
 export type RoomGame = Awaited<ReturnType<typeof startRoom>>;
@@ -166,6 +166,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       walkDelayTicks: config.resume?.walkDelayTicks ?? 6,
       stepAccumulatorMs: 0,
       stepIndex: 0,
+      facing: 3,
+      verticalSteps: 0,
       animStepInterval: DEFAULT_ANIM_STEP_INTERVAL,
       dir: "right" as "left" | "right" | "up" | "down",
       frame: 0,
@@ -221,16 +223,18 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           stopWalking();
           break;
         }
-        const dir = pickDirection(next.x - state.pos.x, next.y - state.pos.y, state.dir);
-        if (dir !== state.dir) {
-          state.frame = 0;
-          state.stepIndex = 0;
-        }
-        state.dir = dir;
+        const facing = stepFacing(state.pos, next);
+        const following = state.path[state.pathIndex];
+        // Keep the pose through one different step between two matching steps.
+        // LoK also keeps the vertical pose for the first diagonal after a long vertical run.
+        let pose = state.stepIndex > 0 && following && stepFacing(next, following) === state.facing ? state.facing : facing;
+        if (state.verticalSteps > 2 && (state.facing === 0 && (pose === 1 || pose === 7) ||
+            state.facing === 4 && (pose === 3 || pose === 5))) pose = state.facing;
+        state.verticalSteps = facing === 0 || facing === 4 ? (facing === state.facing ? state.verticalSteps + 1 : 1) : 0;
+        state.facing = facing;
+        state.dir = facingDirection(pose);
         state.pos = next;
-        if (state.stepIndex++ > 0 && state.stepIndex % state.animStepInterval === 0) {
-          state.frame = (state.frame + 1) % getSequence(state.dir).length;
-        }
+        state.frame = Math.floor(state.stepIndex++ / state.animStepInterval) % getSequence(state.dir).length;
         state.moving = true;
         if (state.pathIndex >= state.path.length) stopWalking();
       }
@@ -255,6 +259,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       state.moving = false;
       state.frame = 0;
       state.stepIndex = 0;
+      state.verticalSteps = 0;
       state.stepAccumulatorMs = 0;
     }
 
@@ -391,7 +396,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       const amulet=scriptLayers.get('amulet');
       if(amulet)ctx.drawImage(amulet.image,amulet.x,amulet.y);
       drawInventory(ctx, itemsSheet, inventoryItems, state.inventorySlots);
-      if (state.itemInHand && state.pointer) {
+      if (state.itemInHand && state.pointer && !exitCursor(availablePortals(), state.pointer)) {
         const item = inventoryItems.get(state.itemInHand);
         if (item) {
           const rect = getTileRect(item.tileIndex);
@@ -464,7 +469,6 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function stop() {
       running = false;
-      if (canvas.style) canvas.style.cursor = "";
       cancelAnimationFrame(animationFrame);
       sequence?.stop();
       config.onSequenceChange?.(false);
@@ -497,10 +501,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function setPointer(point: Vec2 | null) {
-      if (paused || !running) return;
       state.pointer = point;
-      const portal = !sequence && portalAtPoint(config.portals ?? [], point);
-      if (canvas.style) canvas.style.cursor = portal ? "pointer" : "default";
+    }
+
+    function availablePortals() {
+      return running && !paused && !sequence && !dead && backgroundName === "room" ? config.portals ?? [] : [];
     }
 
     function handleClick(point: Vec2) {
@@ -510,7 +515,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (sequence) { sequence.skipLine(); return true; }
       if (dead) return true;
       if (state.drops.length) return true;
-      const portal = portalAtPoint(config.portals ?? [], point);
+      const portal = portalAtPoint(availablePortals(), point);
       // Every exit hit area must run the original first conversation, including
       // the corners/door rectangle and a click while carrying an item.
       if ((portal || (!state.itemInHand && point.x >= 104 && point.x < 192 && point.y >= 32 && point.y < 68) ||
@@ -518,6 +523,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (portal) {
         setTarget(portal.point);
         if (state.target || (Math.abs(state.pos.x - portal.point.x) <= 4 && Math.abs(state.pos.y - portal.point.y) <= 2)) pendingPortal = portal;
+        return true;
+      }
+      if (exitCursor(availablePortals(), point) === 'blocked') {
+        pendingPortal = null;
+        stopWalking();
         return true;
       }
       pendingPortal = null;
@@ -584,7 +594,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function talkToTree() {
-      if (!openingScript || treeSpoken) return false;
+      if (!openingScript || treeSpoken || backgroundName !== "room") return false;
       playScript(openingScript.tree, () => {
         treeSpoken = true;
         config.onScriptAction?.({ op: 'flag', flag: 53, value: true });
@@ -645,7 +655,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function face(facing: number) {
-      state.dir = facing >= 1 && facing <= 3 ? "right" : facing >= 5 ? "left" : facing === 0 ? "up" : "down";
+      state.facing = facing;
+      state.dir = facingDirection(facing);
     }
 
     function soundEffect(track: number) { config.onScriptAction?.({ op: 'sfx', track }); }
@@ -748,6 +759,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function playScript(actions: RoomAction[], done?: () => void) {
+      if (actions.some(action => action.op === 'exit') && talkToTree()) return;
       stopWalking();
       pendingPortal = null;
       sequenceDone = done ?? null;
@@ -791,7 +803,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     if (transition?.active) transition.draw(ctx);
     if (!paused) animationFrame = requestAnimationFrame(loop);
 
-    function getSnapshot(): RoomSnapshot { return structuredClone({ pos: state.pos, walkDelayTicks: state.walkDelayTicks, facing:state.dir==="right"?3:state.dir==="left"?5:state.dir==="up"?0:4, inventorySlots: state.inventorySlots, itemInHand: state.itemInHand,
+    function getSnapshot(): RoomSnapshot { return structuredClone({ pos: state.pos, walkDelayTicks: state.walkDelayTicks, facing: state.facing, inventorySlots: state.inventorySlots, itemInHand: state.itemInHand,
       sceneItems: state.sceneItems, overlays: state.overlays, treeSpoken,
       runtime: { clockMs, sceneTicks, sceneAccumulatorMs, actorVisible, actorShape, hasAmulet,
         sceneAnims: sceneAnims.map(({ script, ...anim }) => anim),
@@ -816,7 +828,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     return { setTarget, stop, setDebug, setPointer, setWalkSpeed, setAnimStepInterval, handleClick,
       setAtmosphere: (enabled: boolean) => { atmosphere = enabled; if (paused) render(); },
       runSequence: playScript,
-      getSnapshot, getSaveSnapshot, getSaveState, setPaused, getPortals: () => !paused && !sequence && !dead && backgroundName === "room" ? config.portals ?? [] : [] };
+      getSnapshot, getSaveSnapshot, getSaveState, setPaused, getPortals: availablePortals };
   } catch (error) {
     for (const value of scriptRenderers.values()) value.renderer.dispose();
     packedBackground?.dispose();

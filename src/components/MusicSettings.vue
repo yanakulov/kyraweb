@@ -16,7 +16,8 @@
     <label class="rom-import" :class="{ 'is-busy': state.busy }">{{ t('Add SoundFont bank (.sf2)') }}<input type="file" accept=".sf2" :disabled="state.busy" @change="importFont" /></label>
     <p class="music-note">{{ t('Each imported bank becomes a separate choice. Files stay in this browser; local banks are loaded only when selected.') }}</p>
     <div class="music-buttons"><button type="button" :disabled="!state.ready || state.busy" @click="player.preview()">{{ t(state.previewing ? 'Stop test' : 'Test music') }}</button><button v-if="state.renderer === 'mt32' && state.available && state.source !== 'local'" type="button" :disabled="state.busy" @click="player.forgetRoms()">{{ t('Remove ROMs') }}</button></div>
-    <p v-if="state.message" class="music-note" role="status">{{ t(state.message) }}</p>
+    <p v-if="state.soundFontProgress !== undefined" class="music-note" role="status">{{ t('Loading SoundFont…') }} {{ state.soundFontProgress }}%</p>
+    <p v-else-if="state.message" class="music-note" role="status">{{ t(state.message) }}</p>
     <p class="music-note music-credit"><a :href="withBase('assets/audio/README.md')" target="_blank" rel="noopener">Munt / TinySoundFont</a> · <a :href="withBase('assets/audio/mt32-source.tar.gz')">{{ t('Emulator source') }}</a></p>
   </div>
 </template>

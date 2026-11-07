@@ -5,7 +5,7 @@ import specialPalettes from "../resources/specialPalettes.json";
 import { runEmc, type EmcProgram } from "../../../extractor/emc.mjs";
 import type { RoomAction } from "./roomScript";
 import type { RoomSnapshot, Vec2, InventoryItemId } from "../core/types";
-import type { WorldRoom } from "./world";
+import type { CursorTrack, WorldRoom } from "./world";
 import { actorScaleAt } from '../characters/brandonFrames';
 
 export type ForestRoom = WorldRoom & {
@@ -81,7 +81,7 @@ export function traceForest(
   point: Vec2 = snapshot.pos,
   walkable: (p: Vec2) => boolean = () => true,
   confirmations: Vec2[] = [],
-): { actions: RoomAction[]; handled: boolean } {
+): { actions: RoomAction[]; handled: boolean; cursorTrack?: CursorTrack } {
   const initialState = {
     ...state,
     flags: new Set(state.flags),
@@ -93,6 +93,7 @@ export function traceForest(
   let confirmation = 0,
     vase = state.vase,
     entry: Vec2 | undefined;
+  let cursorTrack: CursorTrack | undefined;
   const flags = new Set(state.flags),
     npcs = { 1: { ...state.merith }, 2: { ...state.herman } } as Record<
       number,
@@ -555,11 +556,16 @@ export function traceForest(
           case 0x57:
           case 0x78:
           case 0x79:
-          case 0x7b:
           case 0x95:
           case 0x96:
           case 0x98:
             return 0;
+          case 0x7b: {
+            const [x, y, w, h, facing] = a;
+            const side = (["north", "east", "south", "west"] as const)[facing / 2];
+            if (side && w > 0 && h > 0) cursorTrack = { side, rect: { x, y, w, h } };
+            return 0;
+          }
           case 0x16:
             emit({
               op: "palette",
@@ -581,7 +587,7 @@ export function traceForest(
       },
       { 0: room.id, 1: point.x | 0, 2: point.y | 0, 3: 0, 4: hand, 7: 0 },
     );
-    return { actions, handled: result.regs[3] !== 0 };
+    return { actions, handled: result.regs[3] !== 0, cursorTrack };
   } catch (error) {
     if (error !== paused) throw error;
     return { actions, handled: true };

@@ -4,6 +4,14 @@ export function portalAtPoint(portals: RoomPortal[], point: Vec2 | null) {
   return point ? portals.find(({ rect: r }) => point.x >= r.x && point.x < r.x + r.w && point.y >= r.y && point.y < r.y + r.h) : undefined;
 }
 
+export function exitCursor(portals: RoomPortal[], point: Vec2 | null) {
+  if (!point || !portals.length) return;
+  const portal = portalAtPoint(portals, point);
+  if (portal) return portal.side;
+  if (point.x >= 0 && point.x < 320 && point.y >= 0 && point.y < 159 &&
+      (point.x < 12 || point.x >= 308 || point.y < 12 || point.y >= 136)) return 'blocked';
+}
+
 export function portalMarker(portal: RoomPortal): Vec2 {
   const { rect, side, point } = portal;
   const edge = portal.id === side;

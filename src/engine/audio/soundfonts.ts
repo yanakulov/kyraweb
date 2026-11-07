@@ -1,10 +1,11 @@
 import { withBase } from '../core/assets';
 import { isLocalMusicHost } from './localRoms';
-export type SoundFontBank = { id: string; name: string; bytes?: ArrayBuffer; src?: string; stored?: boolean };
+export type SoundFontBank = { id: string; name: string; bytes?: ArrayBuffer; src?: string; stored?: boolean; downloadBytes?: number };
 export const publicSoundFont: SoundFontBank = {
   id: 'public:generaluser-gs',
   name: 'GeneralUser GS 2.0.3 (32 MB)',
-  src: withBase('assets/audio/soundfonts/GeneralUser-GS.sf2')
+  src: withBase('assets/audio/soundfonts/GeneralUser-GS.sf2'),
+  downloadBytes: 32_319_396
 };
 export const MAX_SOUNDFONT_BYTES = 64 * 1024 * 1024;
 export function validateSoundFont(bytes: ArrayBuffer) {
@@ -52,7 +53,48 @@ export async function storeSoundFont(bank: SoundFontBank) {
     t.oncomplete = () => resolve(); t.onabort = () => reject(new Error('SoundFont storage is unavailable.'));
   }); } finally { database.close(); }
 }
-export async function soundFontData(bank: SoundFontBank): Promise<ArrayBuffer> {
+async function downloadBank(src: string, size: number, onProgress?: (percent: number) => void) {
+  const chunkSize = 2 * 1024 * 1024;
+  const abort = new AbortController();
+  // Pages can stall on the full bank, but reliably serves bounded byte ranges.
+  async function readPart(start: number) {
+    const end = Math.min(size, start + chunkSize) - 1;
+    for (let attempt = 0; attempt < 2 && !abort.signal.aborted; attempt++) {
+      try {
+        const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(25_000)]);
+        const response = await fetch(src, { headers: { Range: `bytes=${start}-${end}` }, signal });
+        const expected = response.status === 200 && start === 0 ? size
+          : response.status === 206 && response.headers.get('Content-Range') === `bytes ${start}-${end}/${size}` ? end - start + 1 : 0;
+        if (expected) {
+          const bytes = await response.arrayBuffer();
+          if (bytes.byteLength === expected) return bytes;
+        } else await response.body?.cancel();
+      } catch { /* Retry a stalled or interrupted range. */ }
+    }
+    throw new Error('SoundFont could not load.');
+  }
+  onProgress?.(0);
+  try {
+    const first = await readPart(0);
+    if (first.byteLength === size) { onProgress?.(100); return first; }
+    const output = new Uint8Array(size);
+    output.set(new Uint8Array(first));
+    let loaded = first.byteLength, nextOffset = loaded;
+    onProgress?.(Math.floor(loaded * 100 / size));
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      while (nextOffset < size) {
+        const start = nextOffset;
+        nextOffset += chunkSize;
+        const bytes = await readPart(start);
+        output.set(new Uint8Array(bytes), start);
+        loaded += bytes.byteLength;
+        onProgress?.(Math.floor(loaded * 100 / size));
+      }
+    }));
+    return output.buffer;
+  } finally { abort.abort(); }
+}
+export async function soundFontData(bank: SoundFontBank, onProgress?: (percent: number) => void): Promise<ArrayBuffer> {
   if (bank.bytes) return bank.bytes;
   if (bank.stored) {
     const database = await db();
@@ -63,6 +105,7 @@ export async function soundFontData(bank: SoundFontBank): Promise<ArrayBuffer> {
     }); } finally { database.close(); }
   }
   if (!bank.src) throw new Error('Saved SoundFont is missing.');
+  if (bank.downloadBytes) return downloadBank(bank.src, bank.downloadBytes, onProgress);
   const response = await fetch(bank.src); if (!response.ok) throw new Error('SoundFont could not load.');
   return response.arrayBuffer();
 }

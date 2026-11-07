@@ -7,7 +7,7 @@ import { introCue, wanderCue, type MusicCue } from './cues';
 import { readLocalRoms, isLocalMusicHost } from './localRoms';
 import { readSoundFonts, storeSoundFont, localSoundFonts, publicSoundFont, soundFontData, validateSoundFont, MAX_SOUNDFONT_BYTES, type SoundFontBank } from './soundfonts';
 
-export type MusicState = { renderer: string; banks: { id: string; name: string }[]; enabled: boolean; volume: number; sfxEnabled: boolean; sfxVolume: number; available: boolean; ready: boolean; busy: boolean; previewing: boolean; message: string; romNames: string[]; source: 'none' | 'browser' | 'local' };
+export type MusicState = { renderer: string; banks: { id: string; name: string }[]; enabled: boolean; volume: number; sfxEnabled: boolean; sfxVolume: number; available: boolean; ready: boolean; busy: boolean; previewing: boolean; message: string; soundFontProgress?: number; romNames: string[]; source: 'none' | 'browser' | 'local' };
 type Device = { context: AudioContext; node: AudioWorkletNode; gain: GainNode };
 function preference(key: string, fallback: string) { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 function remember(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Session controls still work. */ } }
@@ -191,11 +191,23 @@ export class MusicPlayer {
     return context;
   }
   private async build(context: AudioContext, roms?: Mt32Roms, bank?: SoundFontBank): Promise<Device> {
+    const epoch = this.epoch;
+    let downloading = true;
     const [wasm, intro, font] = await Promise.all([
       fetch(withBase(`assets/audio/${bank ? 'tsf' : 'mt32emu'}.wasm`)).then(response => { if (!response.ok) throw new Error('The audio synthesizer could not load.'); return response.arrayBuffer(); }),
       bank ? Promise.resolve(undefined) : this.load('INTRO'),
-      bank ? soundFontData(bank) : Promise.resolve(undefined), context.audioWorklet.addModule(processorUrl)
-    ]);
+      bank && soundFontData(bank, percent => {
+        if (!downloading || epoch !== this.epoch || this.disposed) return;
+        this.state.soundFontProgress = percent;
+        this.publish();
+      }), context.audioWorklet.addModule(processorUrl)
+    ]).finally(() => {
+      downloading = false;
+      if (this.state.soundFontProgress !== undefined) {
+        delete this.state.soundFontProgress;
+        this.publish();
+      }
+    });
     if (font) validateSoundFont(font);
     const node = new AudioWorkletNode(context, 'kyra-mt32', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
     const gain = context.createGain(); gain.gain.value = 0;
@@ -257,6 +269,8 @@ export class MusicPlayer {
   play(cue: MusicCue, restart = false) {
     if (!restart && !this.faded && cue.file === this.cue.file && cue.track === this.cue.track) return;
     if (cue.file !== this.cue.file) this.stopEffects();
+    // Stop the outgoing score while the new bank is loading, as the DOS driver does.
+    if (!this.state.previewing) this.device?.node.port.postMessage({ type: 'track', file: cue.file });
     this.cue = cue; this.faded = false; this.applyCue();
   }
   intro(step: string) { const cue = introCue(step); if (cue) { this.command = -1; this.play(cue, true); } }
