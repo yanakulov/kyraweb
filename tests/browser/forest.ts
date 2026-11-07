@@ -231,7 +231,8 @@ document.querySelector("#fall")!.addEventListener("click", async () => {
   lockScenario();
   try {
     await route(1, 5, 10, 8, 12, 13, 9, 7);
-    game.handleClick({ x: 40, y: 100 });
+    // x=10 belongs to both the broken-bridge script and the blocked west edge.
+    game.handleClick({ x: 10, y: 100 });
     advance(60000);
     if (!playing || dead)
       throw Error("Bridge warning did not wait for a decision");
@@ -239,9 +240,9 @@ document.querySelector("#fall")!.addEventListener("click", async () => {
     game.handleClick({ x: 280, y: 110 });
     await settle();
     if (dead) throw Error("Retreat killed Brandon");
-    game.handleClick({ x: 40, y: 100 });
+    game.handleClick({ x: 10, y: 100 });
     advance(60000);
-    game.handleClick({ x: 40, y: 100 });
+    game.handleClick({ x: 10, y: 100 });
     await settle();
     if (!dead) throw Error("Fatal crossing did not complete");
     capture("Original bridge fall");

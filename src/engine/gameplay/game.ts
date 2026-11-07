@@ -1,7 +1,7 @@
 import { sceneShuffle } from './sceneShuffle';
 import { locale, translateGameText } from '../../i18n';
-import { DEFAULT_ANIM_STEP_INTERVAL, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS } from "../core/constants";
-import { loadImage, loadMask, loadNpcTextJson, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
+import { DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS } from "../core/constants";
+import { loadImage, loadMask, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
 import {
   buildInventoryItems,
@@ -57,13 +57,12 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const packedHud = hudPack && hudInfo ? new IndexedClip(hudPack, hudInfo) : null;
     const maskInfo = scene.maskClip && packedBackground?.clip.pack.clips[scene.maskClip];
     const packedMask = packedBackground && maskInfo ? new IndexedClip(packedBackground.clip.pack, maskInfo) : null;
-    const [bg, br, ui, mask, itemsSheet, npcText, optionsRu] = await Promise.all([
+    const [bg, br, ui, mask, itemsSheet, optionsRu] = await Promise.all([
       packedBase ? Promise.resolve(packedBase) : loadImage(scene.bgSrc),
       loadImage(scene.brSrc),
       !packedHud && scene.uiOverlaySrc ? loadImage(scene.uiOverlaySrc) : Promise.resolve(null),
       packedMask ? Promise.resolve({ width: packedMask.info.width, height: packedMask.info.height, pixels: Array.from(packedMask.frame(0)) }) : scene.maskSrc ? loadMask(scene.maskSrc) : Promise.resolve(null),
       loadImage(withBase("assets/inventory/items.png")),
-      loadNpcTextJson(withBase("assets/text/npc_text.json")).catch(() => null),
       packedHud || scene.uiOverlaySrc ? loadImage(withBase("assets/interface/HUD/options-ru.png"), config.signal) : Promise.resolve(null)
     ]);
     const sceneMeta = scene.meta ?? (scene.sceneMetaSrc ? await loadSceneMeta(scene.sceneMetaSrc) : null);
@@ -80,6 +79,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const anims = sceneMeta?.anims ?? [];
     const spriteDefMap = spriteDefs.length ? buildSpriteDefMap(spriteDefs) : null;
     const sceneAnims = anims.length ? buildSceneAnimStates(anims) : [];
+    const sceneAnimOrder = anims.map(({ drawY }, index) => ({ drawY, index })).sort((a, b) => a.drawY - b.drawY || b.index - a.index);
     let sceneTicks = 0, sceneAccumulatorMs = 0;
     const sceneAnimShapes = sceneEmc?.sceneAnimShapes ?? [];
     const overlayDefinitions = initSceneOverlays(scene.overlays);
@@ -179,7 +179,6 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       drops: [] as DropAnim[],
       statusMessage: null as string | null,
       statusMessageUntil: 0,
-      npcText: npcText ?? null
     };
 
     let lastTime = performance.now();
@@ -301,9 +300,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         drawSceneOverlays(ctx, sceneShapesImage, spriteDefMap, state.overlays);
       }
       for (const layer of permanentLayers.values()) ctx.drawImage(layer.image,layer.x,layer.y);
-      if (backgroundName === "room" && spriteDefMap && sceneAnims.length) {
-        drawSceneAnims(ctx, sceneShapesImage, spriteDefMap, sceneAnims);
-      }
+      const drawAmbient = (front: boolean) => {
+        if (backgroundName === 'room' && spriteDefMap) drawSceneAnims(ctx, sceneShapesImage, spriteDefMap,
+          sceneAnimOrder.filter(({ drawY }) => (drawY > state.pos.y) === front).map(({ index }) => sceneAnims[index]));
+      };
+      drawAmbient(false);
       if (backgroundName === "room" && spriteDefMap) drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, questShapes);
       // FACE movies contain an opaque rectangle of the room, not just the mouth.
       // Composite them behind Brandon while he approaches the speaking tree.
@@ -372,6 +373,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
       const actorLayer = backgroundName === 'room' && mask ? resolveActorLayer(state.pos, drawLayerTable, mask) : 1;
       if (actorVisible) restoreForeground(state.pos, drawX, drawY, drawW, drawH);
+      drawAmbient(true);
       drawNpcs(true);
       if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
       for (const [name, layer] of scriptLayers) if (name !== "face" && name !== "face2") ctx.drawImage(layer.image, layer.x, layer.y);
@@ -389,7 +391,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
       if (uiOverlay) {
         ctx.drawImage(uiOverlay, 0, 0);
-        if (locale.value === 'ru' && optionsRu) ctx.drawImage(optionsRu, 9, 163);
+        if (locale.value === 'ru' && optionsRu) ctx.drawImage(optionsRu, HUD_OPTIONS_RECT.x, HUD_OPTIONS_RECT.y);
       }
       const rest=scriptRenderers.get('amulet-rest');
       if(hasAmulet&&rest)ctx.drawImage(rest.renderer.render(rest.clip.frame(0)),224,152);
@@ -511,7 +513,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     function handleClick(point: Vec2) {
       if (paused || !running) return true;
       if (transition?.active) return true;
-      if (sequence?.awaiting) { sequence.confirm(point); config.onContinueChange?.(false); return true; }
+      if (sequence?.awaiting) {
+        if (state.statusMessageUntil === Infinity) state.statusMessage = null;
+        sequence.confirm(point); config.onContinueChange?.(false); return true;
+      }
       if (sequence) { sequence.skipLine(); return true; }
       if (dead) return true;
       if (state.drops.length) return true;
@@ -525,26 +530,17 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         if (state.target || (Math.abs(state.pos.x - portal.point.x) <= 4 && Math.abs(state.pos.y - portal.point.y) <= 2)) pendingPortal = portal;
         return true;
       }
-      if (exitCursor(availablePortals(), point) === 'blocked') {
-        pendingPortal = null;
-        stopWalking();
-        return true;
-      }
       pendingPortal = null;
       if (point.y < scene.uiMaskY && findSceneItemAt(point,state.sceneItems) === -1) {
         const actions=config.onInteract?.(point,getSnapshot());
         if(actions){playScript(actions);return true;}
       }
+      // A blocked edge can still be a scripted hotspot, as on the ruined bridge.
+      if (exitCursor(availablePortals(), point) === 'blocked') { stopWalking(); return true; }
       const sceneItemIndex = point.y < scene.uiMaskY ? findSceneItemAt(point, state.sceneItems) : -1;
       if (sceneItemIndex === -1 && point.y < scene.uiMaskY && isPointOnBrandon(point)) {
         const actions = config.onActorInteract?.(getSnapshot());
         if (actions) { playScript(actions); return true; }
-      }
-      if (sceneItemIndex === -1 && !state.itemInHand && point.y < scene.uiMaskY && isPointOnBrandon(point)) {
-        stopWalking();
-        const line = getNpcTextLine(100, "Why do I have to do everything?");
-        setStatusMessage(line);
-        return true;
       }
       if (point.y < scene.uiMaskY) {
         const overlay = findOverlayAt(point, state.overlays, spriteDefMap);
@@ -638,12 +634,6 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
     }
 
-    function getNpcTextLine(id: number, fallback: string) {
-      const value = state.npcText?.[id];
-      if (value && value.length) return value;
-      return fallback;
-    }
-
     function isPointOnBrandon(point: Vec2) {
       const scale = actorScaleAt(state.pos.y, scene.actorScale);
       return point.x >= state.pos.x - 12 * scale && point.x <= state.pos.x + 12 * scale && point.y >= state.pos.y - 48 * scale && point.y <= state.pos.y;
@@ -663,7 +653,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     function applyScript(action: RoomAction) {
       config.onScriptAction?.(action);
       switch (action.op) {
-        case 'choice':setStatusMessage('Click where you want to go.');break;
+        case 'choice':state.statusMessage='Click where you want to go.';state.statusMessageUntil=Infinity;break;
         case 'death':dead=true;actorVisible=false;config.onDeath?.();break;
         case 'exit':config.onExit?.({id:'script',target:action.target,side:'north',entry:action.entry,rect:{x:0,y:0,w:0,h:0},point:state.pos});break;
         case 'palette':if(roomPalette){const to=roomPalette.slice();to.splice(action.start*3,action.colors.length,...action.colors);paletteFade={from:roomPalette.slice(),to,ms:action.ms,age:0,step:-1};updatePalette(0);}break;
@@ -777,7 +767,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (restored.sceneAnims.length !== sceneAnims.length) throw new Error("This save does not match the room's animations.");
       restored.sceneAnims.forEach((saved, index) => {
         if (saved.ip > sceneAnims[index].script.length) throw new Error("The saved room animation is invalid.");
-        Object.assign(sceneAnims[index], saved);
+        Object.assign(sceneAnims[index], saved, { renderX: saved.renderX ?? saved.x, renderY: saved.renderY ?? saved.y });
       });
       for (const change of restored.masks) applyScript({ op: 'mask', ...change });
       questShapes.push(...restored.shapes); noDropRegions.push(...restored.noDrop);

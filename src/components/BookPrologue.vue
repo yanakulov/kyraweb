@@ -10,7 +10,7 @@
       <button class="prologue-next" type="button" :disabled="!ready" @click="advance">{{ nextLabel }}</button>
     </nav>
     <div class="prologue-actions">
-      <button v-if="$slots.audio" ref="audioButton" type="button" class="prologue-skip" :aria-expanded="audioOpen" :disabled="!ready" @click="audioOpen = !audioOpen">{{ t(audioOpen ? 'Back to book' : 'Sound settings') }}</button>
+      <button v-if="$slots.audio" ref="audioButton" type="button" :aria-expanded="audioOpen" :disabled="!ready" @click="audioOpen = !audioOpen">{{ t(audioOpen ? 'Back to book' : 'Sound settings') }}</button>
       <button type="button" class="prologue-skip" :disabled="!ready" @click="$emit('continue')">{{ returning ? returnLabel : (locale === 'ru' ? 'Перейти к легенде' : 'Enter the legend') }}</button>
     </div>
   </section>
@@ -62,6 +62,6 @@ onBeforeUnmount(() => cancelAnimationFrame(frame));
 h2{font:32px/1.1 Germanica,Georgia,serif;text-align:center;margin:0 0 18px;padding-bottom:12px;border-bottom:1px solid #70492360}
 .prologue-story{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#79552d transparent;font:22px/1.1 Germanica,Georgia,serif}.prologue-story p{margin:0}.opening-word{white-space:nowrap}.initial{font-size:1.65em;line-height:.85;color:#92261e}.ink-mark{color:#846431;font:11px Georgia,serif;margin-left:3px}
 .prologue-audio{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#79552d transparent;color-scheme:light;padding:0 4px}.prologue-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:0 10px;margin-top:auto}
-nav{display:flex;align-items:center;gap:10px;margin-top:14px;border-top:1px solid #70492360}button{color:inherit;border:0;background:transparent;min-height:44px;padding:7px 8px;font:inherit;cursor:inherit}nav>span{font-size:13px;opacity:.7}nav>button:first-child:not(.prologue-next){font-size:28px}.prologue-next{flex:1;font-variant:small-caps;text-align:right}.prologue-skip{font-size:12px;text-decoration:underline;text-underline-offset:4px;opacity:.75;min-height:36px}button:hover{color:#754718}button:active{transform:translateY(1px)}button{transition:color .15s,transform .15s}button:focus-visible{outline:1px solid #79552d;outline-offset:-2px}
+nav{display:flex;align-items:center;gap:10px;margin-top:14px;border-top:1px solid #70492360}button{color:inherit;border:0;background:transparent;min-height:44px;padding:7px 8px;font:inherit;cursor:inherit}nav>span{font-size:13px;opacity:.7}nav>button:first-child:not(.prologue-next){font-size:28px}.prologue-next{flex:1;font-variant:small-caps;text-align:right}.prologue-actions button{font-size:12px;text-decoration:underline;text-underline-offset:4px;opacity:.75;min-height:36px}button:hover{color:#754718}button:active{transform:translateY(1px)}button{transition:color .15s,transform .15s}button:focus-visible{outline:1px solid #79552d;outline-offset:-2px}
 @media(prefers-reduced-motion:reduce){button{transition:none}}
 </style>

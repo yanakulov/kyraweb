@@ -4,7 +4,7 @@ import { IndexedClip, loadScenePack, type ScenePack } from "../resources/scenePa
 import { isWalkable } from "../scene/masks";
 import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneMeta, Vec2, WorldSave } from "../core/types";
 import type { RoomAction } from "./roomScript";
-import { createForestState, traceForest, applyForestState, loadForestData } from './forest';
+import { createForestState, traceForest, applyForestState, loadForestData, originalItem } from './forest';
 import { validateWorldSave } from './saveStorage';
 
 export const SIDES = ["north", "east", "south", "west"] as const;
@@ -171,9 +171,12 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       entry: from || restoring ? { ...arrival, facing } : undefined,
       playOpening: !restoring && !from && config.playOpening !== false, entryActions, setupActions, amulet:quest.flags.has(45), npcFrames:questRoom?.npcFrames, portals,
       onScriptAction: action=>{applyForestState(quest,action);if(action.op==='mask')changeMask(action);if(active&&callbackOwner===token)config.onScriptAction?.(action);},
-      onActorInteract: snapshot => snapshot.itemInHand === 'letter'
-        ? forest.letter[quest.flags.has(129) ? 'readable' : 'sealed'].map(action => action.op === 'say' ? { ...action, x: snapshot.pos.x, y: snapshot.pos.y - 56 } : action)
-        : null,
+      onActorInteract: snapshot => {
+        const { itemInHand, pos } = snapshot;
+        const actions = itemInHand === 'letter' ? forest.letter[quest.flags.has(129) ? 'readable' : 'sealed']
+          : id === 24 && !itemInHand ? forest.caveSelf : forest.self?.[originalItem(itemInHand)];
+        return actions?.map(action => action.op === 'say' ? { ...action, x: pos.x, y: pos.y - 56 } : action) ?? null;
+      },
       onInteract: questRoom?(point,snapshot)=>{
         if(snapshot.treeSpoken)quest.flags.add(53);
         const result=traceForest(questRoom,1,quest,snapshot,point,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask));

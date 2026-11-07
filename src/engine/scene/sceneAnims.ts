@@ -7,6 +7,8 @@ export function buildSceneAnimStates(anims: SceneAnimDef[]): SceneAnimState[] {
       sprite: anim.sprite,
       x: anim.defaultX,
       y: anim.defaultY,
+      renderX: anim.defaultX,
+      renderY: anim.defaultY,
       defaultX: anim.defaultX,
       defaultY: anim.defaultY,
       flipX: anim.flipX,
@@ -32,21 +34,13 @@ export function updateSceneAnims(anims: SceneAnimState[], nowMs: number, actor?:
     const opcode = script[ip++] ?? 0xFF87;
 
     switch (opcode) {
-      case 0xFF88: {
-        anim.sprite = script[ip++] ?? anim.sprite;
-        ip++; // unused
-        anim.x = script[ip++] ?? anim.x;
-        anim.y = script[ip++] ?? anim.y;
-        anim.flipX = false;
-        anim.lastRefresh = nowMs;
-        break;
-      }
+      case 0xFF88:
       case 0xFF8D: {
         anim.sprite = script[ip++] ?? anim.sprite;
         ip++; // unused
-        anim.x = script[ip++] ?? anim.x;
-        anim.y = script[ip++] ?? anim.y;
-        anim.flipX = true;
+        anim.renderX = anim.x = script[ip++] ?? anim.x;
+        anim.renderY = anim.y = script[ip++] ?? anim.y;
+        anim.flipX = opcode === 0xFF8D;
         anim.lastRefresh = nowMs;
         break;
       }
@@ -64,15 +58,13 @@ export function updateSceneAnims(anims: SceneAnimState[], nowMs: number, actor?:
         anim.nextRun = nowMs;
         break;
       }
-      case 0xFF90: {
-        anim.sprite = script[ip++] ?? anim.sprite;
-        anim.flipX = false;
-        anim.lastRefresh = nowMs;
-        break;
-      }
+      case 0xFF90:
       case 0xFF91: {
         anim.sprite = script[ip++] ?? anim.sprite;
-        anim.flipX = true;
+        // DAT moves the working coordinates separately from refreshing the visible frame.
+        anim.renderX = anim.x;
+        anim.renderY = anim.y;
+        anim.flipX = opcode === 0xFF91;
         anim.lastRefresh = nowMs;
         break;
       }
@@ -151,14 +143,15 @@ export function drawSceneAnims(
     if (!anim.visible || anim.sprite < 0) continue;
     const def = spriteDefMap.get(anim.sprite);
     if (!def) continue;
+    const x = anim.renderX ?? anim.x, y = anim.renderY ?? anim.y;
     if (anim.flipX) {
       ctx.save();
-      ctx.translate(anim.x + def.w, 0);
+      ctx.translate(x + def.w, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(bg, def.x, def.y, def.w, def.h, 0, anim.y, def.w, def.h);
+      ctx.drawImage(bg, def.x, def.y, def.w, def.h, 0, y, def.w, def.h);
       ctx.restore();
     } else {
-      ctx.drawImage(bg, def.x, def.y, def.w, def.h, anim.x, anim.y, def.w, def.h);
+      ctx.drawImage(bg, def.x, def.y, def.w, def.h, x, y, def.w, def.h);
     }
   }
 }

@@ -111,8 +111,8 @@ button:disabled { cursor: default; }
 ::selection { background: #43573c; color: #fff3d2; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.hud-options { position: absolute; left: 4%; top: 77%; width: 19%; height: 21%; min-height: 44px; background: transparent; border: 0; z-index: 6; }
-.hud-options:focus-visible { outline-offset: -6px; }
+.hud-options { position: absolute; padding: 0; background: transparent; border: 0; z-index: 6; }
+.hud-options:focus-visible { outline-offset: -2px; }
 .scene-notice { position: absolute; z-index: 7; top: 4%; left: 10%; right: 10%; padding: 12px; margin: 0; background: #14231df2; color: var(--paper); text-align: center; font-size: 12px; }
 .cursor-controlled, .cursor-controlled button { cursor: none !important; }
 .game-cursor { position: absolute; width: 3.75%; height: 8%; pointer-events: none; z-index: 7; }
