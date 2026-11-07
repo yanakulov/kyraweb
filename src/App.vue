@@ -1,5 +1,5 @@
 <template>
-  <main class="app" :class="{ 'book-is-closed': !bookOpened }" ref="appRef">
+  <main class="app" :class="{ 'book-is-closed': !bookOpened }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()">
     <FantasyBook v-if="!bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :snapshot="openingSnapshot ?? undefined" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="prepareOpening" @ready="openingReadingReady = true" @open="openBook">
       <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" @continue="finishPrologue" />
       <template #invitation><button v-if="latestSave" class="book-continue" type="button" :disabled="bookBusy" @click.stop="continueJourney">{{ t('Continue journey') }}</button><p v-if="bookBusy || bookMessage" class="book-status" role="status">{{ t(bookBusy ? 'Opening your saved chapter…' : bookMessage) }}</p></template>
@@ -7,7 +7,7 @@
     <FantasyBook v-if="bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
       <BookPrologue v-if="readingHistory" :ready="bookReady" returning @continue="readingHistory = false" />
       <BookMenu v-else :gameplay="!introActive" :main-menu="kallakMenu" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookMessage" :slots="bookSlots" :initial-view="bookInitialView"
-        v-model:walk-speed="walkSpeed" v-model:atmosphere="atmosphere" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen"
+        v-model:walk-speed="walkSpeed" v-model:atmosphere="atmosphere" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen" :music-player="music" :music-state="musicState"
         @start-journey="startJourney" @read-prologue="readingHistory = true" @resume="resumeBook" @save="saveChapter" @load="loadChapter" @fullscreen="toggleFullscreen" @main-menu="leaveBook('menu')" @replay-intro="leaveBook('intro')" />
     </FantasyBook>
     <div class="game-frame" :class="{ 'is-concealed': !bookOpened }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot">
@@ -34,6 +34,10 @@ const FantasyBook = defineAsyncComponent(() => import('./components/FantasyBook.
 import BookMenu from './components/BookMenu.vue';
 import BookPrologue from './components/BookPrologue.vue';
 import { locale, t } from './i18n';
+import { MusicPlayer, type MusicState } from './engine/audio/music';
+const musicState = shallowRef<MusicState>();
+const music = new MusicPlayer(state => { musicState.value = state; });
+musicState.value = { ...music.state };
 import { readSaveSlots, writeSaveSlot, type SaveRecord, type SaveSlot } from './engine/gameplay/saveStorage';
 const bookOpened = ref(false);
 function hasReadPrologue() { try { return localStorage.getItem('kyrandia.prologueSeen') === '1'; } catch { return false; } }
@@ -153,8 +157,9 @@ const config = {
   onNoteChange: (visible: boolean) => { noteVisible.value = visible; },
   scene: gemCutScene,
   world: import.meta.env.BASE_URL + "assets/world/world.json",
-  onLocationChange: (name: string) => { locationName.value = name; queueMicrotask(syncControls); },
-  onLoadingChange: (value: boolean) => { loading.value = value; queueMicrotask(syncControls); },
+  onLocationChange: (name: string, _id?: number) => { locationName.value = name; queueMicrotask(syncControls); },
+  onScriptAction: (action: import('./engine/gameplay/roomScript').RoomAction) => { if (action.op === 'music') music.wander(action.command, action.restart); else if (action.op === 'sfx') music.effect(action.track); },
+  onLoadingChange: (value: boolean) => { if (value) music.stopEffects(); loading.value = value; queueMicrotask(syncControls); },
   onNavigationError: (message: string) => { navigationError.value = message; },
   onSubtitleChange: (lines: import('./engine/intro/types').IntroSubtitle[]) => { subtitleLines.value = lines; },
   onSequenceChange: (active: boolean) => { sequenceActive.value = active; queueMicrotask(syncControls); }
@@ -221,7 +226,8 @@ async function restoreChapter(record: SaveRecord) {
       onDeath: () => { if (committed) config.onDeath(); },
       onContinueChange: value => { if (committed) config.onContinueChange(value); },
       onNoteChange: value => { if (committed) config.onNoteChange(value); },
-      onLocationChange: name => { restoredLocation = name; if (committed) config.onLocationChange(name); },
+      onLocationChange: (name, id) => { restoredLocation = name; if (committed) config.onLocationChange(name, id); },
+      onScriptAction: action => { if (committed) config.onScriptAction(action); },
       onLoadingChange: value => { if (committed) config.onLoadingChange(value); },
       onNavigationError: message => { if (committed) config.onNavigationError(message); },
       onSubtitleChange: lines => { if (committed) config.onSubtitleChange(lines); },
@@ -231,6 +237,7 @@ async function restoreChapter(record: SaveRecord) {
     intro?.stop(); intro = null; game?.stop(); gameLoadController?.abort();
     gameLoadController = controller; game = candidate; committed = true;
     introActive.value = false; kallakMenu.value = false; noteVisible.value = false;
+    music.stop(); music.restoreRoom(record.state.currentRoom);
     gameError.value = ''; navigationError.value = ''; loading.value = false;
     sequenceActive.value = awaitingContinue.value = false; subtitleLines.value = []; subtitleAlpha.value = 1;
     locationName.value = restoredLocation;
@@ -290,6 +297,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     game = null;
   }
   introActive.value = true;
+  music.stop();
   kallakMenu.value = false; noteVisible.value = false;
   sequenceActive.value = false;
   navigationError.value = "";
@@ -305,9 +313,11 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     },
     renderSubtitlesOnCanvas: false,
     atmosphere: () => atmosphere.value,
+    onSoundEffect: track => { if (runId === introRunId) music.effect(track); },
     onLoadingChange: (value) => { loading.value = value; },
     onStepChange: (id) => {
       currentIntroStep.value = id;
+      music.intro(id);
       if (id === "kallak_writing" && autoStartGame) {
         intro?.setDemoLoopStep("kallak_writing");
       }
@@ -328,6 +338,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     return;
   }
   introActive.value = false;
+  music.beginGame();
   subtitleLines.value = [];
   subtitleAlpha.value = 1;
   if (!canvasRef.value) return;
@@ -335,7 +346,8 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   gameLoadController = new AbortController();
   const startedGame = await startGame(canvasRef.value, { ...config,
     signal: gameLoadController.signal,
-    onLocationChange: name => { if (runId === introRunId) config.onLocationChange(name); },
+    onLocationChange: (name, id) => { if (runId === introRunId) config.onLocationChange(name, id); },
+    onScriptAction: action => { if (runId === introRunId) config.onScriptAction(action); },
     onNoteChange: visible => { if (runId === introRunId) config.onNoteChange(visible); },
     onLoadingChange: value => { if (runId === introRunId) config.onLoadingChange(value); },
     onNavigationError: message => { if (runId === introRunId) config.onNavigationError(message); },
@@ -453,6 +465,8 @@ function handlePointerUp(event: PointerEvent) {
 function cancelGesture() { gesture = null; }
 
 onMounted(() => {
+  void music.restore();
+  document.addEventListener('visibilitychange', musicVisibility);
   refreshSaveSlots();
   document.addEventListener('keydown', handlePanelKey);
   fullscreenAvailable.value = document.fullscreenEnabled;
@@ -464,6 +478,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  music.dispose(); document.removeEventListener('visibilitychange', musicVisibility);
   introRunId++;
   document.removeEventListener('keydown', handlePanelKey);
   restoreController?.abort();
@@ -493,4 +508,6 @@ watch(introActive, (active) => {
 
 
 watch(atmosphere, value => game?.setAtmosphere(value));
+function musicVisibility() { music.setHidden(document.hidden); }
+watch([bookOpened, bookSnapshot, loading, gameError], () => music.setPaused(!bookOpened.value || !!bookSnapshot.value || loading.value || !!gameError.value), { immediate: true, flush: 'sync' });
 </script>

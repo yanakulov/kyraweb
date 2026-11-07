@@ -82,6 +82,7 @@ export async function buildWorld(gameDir, outputDir = 'public/assets/world') {
     const shapes = [], regions = [], portals = [];
     let scroll=0;
     let title = name;
+    const entryMusic = [];
     const host = (op, a, text) => {
       if (op === 0x5b) scroll=a[0];
       if (op === 0x28) dat.actorScale = { fromY: a[0], fromScale: a[1], toY: a[2], toScale: a[3] };
@@ -93,6 +94,7 @@ export async function buildWorld(gameDir, outputDir = 'public/assets/world') {
       if (op === 0x29) slots.set(a[1], text[a[0]]);
       if (op === 0x3f) staticFrames.push({ room: id, file: slots.get(a[4]), index: a[0], x: a[1], y: a[2] });
       if (op === 0x8b) title = text[a[1]];
+      if (op === 0x18) entryMusic.push({ op: 'music', command: a[0], restart: !!a[1] });
       if (op === 8 && a[0] !== -1) portals.push({ rect: { x: a[0], y: a[1], w: a[2] - a[0] + 1, h: a[3] - a[1] + 1 }, target: a[5], side: ['north','east','south','west'][a[4] / 2], entry: a[6] >= 0 && a[7] >= 0 ? { x: a[6], y: a[7] } : null });
       return 0;
     };
@@ -105,7 +107,7 @@ export async function buildWorld(gameDir, outputDir = 'public/assets/world') {
     for (const r of regions) for (let y = Math.max(0, r.y); y < Math.min(mask.height, r.y + r.h); y++) for (let x = Math.max(0, r.x); x < Math.min(320, r.x + r.w); x++) {
       if (r.blocked) mask.pixels[y * 320 + x] |= 128; else mask.pixels[y * 320 + x] &= 127;
     }
-    rooms.push({ id, name, title, exits, ...dat, shapes, portals, image, mask });
+    rooms.push({ id, name, title, exits, ...dat, shapes, portals, entryMusic, image, mask });
   }
   const more = await readGameResources(gameDir, staticFrames.map(f => f.file));
   for (const f of staticFrames) {

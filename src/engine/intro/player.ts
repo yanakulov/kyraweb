@@ -6,6 +6,7 @@ import type { SceneAnimState, SceneSpriteDef } from "../core/types";
 import type { IntroPlayback, IntroStep, IntroSubtitle } from "./types";
 import { drawStudioLogo } from './studioLogo';
 import { locale } from '../../i18n';
+import { IntroEffects } from './effects';
 
 export function frameAtTime(times: number[], elapsedMs: number) {
   let low = 0, high = times.length;
@@ -20,7 +21,7 @@ export function frameAtTime(times: number[], elapsedMs: number) {
 export function playIntro(
   canvas: HTMLCanvasElement,
   steps: IntroStep[],
-  options?: { onFirstFrame?: () => void; onStepChange?: (id: string) => void; onStepReady?: (id: string) => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean; atmosphere?: () => boolean; onLoadingChange?: (loading: boolean) => void }
+  options?: { onFirstFrame?: () => void; onStepChange?: (id: string) => void; onStepReady?: (id: string) => void; onSoundEffect?: (track: number) => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean; atmosphere?: () => boolean; onLoadingChange?: (loading: boolean) => void }
 ): IntroPlayback {
   const ctx = canvas.getContext("2d");
   if (!ctx) {
@@ -39,6 +40,7 @@ export function playIntro(
   canvas.height = LOGICAL_HEIGHT;
 
   const renderSubtitlesOnCanvas = options?.renderSubtitlesOnCanvas ?? false;
+  const effectClock = new IntroEffects();
 
   const NO_UI_OVERLAY = new Set([
     "westwood",
@@ -281,6 +283,7 @@ export function playIntro(
           if (loopDuration > 0) elapsed = subtitleLoopRange.startMs + elapsed % loopDuration;
         }
         const subtitleElapsed = elapsed;
+        effectClock.update(step.id, step.effects ?? [], elapsed, !!subtitleLoopRange, track => options?.onSoundEffect?.(track));
 
         const fadeIn = step.fadeInMs ?? 0;
         const fadeOut = step.fadeOutMs ?? 0;
@@ -339,7 +342,7 @@ export function playIntro(
         }
 
         if (activeSceneAnim) {
-          updateSceneAnims(activeSceneAnim.anims, now);
+          updateSceneAnims(activeSceneAnim.anims, now, undefined, options?.onSoundEffect);
           drawSceneAnims(ctx, activeSceneAnim.shapesImage, activeSceneAnim.spriteDefMap, activeSceneAnim.anims);
         }
 

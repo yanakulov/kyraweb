@@ -84,6 +84,7 @@ export function buildIntroSteps(): IntroStep[] {
       fadeInMs: 250,
       fadeOutMs: 0,
       indexedFrames: timedFrames("tree1", tree.tracks.tree1),
+      effects: tree.effects.filter(effect => effect.atMs < treeSplitMs),
       subtitles: sliceSubtitles(treeSubtitles, 0, treeSplitMs)
     },
     {
@@ -92,6 +93,7 @@ export function buildIntroSteps(): IntroStep[] {
       fadeInMs: 0,
       fadeOutMs: 0,
       indexedFrames: timedFrames("tree2", tree.tracks.tree2, treeSplitMs),
+      effects: tree.effects.filter(effect => effect.atMs >= treeSplitMs).map(effect => ({ ...effect, atMs: effect.atMs - treeSplitMs })),
       subtitles: sliceSubtitles(treeSubtitles, treeSplitMs, tree.durationMs)
     },
     {
@@ -99,6 +101,7 @@ export function buildIntroSteps(): IntroStep[] {
       durationMs: writing.durationMs,
       demoLoopRange: { startMs: 0, endMs: writingFrames.frameTimesMs[firstCycleEnd], resumeMs: 0 },
       indexedFrames: writingFrames,
+      effects: writing.effects,
       overlayFrames: {
         src: writing.tracks.kallak.hand.map(([, frame]) => frame < 0 ? "" : withBase(`assets/intro/hand${frame}.png`)),
         frameTimesMs: writing.tracks.kallak.hand.map(([ms]) => ms),
@@ -115,6 +118,7 @@ export function buildIntroSteps(): IntroStep[] {
       fadeInMs: 0,
       fadeOutMs: 0,
       indexedFrames: timedFrames("mal-kal", conversation.tracks["mal-kal"], 0, { x: 16, y: 58 }),
+      effects: conversation.effects,
       subtitles: timelineSubtitles(conversation.subtitles),
       sceneAnim: {
         metaSrc: withBase("assets/scenes/dat/GEMCUT.json"),

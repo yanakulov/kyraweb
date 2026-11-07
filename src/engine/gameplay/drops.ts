@@ -50,14 +50,18 @@ export function dropItemAt(
   return true;
 }
 
-export function updateDrops(drops: DropAnim[], items: SceneItem[], elapsedMs: number) {
+export function updateDrops(drops: DropAnim[], items: SceneItem[], elapsedMs: number, sound?: (track: number) => void) {
   for (let i = drops.length - 1; i >= 0; i--) {
     const drop = drops[i];
+    const previous = Math.floor((drop.elapsedMs + 1e-7) / TICK_MS);
     drop.elapsedMs += Math.max(0, elapsedMs);
     const index = Math.floor((drop.elapsedMs + 1e-7) / TICK_MS);
+    const impact = drop.path.findIndex((point, at) => at > 0 && point.y === drop.destY);
+    if (impact > previous && index >= impact && impact < drop.path.length - 2) sound?.(0x47);
     if (index >= drop.path.length - 1) {
       items.push({ id: drop.id, x: drop.destX, y: drop.destY });
       drops.splice(i, 1);
+      sound?.(0x32);
     } else {
       drop.x = drop.path[index].x;
       drop.y = drop.path[index].y;

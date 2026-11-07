@@ -1,4 +1,6 @@
 export type RoomAction =
+  | { op: "sfx"; track: number }
+  | { op: "music"; command: number; restart: boolean }
   | {
       op: "scene";
       name: string;

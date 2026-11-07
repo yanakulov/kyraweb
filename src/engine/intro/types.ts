@@ -17,6 +17,7 @@ export type IntroStep = {
   footerText?: string;
   footerTextY?: number;
   subtitles?: IntroSubtitle[];
+  effects?: IntroEffect[];
   frames?: {
     src: string[];
     frameDurationMs: number;
@@ -75,6 +76,8 @@ export type IntroStep = {
     baseY: number;
   };
 };
+
+export type IntroEffect = { atMs: number; track: number };
 
 export type IntroPlayback = {
   setPaused: (paused: boolean) => void;

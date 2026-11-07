@@ -16,6 +16,18 @@ A browser reimagining of The Legend of Kyrandia, Book One of Fables & Fiends. Th
 
 ## Authority and scope
 
+SoundFont addition: offer Munt and TinySoundFont as distinct audio renderers in
+book Settings. GeneralUser GS is available on demand. User banks stay local and
+load only when selected. SF2 mode uses an approximate MT-32-to-GM conversion,
+including for custom timbres and SFX. See `docs/soundfonts.ru.md`.
+
+Music addition: the original DOS CD XMIDI is synthesized by Munt/WebAssembly
+MT-32 / CM-32L in an AudioWorklet. Firmware is user-imported or privately auto-loaded
+from `.local/mt32/` on localhost, and never shipped in a published build.
+Device, music/SFX volume and test controls belong inside book Settings. Original
+XMIDI SFX share the synth through Miles channel locking and work with music off.
+Speech and AdLib are separate future work. See `docs/music.md` for current limits.
+
 The user's direction is old Kyrandia: restrained fantasy materials, gems, pixel graphics and a real three-dimensional opening book. The implemented references are `src/App.vue`, `src/styles.css`, `src/components/FantasyBook.vue`, `src/components/BookMenu.vue`, `src/components/BookSelect.vue`, `src/components/BookPrologue.vue`, `src/components/prologue.ts`, `src/components/storybookInk.ts`, `src/components/bookTransition.ts`, `src/i18n.ts`, `src/locales/ru-game.json`, `src/engine/gameplay/saveStorage.ts` and `src/engine/intro/steps.ts`. The Blender source recipe is `extractor/model_storybook.py`, with the cleaned illustration at `extractor/materials/cover-illustration.png`; the browser loads `public/assets/interface/storybook.glb.gz`. The editable `.blend` remains in ignored `.reference/`. `DESIGN.md` documents the visual system and prehistory sources.
 
 The user's preferred aged desk texture is restored from the earlier generated `desk.webp` into `extractor/materials/aged-walnut.webp`. Blender embeds it in the GLB; it is not a separate runtime download.

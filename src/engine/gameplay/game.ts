@@ -204,12 +204,12 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           updateSceneAnims(sceneAnims, ++sceneTicks * TICK_MS,(op,value)=>{
             if(op===0xFFAD)state.pos.x=value;if(op===0xFFAE)state.pos.y=value;
             if(op===0xFFAF)actorShape=value;
-          });
+          }, soundEffect);
         }
       }
       if (ambientWait !== null && !sceneAnims[ambientWait]?.play) ambientWait = null;
       if (state.drops.length) {
-        updateDrops(state.drops, state.sceneItems, dt * 1000);
+        updateDrops(state.drops, state.sceneItems, dt * 1000, soundEffect);
       }
 
       const stepInterval = state.walkDelayTicks * TICK_MS;
@@ -564,17 +564,18 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
             state.sceneItems.splice(itemIndex, 1);
           }
           setStatusMessage(`Took ${getItemStatusName(state.itemInHand)}`);
+          soundEffect(53);
           return true;
         }
       }
       if (state.itemInHand) {
         stopWalking();
-        if(noDropRegions.some(r=>point.x>=r.x&&point.x<r.x+r.w&&point.y>=r.y&&point.y<r.y+r.h))return true;
+        if(noDropRegions.some(r=>point.x>=r.x&&point.x<r.x+r.w&&point.y>=r.y&&point.y<r.y+r.h)){soundEffect(54);return true;}
         const droppedItem = state.itemInHand;
         if (dropItemAt(point, state.itemInHand, state.drops, state.sceneItems, scene, mask)) {
           setStatusMessage(`Placed ${getItemStatusName(droppedItem)}`);
           state.itemInHand = null;
-        }
+        } else soundEffect(54);
         // A failed drop keeps the item in hand and must not trigger walking/pickup.
         return true;
       }
@@ -593,6 +594,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function exchangeInventorySlot(slot: number) {
       const slotItem = state.inventorySlots[slot];
+      if (slotItem || state.itemInHand) soundEffect(slotItem ? 53 : 0x32);
       if (slotItem && !state.itemInHand) {
         state.itemInHand = slotItem;
         state.inventorySlots[slot] = null;
@@ -613,6 +615,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (!overlay.active) return;
       foregroundFrames.clear();
       state.itemInHand = overlay.id;
+      soundEffect(53);
       setStatusMessage(`Took ${getItemStatusName(overlay.id)}`);
       if (overlay.replaceShape !== undefined) {
         overlay.shape = overlay.replaceShape;
@@ -645,6 +648,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       state.dir = facing >= 1 && facing <= 3 ? "right" : facing >= 5 ? "left" : facing === 0 ? "up" : "down";
     }
 
+    function soundEffect(track: number) { config.onScriptAction?.({ op: 'sfx', track }); }
     function applyScript(action: RoomAction) {
       config.onScriptAction?.(action);
       switch (action.op) {

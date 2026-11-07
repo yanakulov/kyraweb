@@ -9,6 +9,7 @@ import { validateWorldSave } from './saveStorage';
 
 export const SIDES = ["north", "east", "south", "west"] as const;
 export type WorldRoom = SceneMeta & { id: number; name: string; title: string; exits: (number | null)[];
+  entryMusic?: Extract<RoomAction, { op: 'music' }>[];
   actorScale?: GameConfig["scene"]["actorScale"];
   entrances: Record<typeof SIDES[number], Vec2>; northHeight: number; southHeight: number;
   shapes: NonNullable<GameConfig["scene"]["emc"]>["sceneAnimShapes"];
@@ -110,7 +111,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     if (restoring && !state?.runtime) throw new Error("This saved room is incomplete. Choose another saved game.");
     if (restoring) for (const change of state!.runtime!.masks) changeMask(change);
     const planned={flags:new Set(quest.flags),files:{...quest.files},herman:{...quest.herman},merith:{...quest.merith},phasing:quest.phasing,vase:quest.vase};
-    let setupActions:RoomAction[]=[];
+    let setupActions:RoomAction[]=!questRoom && !restoring ? meta.entryMusic ?? [] : [];
     const facing=restoring ? state!.facing ?? 5 : from?({north:0,east:3,south:4,west:5}[from.side]):5;
     if (restoring) arrival = { ...state!.pos };
     const snapshot={...resume,...continued,pos:arrival,facing,walkDelayTicks:({slowest:11,slow:9,fast:6,fastest:3})[settings.walkSpeed]};
@@ -149,7 +150,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       resume: continued ? { ...continued, runtime: restoring ? continued.runtime : undefined } : undefined,
       entry: from || restoring ? { ...arrival, facing } : undefined,
       playOpening: !restoring && !from && config.playOpening !== false, entryActions, setupActions, amulet:quest.flags.has(45), npcFrames:questRoom?.npcFrames, portals,
-      onScriptAction: action=>{applyForestState(quest,action);if(action.op==='mask')changeMask(action);},
+      onScriptAction: action=>{applyForestState(quest,action);if(action.op==='mask')changeMask(action);if(active&&callbackOwner===token)config.onScriptAction?.(action);},
       onActorInteract: snapshot => snapshot.itemInHand === 'letter'
         ? forest.letter[quest.flags.has(129) ? 'readable' : 'sealed'].map(action => action.op === 'say' ? { ...action, x: snapshot.pos.x, y: snapshot.pos.y - 56 } : action)
         : null,

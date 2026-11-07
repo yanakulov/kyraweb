@@ -19,7 +19,11 @@
 - Debug panel (mask, layer, walk speed, animation steps)
 - Intro demo loop on the writing scene with interactive UI overlay
 - Compact indexed graphics, streamed intro scenes, WebGL2 palette rendering and Canvas fallback
-- Original tree-lift opening and discovery of Kallak, followed by the complete 29-line tree conversation with original animations and text (without CD audio)
+- Original tree-lift opening and discovery of Kallak, followed by the complete 29-line tree conversation with original animations and text (without CD speech)
+- Original DOS CD XMIDI music with Munt/WebAssembly MT-32 / CM-32L synthesis; import your own ROM pair in Settings, stored only in this browser ([music setup](docs/music.md))
+  Local development/preview can automatically load a private pair from ignored `.local/mt32/`; firmware is never included in the published build.
+- Original item, intro and EMC/DAT sound effects; up to three simultaneous SFX with independent volume, including when music is off.
+- TinySoundFont with on-demand GeneralUser GS and local SF2 imports. It uses approximate MT-32-to-GM mapping ([setup and limitations](docs/soundfonts.ru.md)).
 - Original forest quests with Brynn, Merith and Herman: enchanted rose, healed willow, amulet and bridge repair
 - Restrained pixel stone interface with touch-sized controls
 - Exploration of the first 17-room forest region, including the cavern entrance and ruined bridge, with original masks, lift travel and persistent room/inventory state

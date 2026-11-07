@@ -1,0 +1,104 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>MT-32 browser regression</title>
+<button id="run">Run AudioWorklet check</button><pre id="result">Waiting for a real user gesture.</pre>
+<button id="local">Test automatic local MT-32</button><button id="stop">Stop music</button><pre id="local-result">Checking local ROM availability.</pre>
+<button id="sfx">Test SFX with music disabled</button><pre id="sfx-result">Waiting for SFX test.</pre>
+<button id="sf2">Test SoundFont renderer</button><pre id="sf2-result">Waiting for SoundFont test.</pre>
+<script type="module">
+import { MusicPlayer } from '/src/engine/audio/music.ts';
+const button = document.querySelector('#run'), result = document.querySelector('#result');
+button.onclick = async () => {
+  button.disabled = true;
+  const player = new MusicPlayer(() => {});
+  try {
+    await player.importRoms([new File([new Uint8Array(65536)], 'synthetic-control.rom'), new File([new Uint8Array(524288)], 'synthetic-pcm.rom')]);
+    if (player.state.ready || player.state.available || player.state.busy || !player.state.message.includes('recognized matching pair')) throw new Error(JSON.stringify(player.state));
+    result.textContent = 'PASS: real WebAssembly loaded inside AudioWorklet; invalid ROMs rejected; device closed; no synthetic replacement audio or ROM storage.';
+  } catch (error) { result.textContent = 'FAIL: ' + error.stack; }
+  finally { player.dispose(); button.disabled = false; }
+};
+const localResult = document.querySelector('#local-result');
+let monitoring = false;
+const localPlayer = new MusicPlayer(state => {
+  if (!monitoring) localResult.textContent = state.message || (state.available ? 'Local ROM pair available.' : 'No local ROM pair.');
+});
+void localPlayer.restore();
+document.querySelector('#stop').onclick = () => { localPlayer.setPaused(true); localPlayer.stop(); };
+document.querySelector('#local').onclick = async () => {
+  const began = performance.now();
+  localPlayer.setEnabled(true); localPlayer.setPaused(false); localPlayer.play({ file: 'INTRO', track: 2 }, true);
+  monitoring = true;
+  let analyser, device;
+  const inspect = () => {
+    if (!analyser && localPlayer.state.ready) {
+      device = localPlayer.device;
+      analyser = device.context.createAnalyser(); analyser.fftSize = 2048;
+      device.gain.connect(analyser);
+    }
+    if (analyser) {
+      const data = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(data);
+      const rms = Math.sqrt(data.reduce((sum, sample) => sum + sample * sample, 0) / data.length);
+      if (rms > .0001) {
+        localResult.textContent = `PASS: ${localPlayer.state.source} ROMs, real AudioWorklet output, RMS ${rms.toFixed(5)}, first signal in ${Math.round(performance.now() - began)} ms.`;
+        device.gain.disconnect(analyser); monitoring = false; return;
+      }
+    }
+    if (performance.now() - began > 10000) { localResult.textContent = `FAIL: ${localPlayer.state.message}, context ${device?.context.state}`; monitoring = false; return; }
+    requestAnimationFrame(inspect);
+  };
+  requestAnimationFrame(inspect);
+};
+window.addEventListener('pagehide', () => localPlayer.dispose());
+document.querySelector('#sf2').onclick = async () => {
+  const result = document.querySelector('#sf2-result'), original = localPlayer.state.renderer, wasEnabled = localPlayer.state.enabled;
+  const bank = localPlayer.state.banks[0];
+  if (!bank) { result.textContent = 'SKIP: no local or imported SF2 bank.'; return; }
+  result.textContent = 'Loading real SoundFont renderer…';
+  try {
+    await localPlayer.selectRenderer(`sf2:${bank.id}`);
+    if (!localPlayer.state.ready || localPlayer.state.renderer !== `sf2:${bank.id}`) throw new Error(localPlayer.state.message);
+    localPlayer.setPaused(false); localPlayer.play({ file: 'INTRO', track: 2 }, true);
+    const device = localPlayer.device, analyser = device.context.createAnalyser(); analyser.fftSize = 2048; device.gain.connect(analyser);
+    const rms = await new Promise((resolve, reject) => {
+      const began = performance.now();
+      const inspect = () => {
+        const data = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(data);
+        const rms = Math.sqrt(data.reduce((sum, value) => sum + value * value, 0) / data.length);
+        if (rms > .0001) resolve(rms);
+        else if (performance.now() - began > 10000) reject(new Error('Silent SF2 output'));
+        else setTimeout(inspect, 25);
+      }; inspect();
+    });
+    device.gain.disconnect(analyser); localPlayer.setPaused(true);
+    result.textContent = `PASS: real TinySoundFont AudioWorklet, ${bank.name}, RMS ${rms.toFixed(5)}.`;
+  } catch (error) { result.textContent = 'FAIL: ' + error.message; }
+  finally { localPlayer.setPaused(true); await localPlayer.selectRenderer(original); localPlayer.setEnabled(wasEnabled); }
+};
+document.querySelector('#sfx').onclick = () => {
+  const result = document.querySelector('#sfx-result'), began = performance.now();
+  result.textContent = 'Running original SFX test…';
+  const wasEnabled = localPlayer.state.enabled, wasSfx = localPlayer.state.sfxEnabled, cue = { ...localPlayer.cue };
+  localPlayer.setEnabled(false); localPlayer.setSfxEnabled(true); localPlayer.setPaused(false);
+  localPlayer.play({ file: 'KYRA1A', track: 0 }, true);
+  let analyser, device, fired = false;
+  const finish = text => {
+    result.textContent = text;
+    if (device && analyser) device.gain.disconnect(analyser);
+    localPlayer.stopEffects(); localPlayer.setPaused(true); localPlayer.play(cue, true);
+    localPlayer.setEnabled(wasEnabled); localPlayer.setSfxEnabled(wasSfx);
+  };
+  const inspect = () => {
+    if (!analyser && localPlayer.state.ready) {
+      device = localPlayer.device; analyser = device.context.createAnalyser(); analyser.fftSize = 2048; device.gain.connect(analyser);
+    }
+    if (analyser && !fired) { fired = true; localPlayer.effect(53); }
+    if (analyser) {
+      const data = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(data);
+      const rms = Math.sqrt(data.reduce((sum, sample) => sum + sample * sample, 0) / data.length);
+      if (rms > .0001) { finish(`PASS: original pickup SFX through AudioWorklet with music off, RMS ${rms.toFixed(5)}.`); return; }
+    }
+    if (performance.now() - began > 10000) { finish(`FAIL: ${localPlayer.state.message}`); return; }
+    setTimeout(inspect, 25); // Audio runs even when the desktop renderer is not painting.
+  };
+  inspect();
+};
+</script></html>

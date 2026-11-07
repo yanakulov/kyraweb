@@ -6,6 +6,7 @@ extractor/__pycache__/
 tmp_sprites/
 
 # Original game files / raw assets (do not commit)
+.local/
 original_files/
 extractor/kyr-game/
 extracted_files/original/

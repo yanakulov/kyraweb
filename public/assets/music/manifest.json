@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "source": "Kyrandia 1 DOS CD XMI.PAK",
+  "files": {
+    "INTRO": {
+      "src": "intro.xmi.gz",
+      "bytes": 28720,
+      "sha256": "9f33d903b189e3651a655857ae19478086f0d2f3f2cd3e179c7317a931149350"
+    },
+    "KYRA1A": {
+      "src": "kyra1a.xmi.gz",
+      "bytes": 36388,
+      "sha256": "19d031d9606eb3a34e29e542dbe624e3696d515bc5ef5121c6f778fb8b57caca"
+    },
+    "KYRA1B": {
+      "src": "kyra1b.xmi.gz",
+      "bytes": 33098,
+      "sha256": "9d202ced8222c5b11155efb414d5193cc7aca89e0aa124d7166058496e8f8135"
+    },
+    "KYRA2A": {
+      "src": "kyra2a.xmi.gz",
+      "bytes": 36696,
+      "sha256": "d88a125fa80aea35118342df640aac6cdee0ecfbbc1b4b7e030b55955a65ba18"
+    },
+    "KYRA3A": {
+      "src": "kyra3a.xmi.gz",
+      "bytes": 37192,
+      "sha256": "40a1ba67bfc91fe077d7dd12f9d6dbf970e9ffb54dd3d8dcd905bca2f33cf4ae"
+    },
+    "KYRA4A": {
+      "src": "kyra4a.xmi.gz",
+      "bytes": 35898,
+      "sha256": "afdb0402d74d7559bae119fc58ce91ad84171a52fff6a3735e97d09989a58874"
+    },
+    "KYRA4B": {
+      "src": "kyra4b.xmi.gz",
+      "bytes": 33194,
+      "sha256": "876419c9bbf63fb84ec57609e512c8d52a901c12f145178b57d9017fab44b11e"
+    },
+    "KYRA5A": {
+      "src": "kyra5a.xmi.gz",
+      "bytes": 29548,
+      "sha256": "5405316e8483cb4f7a47aa057e5d60a039c373670a418d1d3d7679876fe07eb2"
+    },
+    "KYRA5B": {
+      "src": "kyra5b.xmi.gz",
+      "bytes": 21672,
+      "sha256": "aeffac14960d17e507527f4d301099e8aa1596b8974055f194435675aac8c7ac"
+    },
+    "KYRAMISC": {
+      "src": "kyramisc.xmi.gz",
+      "bytes": 37068,
+      "sha256": "be90c7dd1b4d27e0d68262d965e417d303965ab55135f81bfc9424ec0e11210f"
+    }
+  }
+}
