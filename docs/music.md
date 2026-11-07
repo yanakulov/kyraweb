@@ -129,8 +129,13 @@ and skipped intervals do not burst old sounds. Bank/scene transitions cancel
 obsolete effects and pending requests.
 
 Effects have independent enabled/volume controls in Settings and work with music
-off. Music fades affect only the music source. No new audio downloads were needed:
-the original XMI packs already included these tracks.
+off. Music fades affect only the music source. With a Roland ROM pair selected,
+Munt renders the original tracks live using the timbres uploaded by `INTRO` track 0.
+With a SoundFont or without a ROM pair, a compact CM-32L recording of the same
+effects plays independently of the music bank. It loads after the first audio
+gesture. `extractor/render_sfx.ts` builds it from the game's XMIDI tracks using
+Munt, a locally supplied CM-32L ROM pair and FFmpeg. The recorded bank contains
+rendered effects and cue offsets. Firmware stays local.
 
 Tests cover native-part assignment, protection, source cleanup, sample ordering,
 three-slot saturation, independent levels, game input callbacks, DAT operands

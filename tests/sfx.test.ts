@@ -92,6 +92,9 @@ test('intro effects are single-shot, paused by their clock, muted in the menu an
   clock.update('menu', cues, 20, true, n => sent.push(n)); assert.deepEqual(sent, [29, 30]);
   const writing = buildIntroSteps().find(step => step.id === 'kallak_writing')!;
   assert.equal(writing.effects?.[0].track, 29); assert.ok(writing.effects!.length > 20);
+  const shore = buildIntroSteps().find(step => step.id === 'shore_destruct')!;
+  assert.deepEqual(shore.effects?.map(cue => cue.track), [22, 37, 23, 37, 24, 37]);
+  assert.ok(buildIntroSteps().find(step => step.id === 'tree_anim_1')!.effects?.some(cue => cue.track === 25));
 });
 test('opening, tree and forest EMC retain real SFX instructions in the script clock', () => {
   assert.deepEqual(opening.opening.filter(a => a.op === 'sfx').map(a => a.track), [72, 62, 63, 64]);

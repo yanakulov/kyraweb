@@ -3,6 +3,7 @@
 <button id="local">Test automatic local MT-32</button><button id="stop">Stop music</button><pre id="local-result">Checking local ROM availability.</pre>
 <button id="sfx">Test SFX with music disabled</button><pre id="sfx-result">Waiting for SFX test.</pre>
 <button id="sf2">Test SoundFont renderer</button><pre id="sf2-result">Waiting for SoundFont test.</pre>
+<button id="switch-sfx">Test tree SFX across device switches</button><pre id="switch-result">Waiting for device switch test.</pre>
 <script type="module">
 import { MusicPlayer } from '/src/engine/audio/music.ts';
 const button = document.querySelector('#run'), result = document.querySelector('#result');
@@ -100,5 +101,49 @@ document.querySelector('#sfx').onclick = () => {
     setTimeout(inspect, 25); // Audio runs even when the desktop renderer is not painting.
   };
   inspect();
+};
+document.querySelector('#switch-sfx').onclick = async event => {
+  const button = event.currentTarget, result = document.querySelector('#switch-result');
+  const bank = localPlayer.state.banks.find(bank => bank.id.startsWith('local:'));
+  if (!bank || !localPlayer.state.available || localPlayer.state.renderer !== 'mt32') {
+    result.textContent = 'SKIP: needs a local Roland ROM pair and SF2 bank.'; return;
+  }
+  button.disabled = true; localPlayer.unlock();
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const until = async (predicate, label) => {
+    const began = performance.now();
+    while (!predicate()) {
+      if (performance.now() - began > 10000) throw new Error(label);
+      await delay(25);
+    }
+  };
+  async function explosion(label, device) {
+    const analyser = device.context.createAnalyser(); analyser.fftSize = 2048;
+    const samples = new Float32Array(analyser.fftSize);
+    const rms = () => { analyser.getFloatTimeDomainData(samples); return Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length); };
+    device.gain.connect(analyser);
+    try {
+      await delay(100);
+      if (rms() > .0001) throw new Error(`${label} baseline is not silent`);
+      localPlayer.effect(25);
+      await until(() => rms() > .0001, `${label} explosion is silent`);
+      result.textContent += `\nPASS: ${label} tree explosion, RMS ${rms().toFixed(5)}`;
+    } finally { device.gain.disconnect(analyser); localPlayer.stopEffects(); }
+  }
+  try {
+    result.textContent = 'Checking original intro effect 25 with music off.';
+    localPlayer.intro('tree_anim_1'); localPlayer.setEnabled(false); localPlayer.setPaused(false);
+    await until(() => localPlayer.state.ready, 'MT-32 did not start');
+    await explosion('live MT-32', localPlayer.device);
+    await localPlayer.selectRenderer(`sf2:${bank.id}`);
+    if (localPlayer.state.renderer !== `sf2:${bank.id}`) throw new Error(localPlayer.state.message);
+    localPlayer.setEnabled(false);
+    await until(() => localPlayer.recordedEffects.buffer, 'recorded effects did not decode');
+    await explosion('recorded CM-32L with SF2 selected', localPlayer.recordedEffects);
+    await localPlayer.selectRenderer('mt32'); localPlayer.setEnabled(false);
+    if (!localPlayer.state.ready || localPlayer.state.renderer !== 'mt32') throw new Error(localPlayer.state.message);
+    await explosion('live MT-32 after switching back', localPlayer.device);
+  } catch (error) { result.textContent += `\nFAIL: ${error.message}`; }
+  finally { localPlayer.setPaused(true); button.disabled = false; }
 };
 </script></html>

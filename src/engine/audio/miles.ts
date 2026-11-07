@@ -22,6 +22,10 @@ export class MilesMt32 {
       this.short(0xe0 | channel | 64 << 16); // Kyra tracks do not all reset pitch bend
     }
   }
+  loadPatchEvent = (status: number, data: number[]) => {
+    // INTRO 0 ends with test notes. Keep its patch writes and timing without arming the reverb tail.
+    if (status >> 4 !== 8 && status >> 4 !== 9) this.send(status, data);
+  };
   send = (status: number, data: number[]) => {
     const kind = status >> 4, channel = status & 15, [a, b] = data;
     if (status === 0xf0) { this.sysex([status, ...data]); return; }

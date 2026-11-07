@@ -970,6 +970,17 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     assert.equal(requestCount('/assets/forest/gemcut.kyr.gz'), 1, 'returning reuses the decoded room, including an in-flight neighbour request');
     assert.equal(requestCount('/assets/world/1.kyr.gz'), 2, 'a successful cached neighbour is not fetched again');
 
+    loaded.runSequence([{ op: 'exit', target: 8, entry: { x: 200, y: 110 } }]);
+    await until(() => location === 8 && !!loaded.getSaveState(), 'the pool did not become ready');
+    assert.equal(score.at(-1), 7, 'the Pool of Sorrow starts its own score');
+    loaded.runSequence([{ op: 'exit', target: 10, entry: { x: 280, y: 110 } }]);
+    await until(() => location === 10 && !!loaded.getSaveState(), 'return to the forest did not finish');
+    assert.equal(score.at(-1), 2, 'leaving the pool restores the shared forest score');
+    const scoreCount = score.length;
+    loaded.runSequence([{ op: 'exit', target: 5, entry: { x: 280, y: 110 } }]);
+    await until(() => location === 5 && !!loaded.getSaveState(), 'the trunk did not become ready');
+    assert.equal(score.length, scoreCount, 'ordinary forest transitions do not restart the score');
+
     // Self-use follows the original _NPC.EMC branches, in any room.
     const heard: string[] = [], notes: boolean[] = [];
     const letterGame = await startGame(h.canvas, { ...config, saveState: saved, paused: false,

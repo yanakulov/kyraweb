@@ -33,7 +33,7 @@ class Mt32Processor extends AudioWorkletProcessor {
           const synth = new Mt32Synth(module, new Uint8Array(data.control), new Uint8Array(data.pcm), sampleRate);
           this.synth = synth;
           synth.miles.init();
-          this.sequence = new XmidiSequencer(data.initialization, sampleRate, this.synth.miles.send);
+          this.sequence = new XmidiSequencer(data.initialization, sampleRate, synth.miles.loadPatchEvent);
           this.initializing = true;
           this.initRequest = data.id;
         } else if (data.type === 'track') {

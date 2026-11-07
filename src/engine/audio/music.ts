@@ -5,6 +5,7 @@ import { parseXmidi, type MidiTrack } from './xmidi';
 import { readRoms, storeRoms, readRomFiles, type Mt32Roms } from './romStorage';
 import { introCue, wanderCue, type MusicCue } from './cues';
 import { readLocalRoms, isLocalMusicHost } from './localRoms';
+import { RecordedEffects } from './recordedEffects';
 import { readSoundFonts, storeSoundFont, localSoundFonts, publicSoundFont, soundFontData, validateSoundFont, MAX_SOUNDFONT_BYTES, type SoundFontBank } from './soundfonts';
 
 export type MusicState = { renderer: string; banks: { id: string; name: string }[]; enabled: boolean; volume: number; sfxEnabled: boolean; sfxVolume: number; available: boolean; ready: boolean; busy: boolean; previewing: boolean; message: string; soundFontProgress?: number; romNames: string[]; source: 'none' | 'browser' | 'local' };
@@ -37,7 +38,14 @@ export class MusicPlayer {
   private restoring = false;
   private userActivated = false;
   private effectEpoch = 0;
-  private wantsAudio() { return this.state.enabled || this.state.sfxEnabled; }
+  private recordedEffects = new RecordedEffects();
+  private usesNativeEffects() { return this.state.renderer === 'mt32' && !!this.roms; }
+  private prepareRecordedEffects() {
+    if (this.disposed || this.restoring || !this.userActivated || !this.state.sfxEnabled || this.usesNativeEffects()) return;
+    this.recordedEffects.setVolume(this.state.sfxVolume);
+    this.recordedEffects.prepare();
+  }
+  private wantsAudio() { return this.state.enabled || this.state.sfxEnabled && this.usesNativeEffects(); }
   constructor(private changed: (state: MusicState) => void) {}
   private publish(message?: string) { if (this.disposed) return; if (message !== undefined) this.state.message = message; this.changed({ ...this.state, romNames: [...this.state.romNames] }); }
   async restore() {
@@ -66,13 +74,15 @@ export class MusicPlayer {
     } catch (error) { if (!this.disposed) this.publish(this.error(error)); }
     finally {
       this.restoring = false;
+      this.prepareRecordedEffects();
       if ((!this.hasResources() || !this.wantsAudio()) && this.warmContext) { this.closeContext(this.warmContext); this.warmContext = undefined; }
     }
   }
   /** Call synchronously from a user gesture, before awaits, for browser autoplay rules. */
   unlock() {
     this.userActivated = true;
-    if (!this.disposed && !this.failed && this.restoring && !this.hasResources() && !this.warmContext && (this.wantsAudio() || preference('kyrandia.music', 'auto') !== '0' && isLocalMusicHost())) {
+    this.prepareRecordedEffects();
+    if (!this.disposed && !this.failed && this.restoring && !this.hasResources() && !this.warmContext && (this.wantsAudio() || isLocalMusicHost() && (this.state.sfxEnabled || preference('kyrandia.music', 'auto') !== '0'))) {
       try { this.warmContext = this.context(); } catch (error) { this.publish(this.error(error)); }
     }
     if (!this.disposed && !this.failed && this.wantsAudio() && this.hasResources() && !this.state.busy) {
@@ -96,25 +106,28 @@ export class MusicPlayer {
   setSfxEnabled(value: boolean) {
     this.state.sfxEnabled = value; remember('kyrandia.sfx', value ? '1' : '0'); this.failed = false;
     if (!value) this.stopEffects();
+    else this.prepareRecordedEffects();
     if (this.wantsAudio()) this.unlock(); else { this.epoch++; this.destroy(); }
     this.syncVolumes(); this.publish();
   }
   setSfxVolume(value: number) {
     if (!Number.isFinite(value)) return;
     this.state.sfxVolume = Math.max(0, Math.min(1, value)); remember('kyrandia.sfxVolume', String(this.state.sfxVolume));
+    this.recordedEffects.setVolume(this.state.sfxVolume);
     this.syncVolumes(); this.publish();
   }
   private syncVolumes() { this.device?.node.port.postMessage({ type: 'volumes', music: this.state.enabled || this.state.previewing ? this.state.volume : 0, effects: this.state.sfxEnabled ? this.state.sfxVolume : 0 }); }
   effect(track: number) {
     if (!this.state.sfxEnabled || this.state.previewing || !Number.isInteger(track) || track < 0 || track > 119) return;
     const device = this.device, epoch = this.effectEpoch, file = this.cue.file;
+    if (!this.usesNativeEffects()) { this.recordedEffects.play(file, track); return; }
     if (!device) return; // Never replay stale interactions after ROM initialization.
     void this.load(file).then(tracks => {
       if (this.device !== device || epoch !== this.effectEpoch || file !== this.cue.file || !this.state.sfxEnabled) return;
-      if (tracks[track]) device.node.port.postMessage({ type: 'effect', track: tracks[track] });
+      if (tracks[track]?.some(event => event.status >> 4 === 9 && event.data[1])) device.node.port.postMessage({ type: 'effect', track: tracks[track] });
     }).catch(error => { if (epoch === this.effectEpoch) this.publish(this.error(error)); });
   }
-  stopEffects() { this.effectEpoch++; this.device?.node.port.postMessage({ type: 'stopEffects' }); }
+  stopEffects() { this.effectEpoch++; this.recordedEffects.stop(); this.device?.node.port.postMessage({ type: 'stopEffects' }); }
   async importRoms(files: File[]) {
     if (this.state.busy || this.disposed) return;
     // Construct/resume in the file-input gesture, not after asynchronous disk reads.
@@ -127,7 +140,7 @@ export class MusicPlayer {
       const roms = await readRomFiles(files);
       candidate = await this.build(context, roms);
       if (epoch !== this.epoch || this.disposed) { this.close(candidate); return; }
-      this.destroy(); this.device = candidate; candidate = undefined;
+      this.stopEffects(); this.destroy(); this.device = candidate; candidate = undefined;
       this.state.renderer = 'mt32'; remember('kyrandia.renderer', 'mt32');
       this.failed = false; this.roms = roms; this.state.available = this.state.ready = this.state.enabled = true; this.state.source = 'browser';
       this.state.romNames = roms.names; remember('kyrandia.music', '1');
@@ -140,13 +153,14 @@ export class MusicPlayer {
   async forgetRoms() {
     if (this.state.busy) return;
     this.epoch++; if (this.state.renderer === 'mt32') this.destroy(); this.roms = undefined; this.state.romNames = []; this.state.source = 'none'; this.updateBanks();
+    this.prepareRecordedEffects();
     try { await storeRoms(null); this.publish('ROMs removed from this browser.'); } catch (error) { this.publish(this.error(error)); }
   }
   async selectRenderer(renderer: string) {
     if (this.state.busy || this.disposed || renderer === this.state.renderer) return;
     const bank = renderer.startsWith('sf2:') ? this.banks.get(renderer.slice(4)) : undefined;
     if (renderer !== 'mt32' && !bank) return;
-    if (renderer === 'mt32' && !this.roms) { this.destroy(); this.state.renderer = renderer; this.updateBanks(); remember('kyrandia.renderer', renderer); this.publish('Import your own MT-32 or CM-32L Control and PCM ROMs.'); return; }
+    if (renderer === 'mt32' && !this.roms) { this.stopEffects(); this.destroy(); this.state.renderer = renderer; this.updateBanks(); this.prepareRecordedEffects(); remember('kyrandia.renderer', renderer); this.publish('Import your own MT-32 or CM-32L Control and PCM ROMs.'); return; }
     await this.changeRenderer(renderer, bank);
   }
   private async changeRenderer(renderer: string, bank?: SoundFontBank, prepared?: AudioContext) {
@@ -157,8 +171,9 @@ export class MusicPlayer {
     try {
       candidate = await this.build(context, this.roms, bank);
       if (this.disposed || epoch !== this.epoch) return false;
-      this.destroy(); this.device = candidate; candidate = undefined;
+      this.stopEffects(); this.destroy(); this.device = candidate; candidate = undefined;
       this.state.renderer = renderer; this.state.ready = this.state.enabled = true; this.failed = false;
+      this.prepareRecordedEffects();
       if (bank) this.banks.set(bank.id, bank);
       this.updateBanks(); remember('kyrandia.renderer', renderer); remember('kyrandia.music', '1');
       this.syncVolumes(); this.syncPause(); this.applyCue(); this.publish(this.readyMessage()); return true;
@@ -284,7 +299,7 @@ export class MusicPlayer {
     if (cue) this.play(cue, true); else this.fade();
   }
   fade() { this.faded = true; this.request++; if (!this.state.previewing) this.device?.node.port.postMessage({ type: 'fade' }); }
-  stop() { this.faded = true; this.command = -1; this.request++; this.effectEpoch++; this.device?.node.port.postMessage({ type: 'stop' }); }
+  stop() { this.faded = true; this.command = -1; this.request++; this.stopEffects(); this.device?.node.port.postMessage({ type: 'stop' }); }
   preview() {
     this.state.previewing = !this.state.previewing;
     this.applyCue(); this.syncPause(); this.syncVolumes(); this.publish(); this.unlock();
@@ -306,11 +321,14 @@ export class MusicPlayer {
     this.hidden = value; this.syncPause();
     if (this.device) void (value ? this.device.context.suspend() : this.device.context.resume()).catch(() => this.publish('Click Enable music to allow browser audio.'));
   }
-  private syncPause() { this.device?.node.port.postMessage({ type: 'pause', value: this.hidden || this.paused && !this.state.previewing }); }
+  private syncPause() {
+    this.recordedEffects.setPaused(this.hidden || this.paused || this.state.previewing);
+    this.device?.node.port.postMessage({ type: 'pause', value: this.hidden || this.paused && !this.state.previewing });
+  }
   private closeContext(context: AudioContext) { this.contexts.delete(context); void context.close().catch(() => {}); }
   private close(device: Device) { device.node.port.postMessage({ type: 'dispose' }); device.node.disconnect(); device.gain.disconnect(); device.node.port.close(); this.closeContext(device.context); }
   private destroy() { this.request++; this.effectEpoch++; if (this.device) this.close(this.device); this.device = undefined; this.state.ready = false; }
   private error(error: unknown) { return error instanceof Error ? error.message : 'Music could not start.'; }
   private fail(message: string) { this.failed = true; this.destroy(); this.publish(message); }
-  dispose() { this.disposed = true; this.epoch++; this.destroy(); for (const context of this.contexts) this.closeContext(context); }
+  dispose() { this.disposed = true; this.epoch++; this.destroy(); this.recordedEffects.dispose(); for (const context of this.contexts) this.closeContext(context); }
 }

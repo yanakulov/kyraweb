@@ -72,6 +72,10 @@ test('Miles builds Roland checksums, translates SysEx controllers and resets pit
   miles.send(0xc1, [7]); miles.send(0xb1, [60, 12]);
   assert.deepEqual(sysex.at(-1), rolandWrite((5 << 14) + 7 * 8 + 4, [12]));
   const count = short.length; miles.send(0xb1, [110, 127]); miles.send(0xb1, [123, 0]); assert.equal(short.length, count);
+  miles.loadPatchEvent(0x91, [60, 110]); miles.loadPatchEvent(0x81, [60, 0]);
+  miles.loadPatchEvent(0xf0, [0x41, 0x10, 0x16, 0x12, 5, 0, 0, 2, 121, 0xf7]);
+  assert.equal(short.length, count, 'the test phrase must not leak out of device initialization');
+  assert.deepEqual(sysex.at(-1), rolandWrite(5 << 14, [2]));
   for (const bytes of sysex) assert.equal(bytes.slice(5, -1).reduce((sum, b) => sum + b, 0) % 128, 0);
 });
 test('music cues retain DOS mappings and original opening/room commands', () => {
