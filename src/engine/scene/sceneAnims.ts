@@ -17,7 +17,7 @@ export function buildSceneAnimStates(anims: SceneAnimDef[]): SceneAnimState[] {
     }));
 }
 
-export function updateSceneAnims(anims: SceneAnimState[], nowMs: number, actor?: (opcode:number,value:number)=>void) {
+export function updateSceneAnims(anims: SceneAnimState[], nowMs: number, actor?: (opcode:number,value:number)=>void, sound?: (track:number)=>void, random = Math.random) {
   for (let i = 0; i < anims.length; i++) {
     const anim = anims[i];
     if (!anim.play) continue;
@@ -115,11 +115,11 @@ export function updateSceneAnims(anims: SceneAnimState[], nowMs: number, actor?:
       }
       case 0xFF8E: anim.loopsLeft=script[ip++];anim.loopStart=ip;break;
       case 0xFF8F: if(anim.loopsLeft>0){anim.loopsLeft--;ip=anim.loopStart;}break;
-      case 0xFFB3: {const min=script[ip++],max=script[ip++];anim.nextRun=anim.lastRefresh+(min+Math.floor(Math.random()*(max-min+1)))*TICK_MS;break;}
-      case 0xFFB0: ip++;break;
-      case 0xFFB4: ip+=2;break;
+      case 0xFFB3: {const min=script[ip++],max=script[ip++];anim.nextRun=anim.lastRefresh+(min+Math.floor(random()*(max-min+1)))*TICK_MS;break;}
+      case 0xFFB0: { const track=script[ip++];sound?.(track);break; }
+      case 0xFFB4: { const track=script[ip++],percent=script[ip++];if(Math.floor(random()*101)<=percent)sound?.(track);break; }
       case 0xFF99:case 0xFF9A:case 0xFFB1:case 0xFFB2:break;
-      case 0xFFAD:case 0xFFAE:case 0xFFAF: actor?.(opcode,script[ip++]);break;
+      case 0xFFAD:case 0xFFAE:case 0xFFAF: { const value=script[ip++];actor?.(opcode,value);break; }
       case 0xFFAA:case 0xFFAB: actor?.(opcode,0);break;
       case 0xFF87:
       default: {

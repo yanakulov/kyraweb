@@ -4,6 +4,12 @@ import './studio-logo.test';
 import './book-motion.test';
 import './save-storage.test';
 import './localization.test';
+import './audio.test';
+import './local-roms.test';
+import './music-startup.test';
+import './sfx.test';
+import './soundfonts.test';
+import './mu50-roms.test';
 import assert from "node:assert/strict";
 import { playIntro, frameAtTime } from "../src/engine/intro/player";
 import { buildIntroSteps } from "../src/engine/intro/steps";
@@ -653,7 +659,8 @@ test("game input preserves held items on failed drops and exchanges scene items"
   }
   Object.assign(globalThis, { Image: FakeImage, fetch: async () => ({ ok: true, json: async () => ({}) }) });
   try {
-    const game = await startGame(h.canvas, { scene: { ...scene, walkPolygon: [], items: [{ id: "ruby", x: 80, y: 80 }, { id: "saw", x: 120, y: 80 }] } });
+    const sounds: number[] = [];
+    const game = await startGame(h.canvas, { onScriptAction: action => { if (action.op === 'sfx') sounds.push(action.track); }, scene: { ...scene, walkPolygon: [], items: [{ id: "ruby", x: 80, y: 80 }, { id: "saw", x: 120, y: 80 }] } });
     assert.equal(game.handleClick({ x: 80, y: 75 }), true); // Ruby in hand.
     assert.equal(game.handleClick({ x: 200, y: 60 }), true); // Rejected drop is consumed.
     assert.equal(game.handleClick({ x: 120, y: 75 }), true); // Swap ruby for saw.
@@ -664,6 +671,7 @@ test("game input preserves held items on failed drops and exchanges scene items"
     assert.ok(itemDraws.some(d => d[1] === 0 && d[2] === 0 && d[5] === 112 && d[6] === 64), "Ruby replaced the saw in the scene");
     assert.equal(game.handleClick({ x: 120, y: 75 }), true); // Ruby still exists.
     assert.equal(game.handleClick({ x: 200, y: 60 }), true); // Still holding ruby.
+    assert.deepEqual(sounds, [53, 54, 53, 50, 53, 54]);
     game.stop();
   } finally { Object.assign(globalThis, original); h.restore(); }
 });

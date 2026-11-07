@@ -16,7 +16,7 @@ for (const name of ["KallakWriting", "MalcolmTree", "KallakMalcolm"]) {
   const bytes = [...match[1].matchAll(/0x([\da-f]+)/gi)].map((m) => parseInt(m[1], 16));
   let ip = 0, time = 0, activeMovie = 0, activeSubtitle = null;
   let hand = null;
-  const loops = [], movies = [], subtitles = [], tracks = {};
+  const loops = [], movies = [], subtitles = [], effects = [], tracks = {};
   const closeText = () => {
     if (activeSubtitle) activeSubtitle.endMs = round(time);
     activeSubtitle = null;
@@ -63,11 +63,12 @@ for (const name of ["KallakWriting", "MalcolmTree", "KallakMalcolm"]) {
       subtitles.push(activeSubtitle);
     }
     if (op === 17 || op === 18) closeText();
+    if (op === 24) effects.push({ atMs: round(time + 3 * 1000 / 60), track: p[0] });
     // SeqPlayer yields 8 ms after every command, including explicit waits.
     time += 8;
     if (op === 29) break;
   }
   closeText();
-  output[name] = { durationMs: round(time), tracks, subtitles };
+  output[name] = { durationMs: round(time), tracks, subtitles, effects };
 }
 fs.writeFileSync(new URL("../src/engine/intro/introTimeline.json", import.meta.url), JSON.stringify(output, null, 2) + "\n");

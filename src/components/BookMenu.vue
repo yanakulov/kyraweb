@@ -31,6 +31,7 @@
             <BookSelect id="book-speed" :label="t('Walk speed')" :model-value="walkSpeed" :options="speeds" :disabled="busy" @update:model-value="$emit('update:walkSpeed', $event as WalkSpeed)" />
           </div>
           <label class="folio-check"><input type="checkbox" :checked="atmosphere" @change="$emit('update:atmosphere', ($event.target as HTMLInputElement).checked)" /><span aria-hidden="true" class="check-gem"></span><span>{{ t('Window dust') }}</span></label>
+          <MusicSettings v-if="musicPlayer && musicState" :player="musicPlayer" :state="musicState" />
           <button v-if="fullscreenAvailable" type="button" @click="$emit('fullscreen')">{{ t(isFullscreen ? 'Exit full screen' : 'Full screen') }}</button>
           <div class="folio-inline folio-navigation"><button v-if="!mainMenu" type="button" @click="askLeave('menu')">{{ t('Main menu') }}</button><button type="button" @click="mainMenu ? $emit('replayIntro') : askLeave('intro')">{{ t('Replay intro') }}</button></div>
           <button type="button" @click="$emit('readPrologue')">{{ t('The story so far') }}</button>
@@ -48,6 +49,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue';
 import BookSelect from './BookSelect.vue';
+import MusicSettings from './MusicSettings.vue';
+import type { MusicPlayer, MusicState } from '../engine/audio/music';
 import { locale, setLocale, t } from '../i18n';
 type WalkSpeed = 'slowest' | 'slow' | 'fast' | 'fastest';
 type View = 'main' | 'save' | 'load' | 'settings' | 'help';
@@ -56,6 +59,7 @@ const props = withDefaults(defineProps<{
   slots: { index: number; name?: string; location?: string; savedAt?: string; thumbnail?: string; error?: string | null }[];
   walkSpeed: WalkSpeed; atmosphere: boolean; fullscreenAvailable: boolean; isFullscreen: boolean;
   initialView?: 'main' | 'load';
+  musicPlayer?: MusicPlayer; musicState?: MusicState;
 }>(), { initialView: 'main', mainMenu: false });
 const emit = defineEmits<{
   resume: []; save: [index: number, name: string]; load: [index: number]; startJourney: []; readPrologue: [];

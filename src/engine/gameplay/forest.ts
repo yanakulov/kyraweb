@@ -531,11 +531,15 @@ export function traceForest(
           case 0x8b:
             emit({ op: "message", text: text[a[1]] });
             return 0;
-          // Engine configuration or audio. Original frame/time instructions above own visuals.
+          case 0x18:
+            emit({ op: "music", command: a[0], restart: !!a[1] });
+            return 0;
+          case 0x17:
+            emit({ op: "sfx", track: a[0] });
+            return 0;
+          // Engine configuration. Audio follows the original EMC calls.
           case 8:
           case 0x0f:
-          case 0x17:
-          case 0x18:
           case 0x26:
           case 0x28:
           case 0x31:

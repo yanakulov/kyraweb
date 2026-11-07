@@ -90,8 +90,10 @@ export function buildOpening(resources) {
           return 0;
         case 0x10: case 0x11: emit({ op: 'ambient', index: a[0], enabled: id === 0x10 }); return 0;
         case 0x3b: emit({ op: 'commit', x: a[0], y: a[1], w: a[2], h: a[3] }); return 0;
-        // State/configuration, cursor, music and sound commands don't draw frames.
-        case 0x09: case 0x17: case 0x18: case 0x26: case 0x2d: case 0x2e:
+        case 0x18: emit({ op: 'music', command: a[0], restart: !!a[1] }); return 0;
+        case 0x17: emit({ op: 'sfx', track: a[0] }); return 0;
+        // State/configuration and cursor operations don't draw frames.
+        case 0x09: case 0x26: case 0x2d: case 0x2e:
         case 0x36: case 0x37: return 0;
         default: throw new Error(`Unsupported opening syscall 0x${id.toString(16)}`);
       }
@@ -99,11 +101,21 @@ export function buildOpening(resources) {
     return actions;
   }
   const opening = [{ op: 'scene', name: 'trunk', ...actor, visible: true }, ...trace('TRUNK', 3, { 7: 1, 4: -1 })];
+  // The visual opening traces omit scene function 0; retain its real music calls.
+  function musicSetup(name) {
+    const actions = [];
+    runEmc(parseEmc(get(`${name}.EMC`)), 0, (op, a) => {
+      if (op === 4) return +flags.has(a[0]);
+      if (op === 0x18) actions.push({ op: 'music', command: a[0], restart: !!a[1] });
+      return 0;
+    });
+    return actions;
+  }
   opening.push({ op: 'scene', name: 'gem', x: 208, y: 110, facing: 5, visible: false },
-    ...trace('GEM', 2, { 7: 0, 4: -1 }), ...trace('GEM', 3, { 7: 0, 4: -1 }));
+    ...musicSetup('GEM'), ...trace('GEM', 2, { 7: 0, 4: -1 }), ...trace('GEM', 3, { 7: 0, 4: -1 }));
   const dat = Buffer.from(get('GEMCUT.DAT'));
   actor = { x: dat.readUInt16LE(dat.length - 6) & ~3, y: dat[dat.length - 4] & ~1, facing: 0 };
-  opening.push({ op: 'scene', name: 'room', ...actor, visible: true }, ...trace('GEMCUT', 3, { 7: 0, 4: -1 }));
+  opening.push({ op: 'scene', name: 'room', ...actor, visible: true }, ...musicSetup('GEMCUT'), ...trace('GEMCUT', 3, { 7: 0, 4: -1 }));
   const tree = trace('GEMCUT', 1, { 1: 150, 2: 130, 4: -1 });
   if (!flags.has(53)) throw new Error('Tree conversation did not complete');
   return { source: 'Kyrandia 1 DOS CD EMC2', opening, tree, voiceDurations: lengths,

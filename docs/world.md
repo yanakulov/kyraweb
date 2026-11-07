@@ -1,6 +1,6 @@
 # First forest region
 
-The first forest region supports the original CD quest chain through the repaired bridge: Brynn’s note and enchanted rose, healing the willow, Merith’s chase and marble, the altar and amulet, and Herman’s saw and bridge repair. Room 24, CAVEB, is the landing beyond the bridge; its later-world west exit remains unavailable. Save files, later regions and audio are still outside this slice.
+The first forest region supports the original CD quest chain through the repaired bridge: Brynn’s note and enchanted rose, healing the willow, Merith’s chase and marble, the altar and amulet, and Herman’s saw and bridge repair. Room 24, CAVEB, is the landing beyond the bridge; its later-world west exit remains unavailable. Chapter saves and [MT-32 music/SFX](music.md) were added later; later regions and speech remain outside this slice.
 
 | ID | Original resource | Location |
 | --- | --- | --- |

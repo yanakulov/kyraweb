@@ -1,0 +1,302 @@
+import processorUrl from './mt32-worklet.ts?worker&url';
+import manifest from '../../../public/assets/music/manifest.json';
+import { withBase } from '../core/assets';
+import { parseXmidi, type MidiTrack } from './xmidi';
+import { readRoms, storeRoms, readRomFiles, type Mt32Roms } from './romStorage';
+import { introCue, wanderCue, type MusicCue } from './cues';
+import { readLocalRoms, isLocalMusicHost } from './localRoms';
+import { readSoundFonts, storeSoundFont, localSoundFonts, publicSoundFont, soundFontData, validateSoundFont, MAX_SOUNDFONT_BYTES, type SoundFontBank } from './soundfonts';
+
+export type MusicState = { renderer: string; banks: { id: string; name: string }[]; enabled: boolean; volume: number; sfxEnabled: boolean; sfxVolume: number; available: boolean; ready: boolean; busy: boolean; previewing: boolean; message: string; romNames: string[]; source: 'none' | 'browser' | 'local' };
+type Device = { context: AudioContext; node: AudioWorkletNode; gain: GainNode };
+function preference(key: string, fallback: string) { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
+function remember(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Session controls still work. */ } }
+
+export class MusicPlayer {
+  readonly state: MusicState = { renderer: preference('kyrandia.renderer', 'mt32'), banks: [], enabled: preference('kyrandia.music', '0') === '1', volume: Math.max(0, Math.min(1, Number(preference('kyrandia.musicVolume', '.65')) || 0)), sfxEnabled: preference('kyrandia.sfx', '1') !== '0', sfxVolume: Math.max(0, Math.min(1, Number(preference('kyrandia.sfxVolume', '.8')) || 0)), available: false, ready: false, busy: false, previewing: false, message: '', romNames: [], source: 'none' };
+  private roms?: Mt32Roms;
+  private banks = new Map<string, SoundFontBank>();
+  private selectedBank() { return this.state.renderer.startsWith('sf2:') ? this.banks.get(this.state.renderer.slice(4)) : undefined; }
+  private hasResources() { return this.state.renderer === 'mt32' ? !!this.roms : !!this.selectedBank(); }
+  private readyMessage() { return this.state.renderer === 'mt32' ? 'MT-32 is ready.' : 'SoundFont is ready (GM approximation).'; }
+  private updateBanks() { this.state.banks = [...this.banks.values()].map(({ id, name }) => ({ id, name })); this.state.available = this.hasResources(); }
+  private device?: Device;
+  private starting?: Promise<void>;
+  private tracks = new Map<string, Promise<MidiTrack[]>>();
+  private cue: MusicCue = { file: 'INTRO', track: 2 };
+  private paused = true;
+  private hidden = false;
+  private faded = false;
+  private command = -1;
+  private request = 0;
+  private epoch = 0;
+  private disposed = false;
+  private failed = false;
+  private contexts = new Set<AudioContext>();
+  private warmContext?: AudioContext;
+  private restoring = false;
+  private userActivated = false;
+  private effectEpoch = 0;
+  private wantsAudio() { return this.state.enabled || this.state.sfxEnabled; }
+  constructor(private changed: (state: MusicState) => void) {}
+  private publish(message?: string) { if (this.disposed) return; if (message !== undefined) this.state.message = message; this.changed({ ...this.state, romNames: [...this.state.romNames] }); }
+  async restore() {
+    const epoch = this.epoch;
+    this.restoring = true;
+    let storageError: unknown, localError: unknown;
+    try {
+      const [stored, local, savedBanks, localBanks] = await Promise.all([
+        readRoms().catch(error => { storageError = error; return undefined; }),
+        readLocalRoms().catch(error => { localError = error; return undefined; }),
+        readSoundFonts().catch(() => []), localSoundFonts().catch(() => [])
+      ]);
+      if (this.disposed || epoch !== this.epoch || this.roms) return;
+      for (const bank of [...savedBanks, ...localBanks, publicSoundFont]) this.banks.set(bank.id, bank);
+      if (this.state.renderer !== 'mt32' && !this.selectedBank()) this.state.renderer = 'mt32';
+      this.updateBanks();
+      const roms = stored ?? local;
+      if (roms) {
+        if (!(roms.control instanceof ArrayBuffer) || !(roms.pcm instanceof ArrayBuffer) || ![65536, 131072].includes(roms.control.byteLength) || ![524288, 1048576].includes(roms.pcm.byteLength) || !Array.isArray(roms.names) || roms.names.length !== 2 || !roms.names.every(name => typeof name === 'string' && name.length <= 255)) throw new Error('Choose one Control ROM and one PCM ROM.');
+        this.roms = roms; this.state.romNames = roms.names; this.state.source = stored ? 'browser' : 'local';
+      }
+      this.updateBanks();
+      if (local && !stored && preference('kyrandia.music', 'auto') === 'auto') this.state.enabled = true;
+      this.publish(this.state.renderer !== 'mt32' ? 'SoundFont mode uses approximate MT-32 to GM instrument mapping.' : this.state.source === 'local' ? 'Local ROMs loaded automatically.' : !roms && (localError || storageError) ? this.error(localError || storageError) : '');
+      if (this.userActivated && this.wantsAudio() && this.hasResources() && !this.failed) void this.start();
+    } catch (error) { if (!this.disposed) this.publish(this.error(error)); }
+    finally {
+      this.restoring = false;
+      if ((!this.hasResources() || !this.wantsAudio()) && this.warmContext) { this.closeContext(this.warmContext); this.warmContext = undefined; }
+    }
+  }
+  /** Call synchronously from a user gesture, before awaits, for browser autoplay rules. */
+  unlock() {
+    this.userActivated = true;
+    if (!this.disposed && !this.failed && this.restoring && !this.hasResources() && !this.warmContext && (this.wantsAudio() || preference('kyrandia.music', 'auto') !== '0' && isLocalMusicHost())) {
+      try { this.warmContext = this.context(); } catch (error) { this.publish(this.error(error)); }
+    }
+    if (!this.disposed && !this.failed && this.wantsAudio() && this.hasResources() && !this.state.busy) {
+      if (!this.device) void this.start();
+      else if (!this.hidden && this.device.context.state === 'suspended') void this.device.context.resume().catch(() => this.publish('Click Enable music to allow browser audio.'));
+    }
+  }
+  setEnabled(value: boolean) {
+    this.failed = false;
+    this.state.enabled = value; remember('kyrandia.music', value ? '1' : '0');
+    if (value) { this.publish(this.hasResources() ? '' : this.state.renderer === 'mt32' ? 'Import your own MT-32 or CM-32L Control and PCM ROMs.' : 'Import an SF2 SoundFont bank.'); this.applyCue(); this.unlock(); }
+    else { this.state.previewing = false; this.applyCue(); if (!this.wantsAudio()) { this.epoch++; this.destroy(); } this.publish(''); }
+    this.syncVolumes();
+  }
+  setVolume(value: number) {
+    if (!Number.isFinite(value)) return;
+    this.state.volume = Math.max(0, Math.min(1, value)); remember('kyrandia.musicVolume', String(this.state.volume));
+    this.syncVolumes();
+    this.publish();
+  }
+  setSfxEnabled(value: boolean) {
+    this.state.sfxEnabled = value; remember('kyrandia.sfx', value ? '1' : '0'); this.failed = false;
+    if (!value) this.stopEffects();
+    if (this.wantsAudio()) this.unlock(); else { this.epoch++; this.destroy(); }
+    this.syncVolumes(); this.publish();
+  }
+  setSfxVolume(value: number) {
+    if (!Number.isFinite(value)) return;
+    this.state.sfxVolume = Math.max(0, Math.min(1, value)); remember('kyrandia.sfxVolume', String(this.state.sfxVolume));
+    this.syncVolumes(); this.publish();
+  }
+  private syncVolumes() { this.device?.node.port.postMessage({ type: 'volumes', music: this.state.enabled || this.state.previewing ? this.state.volume : 0, effects: this.state.sfxEnabled ? this.state.sfxVolume : 0 }); }
+  effect(track: number) {
+    if (!this.state.sfxEnabled || this.state.previewing || !Number.isInteger(track) || track < 0 || track > 119) return;
+    const device = this.device, epoch = this.effectEpoch, file = this.cue.file;
+    if (!device) return; // Never replay stale interactions after ROM initialization.
+    void this.load(file).then(tracks => {
+      if (this.device !== device || epoch !== this.effectEpoch || file !== this.cue.file || !this.state.sfxEnabled) return;
+      if (tracks[track]) device.node.port.postMessage({ type: 'effect', track: tracks[track] });
+    }).catch(error => { if (epoch === this.effectEpoch) this.publish(this.error(error)); });
+  }
+  stopEffects() { this.effectEpoch++; this.device?.node.port.postMessage({ type: 'stopEffects' }); }
+  async importRoms(files: File[]) {
+    if (this.state.busy || this.disposed) return;
+    // Construct/resume in the file-input gesture, not after asynchronous disk reads.
+    let context: AudioContext;
+    try { context = this.context(); } catch (error) { this.publish(this.error(error)); return; }
+    this.state.busy = true; this.publish('Starting MT-32…');
+    const epoch = ++this.epoch;
+    let candidate: Device | undefined;
+    try {
+      const roms = await readRomFiles(files);
+      candidate = await this.build(context, roms);
+      if (epoch !== this.epoch || this.disposed) { this.close(candidate); return; }
+      this.destroy(); this.device = candidate; candidate = undefined;
+      this.state.renderer = 'mt32'; remember('kyrandia.renderer', 'mt32');
+      this.failed = false; this.roms = roms; this.state.available = this.state.ready = this.state.enabled = true; this.state.source = 'browser';
+      this.state.romNames = roms.names; remember('kyrandia.music', '1');
+      this.syncPause(); this.syncVolumes(); this.applyCue();
+      this.publish('MT-32 is ready.');
+      try { await storeRoms(roms); } catch (error) { this.publish(this.error(error)); }
+    } catch (error) { this.publish(this.error(error)); }
+    finally { if (candidate) this.close(candidate); if (this.device?.context !== context) this.closeContext(context); this.state.busy = false; this.publish(); }
+  }
+  async forgetRoms() {
+    if (this.state.busy) return;
+    this.epoch++; if (this.state.renderer === 'mt32') this.destroy(); this.roms = undefined; this.state.romNames = []; this.state.source = 'none'; this.updateBanks();
+    try { await storeRoms(null); this.publish('ROMs removed from this browser.'); } catch (error) { this.publish(this.error(error)); }
+  }
+  async selectRenderer(renderer: string) {
+    if (this.state.busy || this.disposed || renderer === this.state.renderer) return;
+    const bank = renderer.startsWith('sf2:') ? this.banks.get(renderer.slice(4)) : undefined;
+    if (renderer !== 'mt32' && !bank) return;
+    if (renderer === 'mt32' && !this.roms) { this.destroy(); this.state.renderer = renderer; this.updateBanks(); remember('kyrandia.renderer', renderer); this.publish('Import your own MT-32 or CM-32L Control and PCM ROMs.'); return; }
+    await this.changeRenderer(renderer, bank);
+  }
+  private async changeRenderer(renderer: string, bank?: SoundFontBank, prepared?: AudioContext) {
+    let context: AudioContext;
+    try { context = prepared ?? this.context(); } catch (error) { this.publish(this.error(error)); return false; }
+    const epoch = ++this.epoch; this.state.busy = true; this.publish('Starting audio device…');
+    let candidate: Device | undefined;
+    try {
+      candidate = await this.build(context, this.roms, bank);
+      if (this.disposed || epoch !== this.epoch) return false;
+      this.destroy(); this.device = candidate; candidate = undefined;
+      this.state.renderer = renderer; this.state.ready = this.state.enabled = true; this.failed = false;
+      if (bank) this.banks.set(bank.id, bank);
+      this.updateBanks(); remember('kyrandia.renderer', renderer); remember('kyrandia.music', '1');
+      this.syncVolumes(); this.syncPause(); this.applyCue(); this.publish(this.readyMessage()); return true;
+    } catch (error) { this.publish(this.error(error)); return false; }
+    finally { if (candidate) this.close(candidate); if (this.device?.context !== context) this.closeContext(context); this.state.busy = false; this.publish(); }
+  }
+  async importSoundFont(file: File) {
+    if (this.state.busy || this.disposed) return;
+    if (file.size > MAX_SOUNDFONT_BYTES) { this.publish('Choose a valid SF2 SoundFont, up to 64 MiB.'); return; }
+    let context: AudioContext;
+    try { context = this.context(); } catch (error) { this.publish(this.error(error)); return; }
+    this.state.busy = true; this.publish('Loading SoundFont…');
+    // Read the file before any destructive switch; a bad bank keeps the old device.
+    try {
+      const bytes = await file.arrayBuffer(); validateSoundFont(bytes);
+      if (this.disposed) return;
+      const bank: SoundFontBank = { id: `user:${crypto.randomUUID()}`, name: file.name.replace(/\.sf2$/i, '').slice(0, 120), bytes };
+      if (await this.changeRenderer(`sf2:${bank.id}`, bank, context)) {
+        try { await storeSoundFont(bank); this.banks.set(bank.id, { id: bank.id, name: bank.name, stored: true }); }
+        catch { this.publish('SoundFont storage is unavailable. This bank works for this visit only.'); }
+      }
+    } catch (error) { this.publish(this.error(error)); }
+    finally { if (this.device?.context !== context) this.closeContext(context); this.state.busy = false; this.publish(); }
+  }
+  private context() {
+    if (!globalThis.AudioContext || !globalThis.AudioWorkletNode) throw new Error('This browser does not support MT-32 audio.');
+    const context = new AudioContext({ latencyHint: 'interactive' });
+    this.contexts.add(context);
+    void context.resume().catch(() => this.publish('Click Enable music to allow browser audio.'));
+    return context;
+  }
+  private async build(context: AudioContext, roms?: Mt32Roms, bank?: SoundFontBank): Promise<Device> {
+    const [wasm, intro, font] = await Promise.all([
+      fetch(withBase(`assets/audio/${bank ? 'tsf' : 'mt32emu'}.wasm`)).then(response => { if (!response.ok) throw new Error('The audio synthesizer could not load.'); return response.arrayBuffer(); }),
+      bank ? Promise.resolve(undefined) : this.load('INTRO'),
+      bank ? soundFontData(bank) : Promise.resolve(undefined), context.audioWorklet.addModule(processorUrl)
+    ]);
+    if (font) validateSoundFont(font);
+    const node = new AudioWorkletNode(context, 'kyra-mt32', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+    const gain = context.createGain(); gain.gain.value = 0;
+    node.connect(gain).connect(context.destination);
+    const device = { context, node, gain };
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('The MT-32 emulator could not start.')), 30000);
+        node.onprocessorerror = () => { clearTimeout(timer); reject(new Error('The MT-32 emulator could not start.')); };
+        node.port.onmessage = ({ data }) => {
+          if (data.type === 'ready') { clearTimeout(timer); resolve(); }
+          if (data.type === 'error') { clearTimeout(timer); reject(new Error(data.message)); }
+        };
+        if (font) {
+          const soundfont = font.slice(0);
+          node.port.postMessage({ type: 'init', wasm, soundfont }, [wasm, soundfont]);
+        } else {
+          if (!roms || !intro) throw new Error('Import your own MT-32 or CM-32L Control and PCM ROMs.');
+          const control = roms.control.slice(0), pcm = roms.pcm.slice(0);
+          node.port.postMessage({ type: 'init', wasm, control, pcm, initialization: intro[0] }, [wasm, control, pcm]);
+        }
+      });
+      node.port.onmessage = ({ data }) => { if (data.type === 'error' && this.device === device) this.fail(data.message); };
+      node.onprocessorerror = () => { if (this.device === device) this.fail('The MT-32 emulator stopped. Disable and enable music to retry.'); };
+      gain.gain.value = 1; // Per-source CC7 scaling keeps music and SFX independent.
+      return device;
+    } catch (error) { this.close(device); throw error; }
+  }
+  private start() {
+    if (this.starting) return this.starting;
+    const epoch = this.epoch, roms = this.roms, bank = this.selectedBank();
+    if (!this.hasResources()) return Promise.resolve();
+    let context: AudioContext;
+    try { context = this.warmContext ?? this.context(); this.warmContext = undefined; } catch (error) { this.failed = true; this.publish(this.error(error)); return Promise.resolve(); }
+    this.state.busy = true; this.publish(bank ? 'Starting audio device…' : 'Starting MT-32…');
+    this.starting = this.build(context, roms, bank).then(device => {
+      if (epoch !== this.epoch || this.disposed || !this.wantsAudio()) { this.close(device); return; }
+      this.device = device; this.state.ready = true; this.syncPause(); this.syncVolumes(); this.applyCue(); this.publish(this.readyMessage());
+    }).catch(error => { this.closeContext(context); if (epoch === this.epoch) { this.failed = true; this.publish(this.error(error)); } }).finally(() => {
+      this.starting = undefined; this.state.busy = false; this.publish();
+    });
+    return this.starting;
+  }
+  private async load(file: string) {
+    let pending = this.tracks.get(file);
+    if (!pending) {
+      const entry = (manifest.files as Record<string, { src: string }>)[file];
+      if (!entry) throw new Error('Unknown music resource.');
+      pending = fetch(withBase(`assets/music/${entry.src}`)).then(async response => {
+        if (!response.ok) throw new Error('Original music could not load.');
+        let bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes[0] === 0x1f && bytes[1] === 0x8b) bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+        return parseXmidi(bytes);
+      }).catch(error => { this.tracks.delete(file); throw error; });
+      this.tracks.set(file, pending);
+    }
+    return pending;
+  }
+  play(cue: MusicCue, restart = false) {
+    if (!restart && !this.faded && cue.file === this.cue.file && cue.track === this.cue.track) return;
+    if (cue.file !== this.cue.file) this.stopEffects();
+    this.cue = cue; this.faded = false; this.applyCue();
+  }
+  intro(step: string) { const cue = introCue(step); if (cue) { this.command = -1; this.play(cue, true); } }
+  beginGame() { this.command = -1; this.play({ file: 'KYRA1B', track: 0 }, true); }
+  /** Older saves have no audio position. Restart the room's score, not the intro. */
+  restoreRoom(id: number) { this.command = -1; this.wander(({ 0: 41, 1: 2, 2: 5, 7: 3, 8: 7 } as Record<number, number>)[id] ?? 2, true); }
+  wander(command: number, restart = false) {
+    if (!restart && command === this.command) return;
+    this.command = command;
+    const cue = wanderCue(command, this.cue.file === 'INTRO' ? 'KYRA1B' : this.cue.file);
+    if (cue) this.play(cue, true); else this.fade();
+  }
+  fade() { this.faded = true; this.request++; if (!this.state.previewing) this.device?.node.port.postMessage({ type: 'fade' }); }
+  stop() { this.faded = true; this.command = -1; this.request++; this.effectEpoch++; this.device?.node.port.postMessage({ type: 'stop' }); }
+  preview() {
+    this.state.previewing = !this.state.previewing;
+    this.applyCue(); this.syncPause(); this.syncVolumes(); this.publish(); this.unlock();
+  }
+  stopPreview() { if (this.state.previewing) { this.state.previewing = false; this.applyCue(); this.syncPause(); this.syncVolumes(); this.publish(); } }
+  private applyCue() {
+    const request = ++this.request, device = this.device;
+    if (!device) return;
+    if ((!this.state.enabled || this.faded) && !this.state.previewing) { device.node.port.postMessage({ type: 'track', file: this.cue.file }); return; }
+    const cue = this.state.previewing ? { file: 'INTRO', track: 2 } : this.cue;
+    void this.load(cue.file).then(tracks => {
+      if (request !== this.request || this.device !== device) return;
+      if (!tracks[cue.track]) throw new Error('Original music track is missing.');
+      device.node.port.postMessage({ type: 'track', file: cue.file, track: tracks[cue.track] });
+    }).catch(error => { if (request === this.request) this.fail(this.error(error)); });
+  }
+  setPaused(value: boolean) { this.paused = value; this.syncPause(); }
+  setHidden(value: boolean) {
+    this.hidden = value; this.syncPause();
+    if (this.device) void (value ? this.device.context.suspend() : this.device.context.resume()).catch(() => this.publish('Click Enable music to allow browser audio.'));
+  }
+  private syncPause() { this.device?.node.port.postMessage({ type: 'pause', value: this.hidden || this.paused && !this.state.previewing }); }
+  private closeContext(context: AudioContext) { this.contexts.delete(context); void context.close().catch(() => {}); }
+  private close(device: Device) { device.node.port.postMessage({ type: 'dispose' }); device.node.disconnect(); device.gain.disconnect(); device.node.port.close(); this.closeContext(device.context); }
+  private destroy() { this.request++; this.effectEpoch++; if (this.device) this.close(this.device); this.device = undefined; this.state.ready = false; }
+  private error(error: unknown) { return error instanceof Error ? error.message : 'Music could not start.'; }
+  private fail(message: string) { this.failed = true; this.destroy(); this.publish(message); }
+  dispose() { this.disposed = true; this.epoch++; this.destroy(); for (const context of this.contexts) this.closeContext(context); }
+}

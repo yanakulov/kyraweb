@@ -1,5 +1,39 @@
 # Original opening: DOS CD
 
+## Music — 2026-11-07
+
+- Added the real TinySoundFont WASM renderer alongside Munt, selectable SF2 banks,
+  local catalogue, persistent browser imports and atomic device switching. Invalid
+  banks preserve the old working device. GeneralUser GS is available locally and
+  only loaded on selection; its 32.3 MB are not copied into the public build.
+- MT-32-to-GM mapping and missing hardware DSP/XG/custom-timbre behavior are
+  explicitly labelled approximate. No fake MU50/Kawai/Casio/SBLive model entries.
+  Real WASM and browser PCM output were verified independently from Munt.
+
+- SFX: retained EMC 0x17, DAT FFB0/FFB4 and intro effect cues; added item/inventory,
+  rejected-drop, bounce and landing sounds. Music plus three effect sequences
+  merge on one sample clock. Miles channel locking maps SFX channels 10–12 onto
+  real MT-32 parts and restores music controllers when effects finish.
+- Effects have independent enabled/volume controls and work with music off.
+  Real-ROM WASM synthesis and Chromium AudioWorklet output were verified.
+
+- Local ROM autoload: a compatible private pair in ignored `.local/mt32/` now
+  works without import on localhost development/preview. Remote, cross-origin and
+  raw filesystem access are blocked; firmware remains absent from the build.
+- Fixed the fourteen-second silent warm-up by accelerating the initialization
+  score, without changing music playback speed. Real-ROM WASM rendering and the
+  live Chromium AudioWorklet both produce nonzero PCM; first signal was 613 ms.
+
+- Imported all ten original DOS CD XMI resources losslessly, retaining source hashes.
+- Added Munt MT-32 / CM-32L WASM synthesis in an AudioWorklet, sample-clock XMIDI
+  notes/loops, INTRO timbre initialization and Miles/Roland messages.
+- Book Settings now offers local ROM-pair import/removal, device, volume and a
+  title-music test. No firmware is shipped or uploaded. Original EMC music calls
+  are retained during opening, room setup and forest sequences.
+- Distributed the pinned emulator's complete corresponding source and LGPL texts.
+  See `docs/music.md`: physical-Roland comparison remains pending; speech
+  and AdLib are not implemented by this addition.
+
 ## Evidence
 
 - Reference engine: ScummVM `engines/kyra/engine/kyra_lok.cpp`, `scene_lok.cpp`, `script/script.cpp`, `script_lok.cpp`, `graphics/animator_lok.cpp`, `engine/timer_lok.cpp` and `text/text_lok.cpp` ([upstream](https://github.com/scummvm/scummvm/tree/master/engines/kyra)). Original installation and downloaded reference sources remain local.
