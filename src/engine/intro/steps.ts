@@ -65,6 +65,7 @@ export function buildIntroSteps(): IntroStep[] {
       durationMs: 12 * shoreFrameMs,
       fadeInMs: 0,
       fadeOutMs: 0,
+      effects: [{ atMs: 50, track: 22 }],
       indexedFrames: uniform("shore", 12, shoreFrameMs, { x: 0, y: 8 }, 12 * shoreFrameMs)
     },
     {
@@ -76,6 +77,9 @@ export function buildIntroSteps(): IntroStep[] {
       fadeInMs: 0,
       fadeOutMs: 0,
       indexedBgFrames: uniform("shore", 12, shoreFrameMs, { x: 0, y: 8 }, 12 * shoreFrameMs),
+      // FOREST.SEQ cues aligned to the corresponding DESTRUCT.WSA frames.
+      effects: [[0, 22], [6, 37], [16, 23], [30, 37], [30, 24], [35, 37]]
+        .map(([frame, track], index) => ({ atMs: frame * shoreFrameMs * 2 + (index === 4 ? shoreFrameMs : 50), track })),
       indexedFrames: uniform("destruct", 44, shoreFrameMs * 2, { x: 152, y: 56 })
     },
     {
