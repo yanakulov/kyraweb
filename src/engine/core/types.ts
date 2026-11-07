@@ -142,6 +142,8 @@ export type SceneAnimState = {
   sprite: number;
   x: number;
   y: number;
+  renderX?: number;
+  renderY?: number;
   defaultX: number;
   defaultY: number;
   flipX: boolean;

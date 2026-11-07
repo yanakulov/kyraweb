@@ -111,8 +111,6 @@ aside.insertBefore(verify,status);
 verify.onclick = () => void runCheck(verify,'Verify swipe cursor',async () => {
   hud(); assert(!book(),'Close Options before checking gestures');
   const canvas = document.querySelector<HTMLCanvasElement>('.stage canvas')!;
-  const cursor = document.querySelector<HTMLElement>('.game-cursor');
-  if (!cursor || !document.querySelector('.hud-options')) throw Error('Finish the opening before checking gestures');
   const rect = canvas.getBoundingClientRect();
   // Synthetic events exercise the real Vue handlers; capture needs a hardware pointer.
   const capture = canvas.setPointerCapture;
@@ -124,6 +122,8 @@ verify.onclick = () => void runCheck(verify,'Verify swipe cursor',async () => {
   try {
     send('pointermove', rect.left + rect.width / 2, rect.top + rect.height / 2, 'mouse');
     await nextTick();
+    const cursor = document.querySelector<HTMLElement>('.game-cursor');
+    assert(cursor, 'The game cursor did not appear over the scene');
     const before = parseFloat(cursor.style.left);
     send('pointerdown', rect.left + 40);
     send('pointermove', rect.left + 70);

@@ -21,6 +21,14 @@ import type { RoomSnapshot, SceneAnimDef } from "../src/engine/core/types";
 const data = JSON.parse(
   gunzipSync(readFileSync("public/assets/forest/forest.json.gz")).toString(),
 ) as ForestData;
+test('a falling Sorrow drop holds its last visible position until the splash frame', () => {
+  const anims = buildSceneAnimStates(data.rooms.SORROW.anims.slice(0, 1));
+  const [drop] = anims;
+  for (let ms = 1; ms < 4000 && drop.y !== 114; ms += 17) updateSceneAnims(anims, ms);
+  assert.equal(drop.y, 114, 'the last Y increment updates only the DAT cursor');
+  assert.equal(drop.renderY, 106, 'the last visible drop does not overshoot its splash');
+  assert.equal(drop.sprite, 3);
+});
 test('scene shuffle replaces every pixel exactly once in 128 DOS ticks', () => {
   const passes = shufflePixels(304, 128, () => 0.37);
   assert.equal(passes.length, 128);

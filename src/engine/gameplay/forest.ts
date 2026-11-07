@@ -14,7 +14,8 @@ export type ForestRoom = WorldRoom & {
   clipFrames: Record<string, number>;
   npcFrames: Record<number, { xOffset: number; yOffset: number }>;
 };
-export type ForestData = { rooms: Record<string, ForestRoom>; letter: { sealed: RoomAction[]; readable: RoomAction[] } };
+export type ForestData = { rooms: Record<string, ForestRoom>; letter: { sealed: RoomAction[]; readable: RoomAction[] };
+  self: Record<number, RoomAction[]>; caveSelf: RoomAction[] };
 export async function loadForestData(
   src: string,
   signal?: AbortSignal,

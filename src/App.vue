@@ -24,7 +24,7 @@
         <div v-if="noteVisible && locale === 'ru'" class="translated-letter" :style="{ transform: `scale(${subtitleScale})` }"><p>{{ t('Dear Brynn:') }}</p><p>{{ t('Malcolm has broken free. Soon he will come for me. Please help Brandon. Direct him toward the Amulet. Use the lavender rose to key the spells.') }}</p><p>{{ t("Darm and Zanthia should be able to help. Be careful, he'll try to get all of us.") }}</p><p>— {{ t('Kallak') }}</p></div>
         <button v-if="awaitingContinue" class="pixel-button continue-button" type="button" @click="game?.handleClick({ x: 160, y: 100 })">{{ t('Continue') }}</button>
         <div v-if="gameError" class="game-error" role="alert"><p>{{ t(gameError) }}</p><button class="pixel-button" type="button" @click="boot">{{ t('Try again') }}</button><button v-if="latestSave" class="pixel-button" type="button" @click="showBookOptions('load')">{{ t('Load game') }}</button></div>
-        <button v-if="!introActive && !gameError && !sequenceActive && !loading" class="hud-options" type="button" :aria-label="t('Options')" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
+        <button v-if="!introActive && !gameError && !sequenceActive && !loading" class="hud-options" :style="optionsStyle" type="button" :aria-label="t('Options')" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
         <p class="sr-only" role="status">{{ gameHint }}</p>
         <p v-if="navigationError" class="scene-notice" role="status">{{ t(navigationError) }}</p>
       </div>
@@ -74,7 +74,7 @@ function closePanels() { if (readingHistory.value) { readingHistory.value = fals
 function showSettings() { showBookOptions(); }
 function activateOptions(event: MouseEvent) { if (event.detail === 0 || !touchPointer.value) showSettings(); }
 import { mapPointerToCanvas, startGame } from "./engine/gameplay/game";
-import { LOGICAL_WIDTH } from "./engine/core/constants";
+import { HUD_OPTIONS_RECT, LOGICAL_HEIGHT, LOGICAL_WIDTH } from "./engine/core/constants";
 import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
 import { gemCutScene } from "./engine/scenes/gemCut";
 import SubtitleOverlay from "./components/SubtitleOverlay.vue";
@@ -100,8 +100,11 @@ function syncControls() {
   heldItem.value = snapshot?.itemInHand ?? null;
   game?.setPointer(pointerInStage.value || touchPointer.value ? cursor.value : null);
 }
+const { x: optionsX, y: optionsY, w: optionsWidth, h: optionsHeight } = HUD_OPTIONS_RECT;
+const optionsStyle = { left: `${optionsX / LOGICAL_WIDTH * 100}%`, top: `${optionsY / LOGICAL_HEIGHT * 100}%`,
+  width: `${optionsWidth / LOGICAL_WIDTH * 100}%`, height: `${optionsHeight / LOGICAL_HEIGHT * 100}%` };
 function isOptionsPoint(point: Vec2) {
-  return point.x >= 12.8 && point.x < 73.6 && point.y >= 154 && point.y < 198;
+  return point.x >= optionsX && point.x < optionsX + optionsWidth && point.y >= optionsY && point.y < optionsY + optionsHeight;
 }
 function interact(point: Vec2) {
   if (!game || loading.value || gameError.value || bookSnapshot.value) return;

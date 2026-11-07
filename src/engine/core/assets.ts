@@ -82,15 +82,6 @@ export async function loadEmcTextStrings(src: string): Promise<string[]> {
   return parseEmcTextStrings(new Uint8Array(buffer));
 }
 
-export async function loadNpcTextJson(src: string): Promise<string[]> {
-  const res = await fetch(src);
-  if (!res.ok) {
-    throw new Error(`Failed to load npc text: ${src}`);
-  }
-  const data = await res.json();
-  return Array.isArray(data.strings) ? data.strings.map((s: unknown) => String(s ?? "")) : [];
-}
-
 export function decodeBase64Bytes(data: string): Uint8Array {
   const binary = atob(data);
   const bytes = new Uint8Array(binary.length);

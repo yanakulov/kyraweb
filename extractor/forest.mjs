@@ -105,26 +105,30 @@ export async function buildForest(root, out = "public/assets/forest") {
   for (let y = 0; y < 128; y++) notePixels.set(note.pixels.subarray((y + 8) * 320 + 63, (y + 8) * 320 + 257), y * 194);
   const noteClip = { width: 194, height: 128, frames: [notePixels], palette: note.palette, transparentIndex: -1 };
   const npcProgram = parseEmc(get('_NPC.EMC')), npcVoices = readPak(get('CHAPTER1.VRM'));
-  function letterActions(readable) {
+  function selfActions(item, room = 0, readable = false) {
     const actions = [];
     runEmc(npcProgram, 0, (op, a, strings) => {
       switch (op) {
         case 0x72: return 0;
+        case 0x22: return room;
         case 4: return +(readable && a[0] === 129);
         case 1: actions.push({ op: 'say', text: strings[a[1]], voiceId: a[0], ms: vocDuration(npcVoices.get(`${a[0]}.VOC`)), x: 0, y: 0, color: 15, blocking: true }); break;
+        case 0x17: actions.push({ op: 'sfx', track: a[0] }); break;
         case 0x21: actions.push({ op: 'wait', ms: -a[0] * 1000 / 60 }); break;
         case 0x14: actions.push({ op: 'hand', item: null }); break;
         case 0x52: actions.push({ op: 'frame', clip: 'note', index: 0, x: 63, y: 8, ms: 0 }); break;
         case 0x4a: actions.push({ op: 'confirm' }); break;
         case 0x53: actions.push({ op: 'close', clip: 'note' }); break;
         case 0x0e: actions.push({ op: 'hand', item: 'letter' }); break;
-        default: throw new Error(`Unsupported letter syscall ${op}`);
+        default: throw new Error(`Unsupported self interaction syscall ${op}`);
       }
       return 0;
-    }, { 0: 0, 4: 42, 5: 0 });
+    }, { 0: room, 4: item, 5: 0 });
     return actions;
   }
-  const letter = { sealed: letterActions(false), readable: letterActions(true) };
+  const letter = { sealed: selfActions(42), readable: selfActions(42, 0, true) };
+  const self = Object.fromEntries([-1, 0, 16, 19, 43, 44, 52].map(item => [item, selfActions(item)]));
+  const caveSelf = selfActions(-1, 24);
   await mkdir(out, { recursive: true });
   await writeFile(join(out, 'note.kyr.gz'), encodeScenePack({ note: noteClip }));
   for (const name of names) {
@@ -283,7 +287,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     };
   await writeFile(
     join(out, "forest.json.gz"),
-    gzipSync(JSON.stringify({ rooms: data.rooms, letter }), { level: 9 }),
+    gzipSync(JSON.stringify({ rooms: data.rooms, letter, self, caveSelf }), { level: 9 }),
   );
   await mkdir("tests/fixtures", { recursive: true });
   await writeFile(

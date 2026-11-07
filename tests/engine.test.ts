@@ -739,6 +739,30 @@ test("the first diagonal after walking north preserves Brandon's northbound pose
   } finally { Object.assign(globalThis, original); h.restore(); }
 });
 
+test('the room renderer puts a lamp in front of or behind Brandon by DAT depth', async () => {
+  const h = introHarness(), previousImage = globalThis.Image;
+  class FakeImage {
+    onload = () => {}; width = 320; height = 200; source = '';
+    set src(value: string) { this.source = value; queueMicrotask(() => this.onload()); }
+  }
+  globalThis.Image = FakeImage as unknown as typeof Image;
+  try {
+    const game = await startGame(h.canvas, { scene: { ...scene, meta: { drawLayerTable: [],
+      spriteDefs: [{ id: 0, x: 8, y: 144, w: 16, h: 15 }],
+      anims: [{ disable: false, drawY: 114, defaultX: 132, defaultY: 44, sprite: 0, flipX: false, play: true,
+        script: [0xFF90, 0, 0xFF87] }] } } });
+    const order = (y: number, clock: number) => {
+      game.runSequence([{ op: 'actor', x: 140, y, facing: 5, visible: true }]);
+      h.draws.length = 0; h.tick(clock);
+      return h.draws.flatMap(([image, sx, sy]) => (image as FakeImage).source === 'brandon' ? ['Brandon']
+        : sx === 8 && sy === 144 ? ['lamp'] : []);
+    };
+    assert.deepEqual(order(110, 100), ['Brandon', 'lamp']);
+    assert.deepEqual(order(120, 200), ['lamp', 'Brandon']);
+    game.stop();
+  } finally { globalThis.Image = previousImage; h.restore(); }
+});
+
 test("repeated movement clicks preserve pace and inventory cancels a pending exit", async () => {
   const h = introHarness(), original = { Image: globalThis.Image, fetch: globalThis.fetch };
   class FakeImage {
@@ -1000,6 +1024,15 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     const letterGame = await startGame(h.canvas, { ...config, saveState: saved, paused: false,
       onSubtitleChange: lines => heard.push(...lines.map(line => line.text)), onNoteChange: visible => notes.push(visible) });
     games.push(letterGame);
+    letterGame.runSequence([{ op: 'actor', x: 280, y: 110, facing: 5, visible: true }, { op: 'hand', item: null }]); tick();
+    letterGame.handleClick({ x: 280, y: 80 });
+    assert.deepEqual(heard.splice(0), ['Why do I have to do everything?']);
+    await until(() => !sequence, 'Brandon’s line did not finish');
+    letterGame.runSequence([{ op: 'hand', item: 'ruby' }]); tick();
+    letterGame.handleClick({ x: 280, y: 80 });
+    assert.deepEqual(heard.splice(0), ['A garnet this big must be very valuable.']);
+    assert.equal(letterGame.getSnapshot().itemInHand, 'ruby');
+    await until(() => !sequence, 'Brandon did not finish examining the ruby');
     letterGame.runSequence([{ op: 'actor', x: 280, y: 110, facing: 5, visible: true }, { op: 'hand', item: 'letter' }]); tick();
     letterGame.handleClick({ x: 280, y: 80 });
     await until(() => { if (sequence) letterGame.handleClick({ x: 280, y: 80 }); return !sequence; }, 'sealed letter speech did not finish');

@@ -52,9 +52,10 @@ function runtime(value: unknown, path: string) {
   boolean(data.actorVisible, path); boolean(data.hasAmulet, path);
   if (data.actorShape !== null) number(data.actorShape, path, 0, 65535);
   list(data.sceneAnims, `${path}.sceneAnims`, 64, (value, path) => {
-    const anim = object(value, path, 'visible sprite x y defaultX defaultY flipX play ip nextRun lastRefresh loopsLeft loopStart');
+    const anim = object(value, path, 'visible sprite x y renderX renderY defaultX defaultY flipX play ip nextRun lastRefresh loopsLeft loopStart');
     coordinates(anim, path);
     for (const key of ['defaultX', 'defaultY']) number(anim[key], path, -1024, 1024, false);
+    for (const key of ['renderX', 'renderY']) if (anim[key] !== undefined) number(anim[key], path, -1024, 1024, false);
     for (const key of ['visible', 'flipX', 'play']) boolean(anim[key], path);
     number(anim.sprite, path, -1, 65535);
     for (const key of ['ip', 'loopsLeft', 'loopStart']) number(anim[key], path, 0, 65535);
