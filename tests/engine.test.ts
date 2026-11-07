@@ -38,7 +38,7 @@ import opening from "../public/assets/packs/opening.json";
 import openingPixels from "./fixtures/opening-pixels.json";
 import { roomPortals, nearestFloor, type WorldRoom } from "../src/engine/gameplay/world";
 import worldData from "../public/assets/world/world.json";
-import { portalAtPoint, portalMarker } from "../src/engine/gameplay/navigation";
+import { exitCursor, portalAtPoint, portalMarker } from "../src/engine/gameplay/navigation";
 import { gemCutScene } from "../src/engine/scenes/gemCut";
 import { validateWorldSave } from "../src/engine/gameplay/saveStorage";
 import { locale, setLocale } from "../src/i18n";
@@ -97,7 +97,20 @@ test("exit markers use actual available portals, including doors and corner prec
       const marker = portalMarker(portal);
       assert.ok(marker.x >= 20 && marker.x <= 300 && marker.y >= 20 && marker.y <= 116);
     }
-    if (room.id === 7) assert.equal(portals.some(p => p.side === 'west'), false);
+    if (room.id === 0) {
+      assert.equal(portalAtPoint(portals, { x: 2, y: 146 })?.target, 1);
+      assert.equal(portalAtPoint(portals, { x: 318, y: 152 })?.target, 1);
+    }
+    if (room.id === 1) assert.equal(portalAtPoint(portals, { x: 194, y: 44 })?.target, 0, 'GEM uses its original cursor track above the narrow doorway');
+    if (room.id === 3) assert.equal(portalAtPoint(portals, { x: 176, y: 40 })?.target, 2, 'the temple door uses its original cursor track');
+    if (room.id === 7) {
+      assert.equal(portals.some(p => p.side === 'west'), false);
+      assert.equal(exitCursor(portals, { x: 3, y: 62 }), 'blocked');
+    }
+    if (room.id === 9) {
+      assert.equal(portalAtPoint(portals, { x: 64, y: 50 })?.target, 7, 'the cave opening is clickable away from the screen edge');
+      assert.equal(exitCursor(portals, { x: 2, y: 4 }), 'west');
+    }
     assert.equal(portalAtPoint(portals, {x: 160, y: 170}), undefined);
     assert.equal(portalAtPoint(portals, null), undefined);
   }
@@ -707,6 +720,25 @@ test("game walking advances equally at different display rates and retargets wit
   assert.deepEqual((await simulate(60)).endpoint, { x: 40, y: 80 });
 });
 
+test("the first diagonal after walking north preserves Brandon's northbound pose", async () => {
+  const h = introHarness(), original = { Image: globalThis.Image, fetch: globalThis.fetch };
+  class FakeImage {
+    onload = () => {}; width = 320; height = 200; source = "";
+    set src(value: string) { this.source = value; queueMicrotask(() => this.onload()); }
+  }
+  Object.assign(globalThis, { Image: FakeImage, fetch: async () => ({ ok: true, json: async () => ({}) }) });
+  try {
+    const game = await startGame(h.canvas, { scene });
+    game.setTarget({ x: 184, y: 92 });
+    for (let step = 0; step <= 10; step++) h.tick(step * 100 + 1);
+    assert.deepEqual(game.getSnapshot().pos, { x: 184, y: 98 });
+    assert.equal(game.getSnapshot().facing, 1);
+    const draw = h.draws.filter(args => (args[0] as FakeImage).source === 'brandon').at(-1)!;
+    assert.ok(getSequence('up').some(index => BRANDON_FRAMES[index].x === draw[1] && BRANDON_FRAMES[index].y === draw[2]));
+    game.stop();
+  } finally { Object.assign(globalThis, original); h.restore(); }
+});
+
 test("repeated movement clicks preserve pace and inventory cancels a pending exit", async () => {
   const h = introHarness(), original = { Image: globalThis.Image, fetch: globalThis.fetch };
   class FakeImage {
@@ -848,16 +880,20 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     for (let i = 0; i < 1000; i++) { await settleLoads(); tick(); if (check()) return; }
     assert.fail(message);
   }
+  const score: number[] = [];
   const config = { scene: gemCutScene, world: '/assets/world/world.json', playOpening: false,
+    onScriptAction: (action: RoomAction) => { if (action.op === 'music') score.push(action.command); },
     onLocationChange: (_: string, id?: number) => { location = id!; }, onSequenceChange: (value: boolean) => { sequence = value; } };
   const games: Awaited<ReturnType<typeof startGame>>[] = [];
   try {
-    for (const x of [8, 24, 160, 296, 311]) {
+    for (const point of [{ x: 0, y: 134 }, { x: 24, y: 134 }, { x: 160, y: 149 }, { x: 318, y: 152 }, null]) {
       const firstExit = await startGame(h.canvas, config); games.push(firstExit);
       firstExit.setWalkSpeed('fastest');
       firstExit.runSequence([{ op: 'hand', item: 'letter' }]); tick();
-      firstExit.handleClick({ x, y: 134 });
-      assert.equal(sequence, true, `the first exit at x=${x} must start the tree, even with an item in hand`);
+      if (point) firstExit.handleClick(point);
+      else firstExit.runSequence([{ op: 'exit', target: 1 }]);
+      assert.equal(sequence, true, 'both hit areas and scripted exits must start the tree, even with an item in hand');
+      await settleLoads(); tick();
       assert.equal(location, 0);
       assert.equal(firstExit.getSnapshot().treeSpoken, false, 'the quest flag commits only after the conversation completes');
       assert.equal(firstExit.getSaveState(), null);
@@ -926,9 +962,11 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     blockedPath = '';
     loaded.runSequence([{ op: 'exit', target: 1, entry: { x: 208, y: 110 } }]);
     await until(() => location === 1 && !!loaded.getSaveState(), 'entrance must retry the failed neighbour prefetch');
+    assert.equal(score.at(-1), 2, 'the lift room starts its original score');
     assert.equal(requestCount('/assets/world/1.kyr.gz'), 2);
     loaded.runSequence([{ op: 'exit', target: 0, entry: { x: 160, y: 120 } }]);
     await until(() => location === 0 && !!loaded.getSaveState(), 'cached home did not become ready');
+    assert.equal(score.at(-1), 41, 're-entering home plays its arrival cue instead of retaining the lift theme');
     assert.equal(requestCount('/assets/forest/gemcut.kyr.gz'), 1, 'returning reuses the decoded room, including an in-flight neighbour request');
     assert.equal(requestCount('/assets/world/1.kyr.gz'), 2, 'a successful cached neighbour is not fetched again');
 

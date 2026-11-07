@@ -30,7 +30,6 @@
             <BookSelect id="book-language" :label="t('Language')" :model-value="locale" :options="languages" :disabled="busy" @update:model-value="setLocale" />
             <BookSelect id="book-speed" :label="t('Walk speed')" :model-value="walkSpeed" :options="speeds" :disabled="busy" @update:model-value="$emit('update:walkSpeed', $event as WalkSpeed)" />
           </div>
-          <label class="folio-check"><input type="checkbox" :checked="atmosphere" @change="$emit('update:atmosphere', ($event.target as HTMLInputElement).checked)" /><span aria-hidden="true" class="check-gem"></span><span>{{ t('Window dust') }}</span></label>
           <MusicSettings v-if="musicPlayer && musicState" :player="musicPlayer" :state="musicState" />
           <button v-if="fullscreenAvailable" type="button" @click="$emit('fullscreen')">{{ t(isFullscreen ? 'Exit full screen' : 'Full screen') }}</button>
           <div class="folio-inline folio-navigation"><button v-if="!mainMenu" type="button" @click="askLeave('menu')">{{ t('Main menu') }}</button><button type="button" @click="mainMenu ? $emit('replayIntro') : askLeave('intro')">{{ t('Replay intro') }}</button></div>
@@ -57,14 +56,14 @@ type View = 'main' | 'save' | 'load' | 'settings' | 'help';
 const props = withDefaults(defineProps<{
   gameplay: boolean; canSave: boolean; busy: boolean; message: string; mainMenu?: boolean;
   slots: { index: number; name?: string; location?: string; savedAt?: string; thumbnail?: string; error?: string | null }[];
-  walkSpeed: WalkSpeed; atmosphere: boolean; fullscreenAvailable: boolean; isFullscreen: boolean;
+  walkSpeed: WalkSpeed; fullscreenAvailable: boolean; isFullscreen: boolean;
   initialView?: 'main' | 'load';
   musicPlayer?: MusicPlayer; musicState?: MusicState;
 }>(), { initialView: 'main', mainMenu: false });
 const emit = defineEmits<{
   resume: []; save: [index: number, name: string]; load: [index: number]; startJourney: []; readPrologue: [];
   mainMenu: []; replayIntro: []; fullscreen: [];
-  'update:walkSpeed': [value: WalkSpeed]; 'update:atmosphere': [value: boolean];
+  'update:walkSpeed': [value: WalkSpeed];
 }>();
 const languages = [{ value: 'en', label: 'English' }, { value: 'ru', label: 'Русский' }];
 const speeds = computed(() => ['slowest', 'slow', 'fast', 'fastest'].map((value, index) => ({ value, label: t(['Slowest', 'Slow', 'Fast', 'Fastest'][index]) })));
@@ -88,7 +87,7 @@ header{position:relative;flex:none;border-bottom:1px solid #70492370;margin:0 0 
 .folio-content{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain;scrollbar-color:#74512b transparent;scrollbar-width:thin;padding:0 5px}
 fieldset{border:0;margin:0;padding:0;min-width:0}.folio-leaf{animation:ink-appear .2s ease-out}button,input{font:inherit;color:inherit}button{display:block;width:100%;min-height:44px;padding:8px;border:0;border-bottom:1px solid #77502145;background:transparent;cursor:inherit;transition:color .16s,background-color .16s}button:hover:not(:disabled){background:#6c360e0c;color:#4a1708}button:disabled{opacity:.45;cursor:inherit}button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid #82511d;outline-offset:-2px}
 .folio-choices button{font-size:19px;min-height:50px}.folio-choices button span{display:inline-block;transition:transform .16s}.folio-choices button:hover:not(:disabled) span{transform:translateX(2px)}.folio-choices button:active:not(:disabled) span{transform:translateY(1px)}.folio-frontispiece{font-size:18px;text-align:center;margin:4px 0 8px;font-style:italic}.journey-choice{font-weight:bold}.folio-ornament{display:block;text-align:center;font-size:24px;line-height:1;color:#765124;padding:14px 0 6px}.folio-back{position:absolute;left:0;top:-9px;width:36px;border:0;font-size:32px;min-height:44px}.folio-field{display:grid;gap:4px;margin:8px 0 14px}.folio-field input{width:100%;min-height:44px;border:1px solid #82582f80;border-radius:2px;background:#e6cf9a38;padding:7px;box-sizing:border-box}.folio-field input::placeholder{color:#795c38;opacity:.8}
-.folio-settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:2px 0 8px}.folio-check{position:relative;display:flex;align-items:center;gap:9px;min-height:44px;cursor:inherit}.folio-check input{position:absolute;opacity:0;width:20px;height:20px;margin:0}.check-gem{width:17px;height:17px;flex:none;border:1px solid #79502d;box-shadow:inset 0 0 0 3px #d6be91;transform:rotate(45deg) scale(.78);background:transparent;transition:background-color .18s,box-shadow .18s}.folio-check input:checked+.check-gem{background:#536244;box-shadow:inset 0 0 0 3px #d6be91,0 0 7px #66734122}.folio-check input:focus-visible+.check-gem{outline:2px solid #82511d;outline-offset:3px}.folio-navigation button{font-size:14px}
+.folio-settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:2px 0 8px}.folio-navigation button{font-size:14px}
 .folio-note{font-size:14px;margin:4px 0 12px}.folio-saves{list-style:none;margin:0;padding:0}.folio-saves li{border-bottom:1px solid #70492370;padding:12px 0}.folio-save-details{display:flex;gap:8px;align-items:center}.folio-save-details img{width:72px;height:45px;object-fit:cover;image-rendering:pixelated;filter:sepia(.6);border:1px solid #70492370}.folio-save-details strong,.folio-save-details small{display:block;overflow-wrap:anywhere}.folio-save-details small{font-size:12px;line-height:1.4}.folio-inline{display:flex;gap:8px}.folio-inline button{flex:1}.folio-confirm{padding:8px 0;border-top:1px solid #70492370}.folio-confirm p{margin:4px 0 8px;font-size:14px}
 .folio-help p{margin:8px 0 16px}.folio-credits{font-size:11px;line-height:1.6;text-align:center;margin:12px 0 0}.folio-credits a{color:inherit;text-underline-offset:3px}.folio-message{font-size:13px;margin:6px 0 0;padding-top:6px;border-top:1px solid #70492370;flex:none;max-height:65px;overflow:auto}footer{text-align:center;font-size:11px;letter-spacing:.025em;flex:none;margin-top:10px;padding-top:8px;border-top:1px solid #70492370}
 @keyframes ink-appear{from{opacity:.35;transform:translateY(2px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

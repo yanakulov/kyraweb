@@ -21,7 +21,7 @@ The first forest region supports walking through scene edges, doors and the lift
 
 Browser controls and settings sit below the scene. Settings exposes walk speed and replay; a collapsed **Developer tools** disclosure contains the walk mask, layer information, intro scene selector, walk animation interval and mask opacity. Keep these controls outside the scene rather than covering original artwork.
 
-Settings also includes **Window dust**, a subtle optional pixel effect in Kallak's room and writing scene. Reduced motion disables it. While scene resources load, the hint reports loading and the intro timeline waits. Resource storage and renderer details are documented in [resources.md](resources.md).
+While scene resources load, the hint reports loading and the intro timeline waits. Resource storage and renderer details are documented in [resources.md](resources.md).
 
 Fullscreen is shown only when `document.fullscreenEnabled` is true. It targets the application container, follows `fullscreenchange`, and hides the control if a request fails. Fullscreen keeps controls available and hides the credits. A resource-loading failure displays an alert and **Try again**, which restarts the intro; this also covers failures after playback has begun.
 

@@ -103,7 +103,9 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     game.stop(); holdNextEntrance = true;
     const pendingGame = await startGame(canvas, { scene: gemCutScene, world: "/kyraweb/assets/world/world.json", playOpening: false,
       onLocationChange: (_, roomId) => { id = roomId!; }, onLoadingChange: value => { loading = value; } });
-    pendingGame.runSequence([{ op: 'exit', target: 1, entry: { x: 208, y: 110 } }]);
+    pendingGame.handleClick({ x: 316, y: 148 });
+    await until(() => pendingGame.getSnapshot().treeSpoken, "tree conversation before pending transition");
+    pendingGame.handleClick({ x: 316, y: 148 });
     await until(() => releaseNextEntrance !== null && loading, "pending transition");
     pendingGame.stop(); const stoppedFrame = canvas.toDataURL();
     releaseNextEntrance!(); await new Promise(resolve => setTimeout(resolve, 30)); advance(1000);

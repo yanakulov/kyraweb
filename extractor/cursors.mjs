@@ -4,7 +4,7 @@ import {mkdir,writeFile} from 'node:fs/promises';
 const resources=await readGameResources(process.argv[2],['MOUSE.CPS','PALETTE.COL']);
 const image=decodeCps(resources.get('MOUSE.CPS'),resources.get('PALETTE.COL'));
 await mkdir('public/assets/cursors',{recursive:true});
-for(const [name,x,y,w,h] of [['pointer',0,0,8,10],['north',80,18,16,9],['east',96,18,16,11],['south',112,18,16,9],['west',128,18,16,11]]){
+for(const [name,x,y,w,h] of [['pointer',0,0,8,10],['north',80,18,16,9],['east',96,18,16,11],['south',112,18,16,9],['west',128,18,16,11],['blocked',144,18,16,10]]){
   const colors=new Map();
   for(let row=0;row<h;row++)for(let col=0;col<w;col++){
     const index=image.pixels[(y+row)*image.width+x+col];if(!index)continue;

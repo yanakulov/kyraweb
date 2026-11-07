@@ -8,8 +8,10 @@ import { createForestState, traceForest, applyForestState, loadForestData } from
 import { validateWorldSave } from './saveStorage';
 
 export const SIDES = ["north", "east", "south", "west"] as const;
+export type CursorTrack = Pick<RoomPortal, "side" | "rect">;
 export type WorldRoom = SceneMeta & { id: number; name: string; title: string; exits: (number | null)[];
   entryMusic?: Extract<RoomAction, { op: 'music' }>[];
+  cursorTrack?: CursorTrack;
   actorScale?: GameConfig["scene"]["actorScale"];
   entrances: Record<typeof SIDES[number], Vec2>; northHeight: number; southHeight: number;
   shapes: NonNullable<GameConfig["scene"]["emc"]>["sceneAnimShapes"];
@@ -25,22 +27,26 @@ export function nearestFloor(mask: MaskData, preferred: Vec2) {
   return best;
 }
 
-export function roomPortals(room: WorldRoom, mask: MaskData): RoomPortal[] {
+export function roomPortals(room: WorldRoom, mask: MaskData, track = room.cursorTrack): RoomPortal[] {
   const portals: RoomPortal[] = room.portals.map((p, i) => ({ ...p, id: `door-${i}`,
     target: p.target === 65535 || p.target === -1 ? room.exits[SIDES.indexOf(p.side)]! : p.target,
     point: nearestFloor(mask, { x: p.rect.x + p.rect.w / 2, y: p.rect.y + p.rect.h }) }));
-  for (const [i, side] of SIDES.entries()) {
-    const target = room.exits[i];
-    if (target === null || portals.some(p => p.target === target)) continue;
+  // Side exits take precedence at corners. The south edge includes the status strip.
+  for (const side of ["west", "east", "south", "north"] as const) {
+    const target = room.exits[SIDES.indexOf(side)];
+    if (target === null) continue;
     const origin = room.entrances[side];
     const point = nearestFloor(mask, side === "north" ? { x: origin.x, y: room.northHeight + 4 } :
       side === "south" ? { x: origin.x, y: 132 } : { x: side === "east" ? 304 : 16, y: origin.y });
-    const rect = side === "north" ? { x: 8, y: 8, w: 304, h: Math.max(8, room.northHeight - 4) } :
-      side === "south" ? { x: 8, y: 128, w: 304, h: 8 } : { x: side === "east" ? 304 : 0, y: 8, w: 16, h: 128 };
+    const rect = side === "north" ? { x: 0, y: 0, w: 320, h: 12 } :
+      side === "south" ? { x: 0, y: 128, w: 320, h: 31 } : { x: side === "east" ? 308 : 0, y: 0, w: 12, h: 159 };
     portals.push({ id: side, target, side, point, rect });
   }
   if (room.id === 5) portals.unshift({ id: "lift", target: 1, side: "north", rect: { x: 235, y: 8, w: 66, h: 107 }, point: nearestFloor(mask, { x: 264, y: 108 }) });
   if (room.id === 1) portals.unshift({ id: "lift", target: 5, side: "south", rect: { x: 232, y: 96, w: 40, h: 40 }, point: nearestFloor(mask, { x: 216, y: 106 }) });
+  // EMC describes the visible entrance separately from the strip Brandon has to cross.
+  const tracked = track && portals.find(portal => portal.side === track.side);
+  if (tracked) portals.unshift({ ...tracked, rect: track.rect });
   return portals.filter(p => p.target !== null && p.target >= 0 && (p.target < 17 || p.target === 24));
 }
 
@@ -115,8 +121,13 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     const facing=restoring ? state!.facing ?? 5 : from?({north:0,east:3,south:4,west:5}[from.side]):5;
     if (restoring) arrival = { ...state!.pos };
     const snapshot={...resume,...continued,pos:arrival,facing,walkDelayTicks:({slowest:11,slow:9,fast:6,fastest:3})[settings.walkSpeed]};
+    let cursorTrack = meta.cursorTrack;
+    if (questRoom) {
+      const setup = traceForest(questRoom, 0, planned, snapshot);
+      cursorTrack = setup.cursorTrack ?? cursorTrack;
+      if (!restoring) setupActions = setup.actions;
+    }
     if(questRoom && !restoring){
-      setupActions=traceForest(questRoom,0,planned,snapshot).actions;
       for(const action of setupActions){
         applyForestState(planned,action);
         if(action.op==='mask')changeMask(action);
@@ -127,7 +138,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     let entryActions: RoomAction[] | undefined;
     if (!restoring && previous === 1 && id === 5) entryActions = [...lift("dropdown", 232, 8, 6), { op: "actor", x: 280, y: 116, facing: 3, visible: true }];
     if (!restoring && previous === 5 && id === 1) entryActions = [...lift("liftup", 192, 56, 5), { op: "actor", x: 208, y: 110, facing: 5, visible: true }];
-    if(questRoom && id!==0 && !restoring){
+    if(questRoom && (id!==0 || from) && !restoring){
       const announce=traceForest(questRoom,2,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions;
       for(const action of announce)applyForestState(planned,action);
       entryActions=[...(entryActions??[]),...announce,...traceForest(questRoom,3,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions];
@@ -141,7 +152,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       transitionImage.width = 320; transitionImage.height = 200;
       transitionImage.getContext('2d')!.drawImage(canvas, 0, 0);
     }
-    const portals = roomPortals(meta, mask);
+    const portals = roomPortals(meta, mask, cursorTrack);
     try { game = await startRoom(canvas, { ...config, world: undefined, saveState: undefined, paused, backgroundPack: pack, transitionImage,
       scene: { ...config.scene, name: meta.title, indexedBackground: { src, clip: "room" }, maskClip: "mask",
         indexedUi: { src: withBase("assets/packs/kallak-room.kyr.gz"), clip: "hud" }, meta, emc: { sceneAnimShapes: meta.shapes }, actorScale: meta.actorScale,

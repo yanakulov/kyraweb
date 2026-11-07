@@ -111,7 +111,6 @@ export const russian: Record<string, string> = {
   'Fast': 'Быстро',
   'Fastest': 'Очень быстро',
   'Language': 'Язык',
-  'Window dust': 'Пылинки в лучах света',
   'Full screen': 'На весь экран',
   'Exit full screen': 'Выйти из полного экрана',
   'Main menu': 'Главное меню',

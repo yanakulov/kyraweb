@@ -114,7 +114,7 @@ button:disabled { cursor: default; }
 .hud-options { position: absolute; left: 4%; top: 77%; width: 19%; height: 21%; min-height: 44px; background: transparent; border: 0; z-index: 6; }
 .hud-options:focus-visible { outline-offset: -6px; }
 .scene-notice { position: absolute; z-index: 7; top: 4%; left: 10%; right: 10%; padding: 12px; margin: 0; background: #14231df2; color: var(--paper); text-align: center; font-size: 12px; }
-.cursor-controlled { cursor: none !important; }
+.cursor-controlled, .cursor-controlled button { cursor: none !important; }
 .game-cursor { position: absolute; width: 3.75%; height: 8%; pointer-events: none; z-index: 7; }
 .game-cursor img { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 .fantasy-book, .fantasy-book button, .fantasy-book input, .fantasy-book a, .fantasy-book [role="option"] { cursor: url('/assets/cursors/book-pointer.svg') 2 2, auto !important; }

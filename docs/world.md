@@ -59,7 +59,7 @@ Brynn displays the original NOTEENG bitmap and waits for Continue. The home vase
 
 ## Pointer and touch controls
 
-Hover over an exit to see its directional arrow. Exits keeps all available arrows visible; this starts enabled on a coarse-pointer device. Arrow buttons trigger the same doorway/edge action as clicking the scene, including the first tree conversation before leaving home.
+The cursor changes to a directional arrow over a doorway or an open scene edge. On touch screens, swipe to move the cursor and tap to act at its position. The arrow and the click use the same exit area, including doorway rectangles from the original scene scripts. The first attempt to leave Brandon’s home starts the tree conversation.
 
 Inventory opens a larger five-by-two grid that shares the original HUD slots. Select a carried item, tap its destination in the scene, or tap an empty slot to put it away. Clicking during dialogue dismisses only the current line's speech wait; scripted animation and walking continue, and confirmation choices remain explicit. In the intro, a click advances to the end of the current subtitle without skipping the rest of the cutscene.
 
