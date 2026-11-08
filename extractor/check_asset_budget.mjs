@@ -21,12 +21,15 @@ const source = (await stat('dist/assets/audio/mt32-source.tar.gz')).size
 const soundfont = (await stat('dist/assets/audio/soundfonts/GeneralUser-GS.sf2')).size;
 const effects = (await stat('dist/assets/audio/effects.mp3')).size;
 const voices = (await size('dist/assets/voices')).bytes;
-const runtime = result.bytes - source - soundfont - effects - voices;
+const controlPreviews = (await stat('dist/assets/interface/controls-classic.webp')).size
+  + (await stat('dist/assets/interface/controls-modern.webp')).size;
+const runtime = result.bytes - source - soundfont - effects - voices - controlPreviews;
 const model = (await stat('dist/assets/interface/storybook.glb.gz')).size;
 console.log(`Production build: ${result.bytes.toLocaleString('en-US')} bytes in ${result.files} files.`);
-console.log(`Runtime: ${runtime.toLocaleString('en-US')} bytes; optional bank: ${soundfont.toLocaleString('en-US')} bytes; CD voices: ${voices.toLocaleString('en-US')} bytes; fallback SFX: ${effects.toLocaleString('en-US')} bytes; source archive: ${source.toLocaleString('en-US')} bytes; book model: ${model.toLocaleString('en-US')} bytes.`);
+console.log(`Runtime: ${runtime.toLocaleString('en-US')} bytes; optional bank: ${soundfont.toLocaleString('en-US')} bytes; CD voices: ${voices.toLocaleString('en-US')} bytes; fallback SFX: ${effects.toLocaleString('en-US')} bytes; source archive: ${source.toLocaleString('en-US')} bytes; book model: ${model.toLocaleString('en-US')} bytes; first-run previews: ${controlPreviews.toLocaleString('en-US')} bytes.`);
 if (soundfont !== 32_319_396) throw new Error('Unexpected size for the pinned GeneralUser GS bank.');
 if (runtime > runtimeBudget) throw new Error('Runtime asset budget exceeded.');
 if (effects > 600_000) throw new Error('Fallback sound effects budget exceeded.');
 if (voices > 5_000_000) throw new Error('CD voice asset budget exceeded.');
+if (controlPreviews > 60_000) throw new Error('First-run previews budget exceeded.');
 if (runtime + source > budget) throw new Error('Asset budget exceeded. Check duplicate exports and unused public resources before adding content.');

@@ -1,5 +1,5 @@
 <template>
-  <div class="music-settings">
+  <div class="music-settings" :class="{ 'is-basic': basic }">
     <BookSelect id="book-music" :label="t('Music device')" :model-value="state.renderer" :options="devices" :disabled="state.busy" @update:model-value="player.selectRenderer($event)" />
     <label class="sfx-switch"><input type="checkbox" :checked="state.enabled" :disabled="state.busy" @change="player.setEnabled(($event.target as HTMLInputElement).checked)" />{{ t('Music') }}</label>
     <label class="music-volume" for="music-volume">{{ t('Music volume') }} <span>{{ Math.round(state.volume * 100) }}%</span><input id="music-volume" type="range" min="0" max="100" step="1" :value="state.volume * 100" @input="player.setVolume(Number(($event.target as HTMLInputElement).value) / 100)" /></label>
@@ -16,12 +16,14 @@
     </template>
     <p v-else-if="state.renderer === 'adlib'" class="music-note">{{ t('Original DOS AdLib music. No ROM or SoundFont required.') }}</p>
     <p v-else class="music-note">{{ t('SoundFont mode uses approximate MT-32 to GM instrument mapping. It is not MU50, Kawai, Casio or SBLive hardware emulation; custom timbres and effects can differ.') }}</p>
-    <label class="rom-import" :class="{ 'is-busy': state.busy }">{{ t('Add SoundFont bank (.sf2)') }}<input type="file" accept=".sf2" :disabled="state.busy" @change="importFont" /></label>
-    <p class="music-note">{{ t('Each imported bank becomes a separate choice. Files stay in this browser; local banks are loaded only when selected.') }}</p>
-    <div class="music-buttons"><button type="button" :disabled="!state.ready || state.busy" @click="player.preview()">{{ t(state.previewing ? 'Stop test' : 'Test music') }}</button><button v-if="state.renderer === 'mt32' && state.available && state.source !== 'local'" type="button" :disabled="state.busy" @click="player.forgetRoms()">{{ t('Remove ROMs') }}</button></div>
+    <template v-if="!basic">
+      <label class="rom-import" :class="{ 'is-busy': state.busy }">{{ t('Add SoundFont bank (.sf2)') }}<input type="file" accept=".sf2" :disabled="state.busy" @change="importFont" /></label>
+      <p class="music-note">{{ t('Each imported bank becomes a separate choice. Files stay in this browser; local banks are loaded only when selected.') }}</p>
+    </template>
+    <div class="music-buttons"><button type="button" :disabled="!state.available || state.busy" @click="player.preview()">{{ t(state.previewing ? 'Stop test' : 'Test music') }}</button><button v-if="state.renderer === 'mt32' && state.available && state.source !== 'local'" type="button" :disabled="state.busy" @click="player.forgetRoms()">{{ t('Remove ROMs') }}</button></div>
     <p v-if="state.soundFontProgress !== undefined" class="music-note" role="status">{{ t('Loading SoundFont…') }} {{ state.soundFontProgress }}%</p>
     <p v-else-if="state.message" class="music-note" role="status">{{ t(state.message) }}</p>
-    <p class="music-note music-credit"><a :href="withBase('assets/audio/README.md')" target="_blank" rel="noopener">AdPlug / Nuked OPL3 / Munt / TinySoundFont</a> · <a :href="withBase(state.renderer === 'adlib' ? 'assets/audio/adlib-source.tar.gz' : 'assets/audio/mt32-source.tar.gz')">{{ t('Emulator source') }}</a></p>
+    <p v-if="!basic" class="music-note music-credit"><a :href="withBase('assets/audio/README.md')" target="_blank" rel="noopener">AdPlug / Nuked OPL3 / Munt / TinySoundFont</a> · <a :href="withBase(state.renderer === 'adlib' ? 'assets/audio/adlib-source.tar.gz' : 'assets/audio/mt32-source.tar.gz')">{{ t('Emulator source') }}</a></p>
   </div>
 </template>
 
@@ -31,8 +33,9 @@ import BookSelect from './BookSelect.vue';
 import { t } from '../i18n';
 import { withBase } from '../engine/core/assets';
 import type { MusicPlayer, MusicState } from '../engine/audio/music';
-const props = defineProps<{ player: MusicPlayer; state: MusicState }>();
-const devices = computed(() => [{ value: 'adlib', label: 'AdLib (OPL2)' }, { value: 'mt32', label: 'Roland MT-32 / CM-32L · Munt' }, ...props.state.banks.map(bank => ({ value: `sf2:${bank.id}`, label: `SF2 · ${bank.name}` }))]);
+const props = defineProps<{ player: MusicPlayer; state: MusicState; basic?: boolean }>();
+const devices = computed(() => [{ value: 'adlib', label: 'AdLib (OPL2)' }, { value: 'mt32', label: 'Roland MT-32 / CM-32L · Munt' },
+  ...props.state.banks.filter(bank => !props.basic || props.state.renderer === `sf2:${bank.id}`).map(bank => ({ value: `sf2:${bank.id}`, label: `SF2 · ${bank.name}` }))]);
 function importFiles(event: Event) {
   const input = event.target as HTMLInputElement;
   if (input.files?.length) void props.player.importRoms(Array.from(input.files));
@@ -45,4 +48,8 @@ onBeforeUnmount(() => props.player.stopPreview());
 <style scoped>
 .sfx-switch{display:flex;align-items:center;gap:8px;min-height:44px;font-size:14px}.sfx-switch input{accent-color:#536244;width:18px;height:18px}
 .music-settings{border-top:1px solid #77502145;margin-top:10px;padding-top:12px}.music-note{font-size:12px;line-height:1.5;margin:8px 0;overflow-wrap:anywhere}.music-volume{display:grid;grid-template-columns:1fr auto;align-items:center;margin-top:10px;font-size:14px}.music-volume input{grid-column:1/-1;width:100%;height:44px;accent-color:#536244;cursor:inherit}.rom-import{display:block;position:relative;min-height:44px;box-sizing:border-box;padding:9px 5px;text-align:center;border:1px solid #77502170;font:inherit;cursor:inherit}.rom-import input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:inherit}.rom-import:focus-within{outline:2px solid #82511d;outline-offset:-2px}.is-busy{opacity:.5}.music-buttons{display:flex;gap:8px}.music-buttons button{flex:1;min-height:44px;border:0;border-bottom:1px solid #77502145;background:transparent;font:inherit;color:inherit;cursor:inherit}.music-buttons button:disabled{opacity:.45}.music-buttons button:focus-visible{outline:2px solid #82511d;outline-offset:-2px}.music-credit{font-size:11px}.music-credit a{color:inherit;text-underline-offset:3px}
+.is-basic { display: grid; grid-template-columns: minmax(96px, 1fr) minmax(0, 2fr); gap: 2px 16px; margin: 0; padding: 0; border: 0; }
+.is-basic > :not(.sfx-switch, .music-volume) { grid-column: 1 / -1; }
+.is-basic .music-volume { margin-top: 4px; }
+.is-basic .music-buttons button { border: 1px solid #77502170; background: #7f5a2316; }
 </style>

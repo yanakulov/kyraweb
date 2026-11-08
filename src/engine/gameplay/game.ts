@@ -1,5 +1,5 @@
 import { sceneShuffle } from './sceneShuffle';
-import { locale, translateGameText } from '../../i18n';
+import { locale, t, translateGameText } from '../../i18n';
 import { DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from "../core/constants";
 import { loadImage, loadMask, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
@@ -11,8 +11,10 @@ import {
   findSceneItemAt,
   getItemStatusName,
   getTileRect,
+  inside,
   initInventory
 } from "./inventory";
+import { drawRadialInventory, RADIAL_SLOT_SIZE, radialLayout } from "./radialInventory";
 import { buildMaskCanvas, buildForegroundFrame, isWalkable, resolveActorLayer } from "../scene/masks";
 import { findWalkPath, findClickPath } from "./pathfinding";
 import { facingDirection, getIdleFrame, getSequence, stepFacing } from "./movement";
@@ -28,7 +30,7 @@ import { RoomScript, type OpeningScript, type RoomAction } from "./roomScript";
 import { brandonTalkHead, actorScaleAt } from "../characters/brandonFrames";
 import { startWorldGame } from "./world";
 import { exitCursor, portalAtPoint } from "./navigation";
-import type { DropAnim, GameConfig, InventoryItemId, RoomRuntimeSnapshot, RoomSnapshot, SceneItem, SceneOverlayState, Vec2, WorldSave } from "../core/types";
+import type { ControlMode, DropAnim, GameConfig, InventoryItemId, RoomRuntimeSnapshot, RoomSnapshot, SceneItem, SceneOverlayState, Vec2, WorldSave } from "../core/types";
 
 const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell']);
 const behindActors = (clip: string) => clip === 'face' || clip === 'face2' || clip === 'songbird-rest';
@@ -140,7 +142,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         clip: new IndexedClip(packedBackground.clip.pack, info), renderer: new IndexedRenderer(info, false)
       });
     }
-    if(config.amulet){
+    if (config.amulet || scriptRenderers.has('amulet')) {
       const pack=await loadScenePack(withBase('assets/forest/amulet.kyr.gz'),config.signal);
       for (const [name, info] of Object.entries(pack.clips)) {
         if (!scriptRenderers.has(name)) scriptRenderers.set(name,{clip:new IndexedClip(pack,info),renderer:new IndexedRenderer(info,false)});
@@ -156,6 +158,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let speechRemaining = 0;
     let speechAge = 0;
     let sequence: RoomScript | null = null;
+    let openingSequence: RoomScript | null = null;
+    let skippingOpening = false;
     let treeSpoken = config.resume?.treeSpoken ?? false;
     let pendingPortal: NonNullable<GameConfig["portals"]>[number] | null = null;
     let sequenceDone: (() => void) | null = null;
@@ -193,6 +197,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let clockMs = 0;
     let running = true;
     let paused = config.paused ?? false;
+    let modern = config.controlMode === 'modern';
+    let inventoryOpen = false;
+    let amuletMovieActive = false;
+    let radial = radialLayout(scene.uiMaskY);
     let atmosphere = true;
     const reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
 
@@ -388,26 +396,40 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (scene.opening && backgroundName === "room" && packedBackground && atmosphere && !reducedMotion?.matches) drawKallakAtmosphere(ctx, clockMs);
       ctx.restore();
 
-      if (scene.uiMaskY < LOGICAL_HEIGHT) {
-        ctx.fillStyle = "#000000";
-        ctx.fillRect(0, scene.uiMaskY, LOGICAL_WIDTH, LOGICAL_HEIGHT - scene.uiMaskY);
-      }
-      if (state.statusMessage) {
-        const statusY = scene.uiMaskY + 8;
-        drawStatusLine(ctx, translateGameText(state.statusMessage), statusY, LOGICAL_WIDTH);
-      }
-      if (uiOverlay) {
-        ctx.drawImage(uiOverlay, 0, 0);
-        if (locale.value === 'ru' && optionsRu) ctx.drawImage(optionsRu, HUD_OPTIONS_RECT.x, HUD_OPTIONS_RECT.y);
-      }
-      const rest=scriptRenderers.get('amulet-rest');
-      if(hasAmulet&&rest)ctx.drawImage(rest.renderer.render(rest.clip.frame(0)),224,152);
-      const amulet=scriptLayers.get('amulet');
-      if(amulet)ctx.drawImage(amulet.image,amulet.x,amulet.y);
+      const amulet = scriptLayers.get('amulet');
       const yellow = scriptRenderers.get('yellow-jewel'), yellowAnim = scriptLayers.get('yellow-jewel');
-      if (yellowAnim) ctx.drawImage(yellowAnim.image, yellowAnim.x, yellowAnim.y);
-      else if (hasYellowJewel && yellow) ctx.drawImage(yellow.renderer.render(yellow.clip.frame(10)), YELLOW_JEWEL_POS.x, YELLOW_JEWEL_POS.y);
-      drawInventory(ctx, itemsSheet, inventoryItems, state.inventorySlots);
+      if (modern) {
+        if (inventoryOpen || sequence && (amuletMovieActive || yellowAnim)) {
+          const hover = state.pointer && inventoryOpen ? findInventorySlot(state.pointer, radial.slots, RADIAL_SLOT_SIZE) : -1;
+          drawRadialInventory(ctx, radial, hover, inventoryOpen ? state.pointer : null, t('Menu'), !hasAmulet && !amulet);
+          drawInventory(ctx, itemsSheet, inventoryItems, state.inventorySlots, radial.slots, 1);
+          const movie = scriptRenderers.get('amulet-radial');
+          if (movie && (hasAmulet || amulet)) {
+            const index = amulet?.index ?? movie.clip.info.frames.length - 1;
+            ctx.drawImage(movie.renderer.render(movie.clip.frame(index)), radial.amulet.x, radial.amulet.y, radial.amulet.w, radial.amulet.h);
+          }
+          if (yellowAnim || hasYellowJewel && yellow) {
+            const jewel = yellowAnim?.image ?? yellow!.renderer.render(yellow!.clip.frame(10));
+            ctx.drawImage(jewel, radial.jewel.x, radial.jewel.y, radial.jewel.w, radial.jewel.h);
+          }
+        } else if (state.statusMessage) {
+          drawStatusLine(ctx, translateGameText(state.statusMessage), scene.uiMaskY - 13, LOGICAL_WIDTH);
+        }
+      } else {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, scene.uiMaskY, LOGICAL_WIDTH, LOGICAL_HEIGHT - scene.uiMaskY);
+        if (state.statusMessage) drawStatusLine(ctx, translateGameText(state.statusMessage), scene.uiMaskY + 8, LOGICAL_WIDTH);
+        if (uiOverlay) {
+          ctx.drawImage(uiOverlay, 0, 0);
+          if (locale.value === 'ru' && optionsRu) ctx.drawImage(optionsRu, HUD_OPTIONS_RECT.x, HUD_OPTIONS_RECT.y);
+        }
+        const rest = scriptRenderers.get('amulet-rest');
+        if (hasAmulet && rest) ctx.drawImage(rest.renderer.render(rest.clip.frame(0)), 224, 152);
+        if (amulet) ctx.drawImage(amulet.image, amulet.x, amulet.y);
+        if (yellowAnim) ctx.drawImage(yellowAnim.image, yellowAnim.x, yellowAnim.y);
+        else if (hasYellowJewel && yellow) ctx.drawImage(yellow.renderer.render(yellow.clip.frame(10)), YELLOW_JEWEL_POS.x, YELLOW_JEWEL_POS.y);
+        drawInventory(ctx, itemsSheet, inventoryItems, state.inventorySlots);
+      }
       if (state.itemInHand && state.pointer && !exitCursor(availablePortals(), state.pointer)) {
         const item = inventoryItems.get(state.itemInHand);
         if (item) {
@@ -450,9 +472,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
 
       if (clockMs < shakeUntil && !reduceMotion?.matches) {
-        ctx.drawImage(canvas, 0, 4, LOGICAL_WIDTH, LOGICAL_HEIGHT - 4, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT - 4);
+        ctx.drawImage(canvas, 0, 4, LOGICAL_WIDTH, canvas.height - 4, 0, 0, LOGICAL_WIDTH, canvas.height - 4);
         ctx.fillStyle = '#000';
-        ctx.fillRect(0, LOGICAL_HEIGHT - 4, LOGICAL_WIDTH, 4);
+        ctx.fillRect(0, canvas.height - 4, LOGICAL_WIDTH, 4);
       }
     }
 
@@ -472,7 +494,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let animationFrame = 0;
 
     function setTarget(point: Vec2) {
-      if (paused || !running || transition?.active || dead || sequence || point.y >= scene.uiMaskY || state.drops.length) return;
+      if (paused || !running || transition?.active || dead || sequence || inventoryOpen || point.y >= scene.uiMaskY || state.drops.length) return;
       pendingPortal = null;
       actorShape = null;
       const path = findClickPath(state.pos, point, p => isWalkable(p, scene, mask));
@@ -523,7 +545,26 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function availablePortals() {
-      return running && !paused && !sequence && !dead && backgroundName === "room" ? config.portals ?? [] : [];
+      return running && !paused && !sequence && !dead && !inventoryOpen && backgroundName === "room" ? config.portals ?? [] : [];
+    }
+
+    function setInventoryOpen(value: boolean) {
+      if (value === inventoryOpen || value && (!modern || paused || !running || dead || sequence || transition?.active || state.drops.length)) return false;
+      inventoryOpen = value;
+      if (value) {
+        radial = radialLayout(scene.uiMaskY, state.pointer);
+        stopWalking(); pendingPortal = null;
+      }
+      render();
+      return true;
+    }
+
+    function selectSlot(slot: number) {
+      stopWalking();
+      if (!state.inventorySlots[slot] && !state.itemInHand) return;
+      exchangeInventorySlot(slot);
+      if (state.itemInHand) setInventoryOpen(false);
+      config.onCheckpoint?.();
     }
 
     function handleClick(point: Vec2) {
@@ -536,10 +577,19 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (sequence) { sequence.skipLine(); return true; }
       if (dead) return true;
       if (state.drops.length) return true;
-      const jewel = YELLOW_JEWEL_HITBOX;
-      if (hasAmulet && config.onAmuletInteract && point.x >= jewel.x && point.x < jewel.x + jewel.w && point.y >= jewel.y && point.y < jewel.y + jewel.h) {
+      if (inventoryOpen && inside(point, radial.options)) {
+        setInventoryOpen(false); config.onOptions?.(); return true;
+      }
+      if ((!modern || inventoryOpen) && hasAmulet && config.onAmuletInteract && inside(point, modern ? radial.jewelHit : YELLOW_JEWEL_HITBOX)) {
+        setInventoryOpen(false);
         stopWalking();
         playScript(config.onAmuletInteract(getSnapshot()));
+        return true;
+      }
+      if (inventoryOpen) {
+        const slot = findInventorySlot(point, radial.slots, RADIAL_SLOT_SIZE);
+        if (slot >= 0) selectSlot(slot);
+        else if ((point.x - radial.x) ** 2 + (point.y - radial.y) ** 2 > radial.radius ** 2) setInventoryOpen(false);
         return true;
       }
       const portal = portalAtPoint(availablePortals(), point);
@@ -573,13 +623,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           return true;
         }
       }
-      const slot = findInventorySlot(point);
+      const slot = modern ? -1 : findInventorySlot(point);
       if (slot !== -1) {
-        stopWalking();
-        if (state.inventorySlots[slot] || state.itemInHand) {
-          exchangeInventorySlot(slot);
-          config.onCheckpoint?.();
-        }
+        selectSlot(slot);
         return true;
       }
       if (point.y < scene.uiMaskY) {
@@ -676,9 +722,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       state.dir = facingDirection(facing);
     }
 
-    function soundEffect(track: number) { config.onScriptAction?.({ op: 'sfx', track }); }
+    function soundEffect(track: number) { if (!skippingOpening) config.onScriptAction?.({ op: 'sfx', track }); }
     function applyScript(action: RoomAction) {
       const openingBank = scene.opening && (backgroundName === 'trunk' || backgroundName === 'gem') ? backgroundName.toUpperCase() : undefined;
+      if (skippingOpening && ['sfx', 'say', 'message'].includes(action.op)) return;
       config.onScriptAction?.(action.op === 'say' && !action.voiceBank && openingBank ? { ...action, voiceBank: openingBank } : action);
       switch (action.op) {
         case 'choice':state.statusMessage='Click where you want to go.';state.statusMessageUntil=Infinity;break;
@@ -740,6 +787,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         case "face": face(action.facing); actorShape = action.shape < 0 ? null : action.shape;if(action.shape===88)actorVisible=false;break;
         case "frame": {
           if (action.clip === 'note') config.onNoteChange?.(true);
+          if (action.clip === 'amulet' && sequence && !amuletMovieActive) {
+            radial = radialLayout(scene.uiMaskY, state.pointer ?? state.pos);
+            amuletMovieActive = true;
+          }
           if(['needsaw1','advice'].includes(action.clip))heldNpcPoses.delete(2);
           if(['tag','tag-0'].includes(action.clip))heldNpcPoses.delete(1);
           if(action.clip==='tag')scriptLayers.delete('tag-0');
@@ -785,6 +836,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     function playScript(actions: RoomAction[], done?: () => void) {
       if (actions.some(action => action.op === 'exit') && talkToTree()) return;
       stopWalking();
+      inventoryOpen = false;
+      amuletMovieActive = false;
       pendingPortal = null;
       sequenceDone = done ?? null;
       config.onSequenceChange?.(true);
@@ -792,6 +845,35 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         movementTempo: () => state.walkDelayTicks / 6,
         frames: name => scriptRenderers.get(name)?.clip.info.frames.length ?? 0 });
       if (!paused) sequence.update(0);
+    }
+
+    function skipOpening() {
+      if (paused || !sequence || sequence !== openingSequence) return false;
+      applyScript({ op: 'clearText', stopVoice: true });
+      skippingOpening = true;
+      try {
+        // Advance the actual movement and script clocks so the room keeps its
+        // final actor pose and music cue. The opening has no player choices.
+        for (let tick = 0; sequence === openingSequence && !sequence?.awaiting && tick < 3600; tick++) {
+          clockMs += TICK_MS;
+          update(TICK_MS / 1000, clockMs);
+        }
+      } finally { skippingOpening = false; }
+      render();
+      return true;
+    }
+
+    function resizeCanvas() {
+      if (canvas.width !== LOGICAL_WIDTH) canvas.width = LOGICAL_WIDTH;
+      const height = modern ? scene.uiMaskY : LOGICAL_HEIGHT;
+      if (canvas.height !== height) canvas.height = height;
+    }
+
+    function setControlMode(mode: ControlMode) {
+      modern = mode === 'modern';
+      inventoryOpen = false;
+      resizeCanvas();
+      render();
     }
 
     if (config.entry || config.resume?.facing !== undefined) face(config.entry?.facing ?? config.resume!.facing!);
@@ -814,14 +896,13 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     } else {
       for(const action of config.setupActions??[])applyScript(action);
       for(const anim of sceneAnims)anim.visible=anim.play;
-      if (openingScript && config.playOpening !== false) playScript(openingScript.opening);
+      if (openingScript && config.playOpening !== false) { playScript(openingScript.opening); openingSequence = sequence; }
       else if (config.entryActions?.length) playScript(config.entryActions);
     }
 
     config.signal?.throwIfAborted();
     // Resizing clears the shared canvas; keep the previous room during loading.
-    if (canvas.width !== LOGICAL_WIDTH) canvas.width = LOGICAL_WIDTH;
-    if (canvas.height !== LOGICAL_HEIGHT) canvas.height = LOGICAL_HEIGHT;
+    resizeCanvas();
     // The caller can atomically replace an old paused game after this promise resolves.
     render();
     if (transition?.active) transition.draw(ctx);
@@ -850,6 +931,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
     function getSaveState(): WorldSave | null { return null; }
     return { setTarget, stop, setDebug, setPointer, setWalkSpeed, setAnimStepInterval, handleClick,
+      setControlMode, setInventoryOpen, getInventoryOpen: () => inventoryOpen, skipOpening,
       setAtmosphere: (enabled: boolean) => { atmosphere = enabled; if (paused) render(); },
       runSequence: playScript,
       getSnapshot, getSaveSnapshot, getSaveState, setPaused, getPortals: availablePortals };

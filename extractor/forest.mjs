@@ -306,6 +306,15 @@ export async function buildForest(root, out = "public/assets/forest") {
     }),
   );
   const amulet = decodeWsa(get("AMULET.WSA"));
+  // The first frame is the empty stone HUD. Key it out to keep the original
+  // metalwork, sparks and timing on the circular inventory's own background.
+  const emptyAmulet = amulet.frames[0];
+  const usedIndices = new Set();
+  for (const frame of amulet.frames) for (let i = 0; i < frame.length; i++)
+    if (frame[i] !== emptyAmulet[i]) usedIndices.add(frame[i]);
+  const transparentAmulet = Array.from({ length: 256 }, (_, i) => i).find(i => !usedIndices.has(i));
+  if (transparentAmulet === undefined) throw new Error('No transparent index for AMULET.WSA');
+  const amuletPalette = decodeCps(get("GEMCUT.CPS"), get("PALETTE.COL")).palette;
   const jewels = decodeCps(get("JEWELS3.CPS"), get("PALETTE.COL"));
   // JEWELS3 uses a 32 × 17 grid. Yellow is jewel 1 in the DOS HUD.
   const yellowFrames = [359, 354, 349, 344, 339, 335, 340, 345, 350, 355, 324, 330].map(shape => {
@@ -320,8 +329,14 @@ export async function buildForest(root, out = "public/assets/forest") {
       "amulet-rest": {
         ...amulet,
         frames: [amulet.frames.at(-1)],
-        palette: decodeCps(get("GEMCUT.CPS"), get("PALETTE.COL")).palette,
+        palette: amuletPalette,
         transparentIndex: -1,
+      },
+      "amulet-radial": {
+        ...amulet,
+        frames: amulet.frames.map(frame => frame.map((value, i) => value === emptyAmulet[i] ? transparentAmulet : value)),
+        palette: amuletPalette,
+        transparentIndex: transparentAmulet,
       },
     }),
   );

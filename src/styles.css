@@ -48,6 +48,7 @@ body {
   width: min(100%, 1280px, calc((100svh - 8px) * 1.6));
   margin-inline: auto;
 }
+.app.is-modern { width: min(100%, calc((100svh - 8px) * 40 / 17)); }
 
 .game-frame {
   position: relative;
@@ -64,6 +65,7 @@ body {
   container-type: inline-size;
   isolation: isolate;
 }
+.is-modern .stage { aspect-ratio: 40 / 17; }
 
 .stage canvas {
   width: 100%;
@@ -137,5 +139,6 @@ button:disabled { cursor: default; }
 
 .app:fullscreen { --game-surround: #000; width: 100%; max-width: none; height: 100%; display: grid; place-items: center; background: #000; }
 .app:fullscreen .game-frame { width: min(100%, calc(100dvh * 1.6)); }
+.app.is-modern:fullscreen .game-frame { width: min(100%, calc(100dvh * 40 / 17)); }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }

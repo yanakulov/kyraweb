@@ -1,6 +1,6 @@
 import { INVENTORY_ICON_SIZE, ITEMS_SHEET_COLS } from "../core/constants";
 import { getDrawLayer } from "../scene/masks";
-import type { InventoryItem, InventoryItemId, InventorySlot, MaskData, SceneItem } from "../core/types";
+import type { InventoryItem, InventoryItemId, InventorySlot, MaskData, SceneItem, Vec2 } from "../core/types";
 
 const INVENTORY_ITEM_DEFS: Record<InventoryItemId, InventoryItem> = {
   // Tile indices are 0-based, 20 columns per row in items.png.
@@ -48,33 +48,28 @@ export function initInventory(): (InventoryItemId | null)[] {
   return slots;
 }
 
-export function findInventorySlot(point: { x: number; y: number }) {
-  for (let i = 0; i < INVENTORY_SLOTS.length; i++) {
-    const slot = INVENTORY_SLOTS[i];
-    if (
-      point.x >= slot.x &&
-      point.x < slot.x + INVENTORY_ICON_SIZE &&
-      point.y >= slot.y &&
-      point.y < slot.y + INVENTORY_ICON_SIZE
-    ) {
-      return i;
-    }
-  }
-  return -1;
+export function inside(point: Vec2, rect: Vec2 & { w: number; h: number }) {
+  return point.x >= rect.x && point.x < rect.x + rect.w && point.y >= rect.y && point.y < rect.y + rect.h;
+}
+
+export function findInventorySlot(point: Vec2, positions = INVENTORY_SLOTS, size = INVENTORY_ICON_SIZE) {
+  return positions.findIndex(slot => inside(point, { ...slot, w: size, h: size }));
 }
 
 export function drawInventory(
   ctx: CanvasRenderingContext2D,
   itemsSheet: HTMLImageElement,
   inventoryItems: Map<InventoryItemId, InventoryItem>,
-  slots: (InventoryItemId | null)[]
+  slots: (InventoryItemId | null)[],
+  positions = INVENTORY_SLOTS,
+  inset = 0
 ) {
-  for (let i = 0; i < slots.length && i < INVENTORY_SLOTS.length; i++) {
+  for (let i = 0; i < slots.length && i < positions.length; i++) {
     const id = slots[i];
     if (!id) continue;
     const item = inventoryItems.get(id);
     if (!item) continue;
-    const slot = INVENTORY_SLOTS[i];
+    const slot = positions[i];
     const rect = getTileRect(item.tileIndex);
     ctx.drawImage(
       itemsSheet,
@@ -82,8 +77,8 @@ export function drawInventory(
       rect.y,
       rect.w,
       rect.h,
-      slot.x,
-      slot.y,
+      slot.x + inset,
+      slot.y + inset,
       INVENTORY_ICON_SIZE,
       INVENTORY_ICON_SIZE
     );

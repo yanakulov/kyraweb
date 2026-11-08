@@ -33,6 +33,7 @@
           <div class="folio-settings-grid">
             <BookSelect id="book-language" :label="t('Language')" :model-value="locale" :options="languages" :disabled="busy" @update:model-value="setLocale" />
             <BookSelect id="book-speed" :label="t('Walk speed')" :model-value="walkSpeed" :options="speeds" :disabled="busy" @update:model-value="$emit('update:walkSpeed', $event as WalkSpeed)" />
+            <BookSelect id="book-controls" :label="t('Controls')" :model-value="controlMode" :options="controls" :disabled="busy" @update:model-value="$emit('update:controlMode', $event as ControlMode)" />
           </div>
           <MusicSettings v-if="musicPlayer && musicState" :player="musicPlayer" :state="musicState" />
           <button v-if="fullscreenAvailable" type="button" @click="$emit('fullscreen')">{{ t(isFullscreen ? 'Exit full screen' : 'Full screen') }}</button>
@@ -41,7 +42,7 @@
           <div v-if="confirmAction" class="folio-confirm"><p>{{ t('Leave this adventure? Unsaved progress will be lost.') }}</p><div class="folio-inline"><button type="button" @click="leave">{{ t('Continue') }}</button><button type="button" @click="cancelLeave">{{ t('Stay here') }}</button></div></div>
           <p class="folio-credits">{{ t('Original tale © 1992 Westwood Studios') }}<br /><a href="https://github.com/yanakulov/kyraweb" target="_blank" rel="noopener noreferrer">{{ t('Reimagined by AkulaFlow · Yan Akulov') }}</a></p>
         </div>
-        <div v-else class="folio-help"><p><strong>{{ t('Explore.') }}</strong> {{ t('Click to walk. Move the cursor to an exit to reveal its arrow.') }}</p><p><strong>{{ t('Discover.') }}</strong> {{ t('Click people to talk or objects to take them. Choose an inventory item, then click where to use it.') }}</p><p><strong>{{ t('Touch.') }}</strong> {{ t('Swipe to guide the cursor. Tap to interact. During dialogue, tap to skip the current line.') }}</p><p>{{ t('Options returns you to this book and pauses the adventure.') }}</p></div>
+        <div v-else class="folio-help"><p><strong>{{ t('Explore.') }}</strong> {{ t('Click to walk. Move the cursor to an exit to reveal its arrow.') }}</p><p><strong>{{ t('Discover.') }}</strong> {{ t('Click people to talk or objects to take them. Choose an inventory item, then click where to use it.') }}</p><p><strong>{{ t('Touch.') }}</strong> {{ t('Swipe to guide the cursor. Tap to interact. During dialogue, tap to skip the current line.') }}</p><p v-if="controlMode === 'modern'">{{ t('Right-click or press I to open the inventory. On touch screens, press and hold. Menu opens the book.') }}</p><p v-else>{{ t('Options returns you to this book and pauses the adventure.') }}</p></div>
       </fieldset>
     </div>
     <p v-if="message" class="folio-message" role="status">{{ t(message) }}</p>
@@ -56,12 +57,13 @@ import MusicSettings from './MusicSettings.vue';
 import type { MusicPlayer, MusicState } from '../engine/audio/music';
 import { AUTOSAVE_SLOT } from '../engine/gameplay/saveStorage';
 import { locale, setLocale, t } from '../i18n';
+import type { ControlMode } from '../engine/core/types';
 type WalkSpeed = 'slowest' | 'slow' | 'fast' | 'fastest';
 type View = 'main' | 'save' | 'load' | 'settings' | 'help';
 const props = withDefaults(defineProps<{
   gameplay: boolean; canSave: boolean; busy: boolean; message: string; mainMenu?: boolean; gameOver?: boolean;
   slots: { index: number; name?: string; location?: string; savedAt?: string; thumbnail?: string; error?: string | null }[];
-  walkSpeed: WalkSpeed; fullscreenAvailable: boolean; isFullscreen: boolean;
+  walkSpeed: WalkSpeed; controlMode: ControlMode; fullscreenAvailable: boolean; isFullscreen: boolean;
   initialView?: 'main' | 'load';
   musicPlayer?: MusicPlayer; musicState?: MusicState;
 }>(), { initialView: 'main', mainMenu: false });
@@ -69,9 +71,11 @@ const emit = defineEmits<{
   resume: []; save: [index: number, name: string]; load: [index: number]; startJourney: []; readPrologue: [];
   mainMenu: []; replayIntro: []; fullscreen: [];
   'update:walkSpeed': [value: WalkSpeed];
+  'update:controlMode': [value: ControlMode];
 }>();
 const languages = [{ value: 'en', label: 'English' }, { value: 'ru', label: 'Русский' }];
 const speeds = computed(() => ['slowest', 'slow', 'fast', 'fastest'].map((value, index) => ({ value, label: t(['Slowest', 'Slow', 'Fast', 'Fastest'][index]) })));
+const controls = computed(() => [{ value: 'modern', label: t('Modern') }, { value: 'classic', label: t('Classic') }]);
 const view = ref<View>(props.initialView), heading = ref<HTMLHeadingElement | null>(null);
 const menu = ref<HTMLElement | null>(null);
 const saveName = ref(''), overwrite = ref<number | null>(null), confirmAction = ref<'menu' | 'intro' | null>(null);

@@ -20,6 +20,7 @@ import { BRANDON_FRAMES } from "../src/engine/characters/brandonFrames";
 import { isWalkable } from "../src/engine/scene/masks";
 import { buildDropPath, dropItemAt, updateDrops, findDropDestination } from "../src/engine/gameplay/drops";
 import { startGame } from "../src/engine/gameplay/game";
+import { radialLayout } from "../src/engine/gameplay/radialInventory";
 import type { SceneConfig, MaskData, DropAnim, SceneItem, Vec2 } from "../src/engine/core/types";
 import gemcutMask from "../public/assets/masks/GEMCUT.json";
 import { readFileSync } from "node:fs";
@@ -690,6 +691,65 @@ test("game input preserves held items on failed drops and exchanges scene items"
     assert.deepEqual(sounds, [53, 54, 53, 50, 53, 54]);
     game.stop();
   } finally { Object.assign(globalThis, original); h.restore(); }
+});
+
+test("modern inventory uses engine hitboxes, holds the same slots and never clicks through to exits", async () => {
+  const h = introHarness(), original = { Image: globalThis.Image, document: globalThis.document };
+  class FakeImage {
+    onload = () => {}; width = 320; height = 200;
+    set src(_: string) { queueMicrotask(() => this.onload()); }
+  }
+  Object.assign(globalThis, { Image: FakeImage, document: { createElement: () => ({ ...h.canvas }) } });
+  try {
+    let options = 0, exits = 0;
+    const game = await startGame(h.canvas, { controlMode: 'modern', scene: { ...scene, items: [{ id: 'ruby', x: 80, y: 80 }] },
+      onOptions: () => options++, onExit: () => exits++,
+      portals: [{ id: 'east', side: 'east', target: 1, point: { x: 168, y: 120 }, rect: { x: 300, y: 8, w: 20, h: 128 } }] });
+    assert.equal(h.canvas.height, 136);
+    const anchor = { x: 85, y: 70 };
+    const layout = radialLayout(136, anchor), slot = { x: layout.slots[0].x + 9, y: layout.slots[0].y + 9 };
+    assert.deepEqual([layout.x, layout.y], [anchor.x, anchor.y]);
+    const edge = radialLayout(136, { x: 1, y: 135 });
+    assert.equal(edge.x - edge.radius, 0);
+    assert.equal(edge.y + edge.radius, 135);
+    game.setPointer(anchor);
+    game.handleClick({ x: 80, y: 75 });
+    game.setInventoryOpen(true);
+    game.handleClick(slot);
+    assert.equal(game.getSnapshot().inventorySlots[0], 'ruby');
+    assert.equal(game.getInventoryOpen(), true);
+    game.handleClick(slot);
+    assert.equal(game.getSnapshot().itemInHand, 'ruby');
+    assert.equal(game.getInventoryOpen(), false);
+    game.setInventoryOpen(true);
+    assert.equal(game.handleClick({ x: 310, y: 80 }), true);
+    assert.equal(exits, 0);
+    assert.equal(game.getInventoryOpen(), false);
+    game.setInventoryOpen(true);
+    game.handleClick({ x: layout.x, y: layout.options.y + 2 });
+    assert.equal(options, 1);
+    assert.equal(game.getInventoryOpen(), false);
+    game.setControlMode('classic');
+    assert.equal(h.canvas.height, 200);
+    assert.equal(game.setInventoryOpen(true), false);
+    game.handleClick({ x: 96, y: 161 });
+    assert.equal(game.getSnapshot().inventorySlots[0], 'ruby');
+    game.stop();
+  } finally { Object.assign(globalThis, original); h.restore(); }
+});
+
+test('the circular amulet keeps every changed pixel from the original acquisition frames', () => {
+  const load = (file: string, name: string) => {
+    const pack = parseScenePack(gunzipSync(readFileSync(`public/assets/forest/${file}.kyr.gz`)));
+    return new IndexedClip(pack, pack.clips[name]);
+  };
+  const original = load('altar', 'amulet'), radial = load('amulet', 'amulet-radial');
+  const stone = original.frame(0).slice();
+  assert.equal(radial.info.frames.length, original.info.frames.length);
+  for (let i = 0; i < original.info.frames.length; i++) {
+    const frame = original.frame(i), cutout = radial.frame(i);
+    assert.ok(cutout.every((pixel, p) => pixel === (frame[p] === stone[p] ? radial.info.transparentIndex : frame[p])));
+  }
 });
 
 test("game walking advances equally at different display rates and retargets without oscillating", async () => {
