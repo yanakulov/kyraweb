@@ -15,7 +15,7 @@ import {
   inside,
   initInventory
 } from "./inventory";
-import { drawRadialInventory, RADIAL_SLOT_SIZE, radialLayout } from "./radialInventory";
+import { drawRadialInventory, RADIAL_RENDER_SCALE, RADIAL_SLOT_SIZE, radialLayout } from "./radialInventory";
 import { buildMaskCanvas, buildForegroundFrame, isWalkable, resolveActorLayer } from "../scene/masks";
 import { findWalkPath, findClickPath } from "./pathfinding";
 import { facingDirection, getIdleFrame, getSequence, stepFacing } from "./movement";
@@ -226,7 +226,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       radialOpenedAt = clockMs;
       if (radialCanvas) {
         const size = radial.radius * 2 + 1;
-        radialCanvas.width = radialCanvas.height = size;
+        radialCanvas.width = radialCanvas.height = size * RADIAL_RENDER_SCALE;
         radialCanvas.style.width = radialCanvas.style.height = `${size * scale}px`;
         radialCanvas.style.left = `${radial.x * 100 / LOGICAL_WIDTH}%`;
         radialCanvas.style.top = `${radial.y * 100 / canvas.height}%`;
@@ -461,6 +461,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           uiContext.imageSmoothingEnabled = false;
           if (radialCanvas) {
             uiContext.clearRect(0, 0, radialCanvas.width, radialCanvas.height);
+            uiContext.scale(RADIAL_RENDER_SCALE, RADIAL_RENDER_SCALE);
             uiContext.translate(radial.radius - radial.x, radial.radius - radial.y);
           }
           const age = reducedMotion?.matches ? Infinity : clockMs - radialOpenedAt;

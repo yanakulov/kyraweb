@@ -90,7 +90,7 @@ body {
   /* A finger aims inside the scene; two fingers can still zoom the page. */
   touch-action: pinch-zoom;
 }
-.stage .radial-surface { position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 3; }
+.stage .radial-surface { position: absolute; transform: translate(-50%, -50%); image-rendering: auto; pointer-events: none; z-index: 3; }
 .stage .radial-surface[hidden] { display: none; }
 
 .book-continue { padding: 5px 14px; min-height: 32px; font: 16px/1.2 Georgia,serif; color: #d9bd82; border: 0; background: linear-gradient(90deg,transparent,#201007eb 20%,#201007eb 80%,transparent); text-shadow: 0 1px 2px #000; }

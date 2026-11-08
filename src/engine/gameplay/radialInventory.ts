@@ -3,6 +3,7 @@ import type { Vec2 } from '../core/types';
 import { getInventorySlotPositions, inside } from './inventory';
 
 export const RADIAL_SLOT_SIZE = 13;
+export const RADIAL_RENDER_SCALE = 4;
 const orbit = 24, outer = 32, amuletScale = .4;
 const halfSlot = Math.floor(RADIAL_SLOT_SIZE / 2);
 
@@ -25,57 +26,57 @@ export function radialLayout(height: number, anchor?: Vec2 | null, footprint = {
 }
 
 function disk(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string) {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fillStyle = color;
-  for (let row = -r; row <= r; row++) {
-    const half = Math.floor(Math.sqrt(r * r - row * row));
-    ctx.fillRect(x - half, y + row, half * 2 + 1, 1);
-  }
+  ctx.fill();
 }
 
 function bevel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, lit: boolean) {
-  ctx.fillStyle = lit ? '#f6db91' : '#b69260';
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = lit ? '#36433c' : '#161a23';
-  ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+  ctx.beginPath();
+  ctx.roundRect(x + .35, y + .35, w - .7, h - .7, 1.6);
+  ctx.fillStyle = lit ? '#263d3c' : '#12121e';
+  ctx.fill();
+  ctx.strokeStyle = lit ? '#e9c992' : '#8b795a';
+  ctx.lineWidth = .6;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.roundRect(x + 1.1, y + 1.1, w - 2.2, h - 2.2, 1);
+  ctx.strokeStyle = lit ? '#71968b' : '#423b50';
+  ctx.lineWidth = .45;
+  ctx.stroke();
 }
 
 let plate: HTMLCanvasElement | undefined;
 function radialPlate() {
   if (plate) return plate;
   plate = document.createElement('canvas');
-  plate.width = plate.height = 2 * outer + 1;
+  plate.width = plate.height = (2 * outer + 1) * RADIAL_RENDER_SCALE;
   const ctx = plate.getContext('2d')!;
-  disk(ctx, outer, outer, outer, '#100c11');
-  disk(ctx, outer, outer, outer - 1, '#c09a62');
-  disk(ctx, outer, outer, outer - 2, '#624735');
+  ctx.scale(RADIAL_RENDER_SCALE, RADIAL_RENDER_SCALE);
+  const center = outer + .5;
+  disk(ctx, center, center, outer + .35, '#100e17');
+  disk(ctx, center, center, outer - .45, '#a28b63');
+  disk(ctx, center, center, outer - 1.15, '#282437');
+  disk(ctx, center, center, outer - 2.3, '#453d54');
+  disk(ctx, center, center, outer - 3, '#2a2538');
+  disk(ctx, center, center, orbit - 1.1, '#807057');
   ctx.globalCompositeOperation = 'destination-out';
-  disk(ctx, outer, outer, orbit - 2, '#fff');
+  disk(ctx, center, center, orbit - 1.7, '#fff');
   ctx.globalCompositeOperation = 'source-over';
-  disk(ctx, outer, outer, 14, '#8b6844');
-  disk(ctx, outer, outer, 13, '#191d27');
+  disk(ctx, center, center, 14, '#100e17');
+  disk(ctx, center, center, 13.4, '#8f7958');
+  disk(ctx, center, center, 12.8, '#342d43');
+  disk(ctx, center, center, 12, '#1b1928');
   return plate;
-}
-
-const menuLetters = {
-  M: [5, 7, 7, 5, 5], E: [7, 4, 6, 4, 7], N: [9, 13, 11, 9, 9], U: [5, 5, 5, 5, 7],
-  М: [5, 7, 7, 5, 5], Е: [7, 4, 6, 4, 7], Н: [5, 5, 7, 5, 5], Ю: [23, 21, 29, 21, 23]
-};
-function drawMenuText(ctx: CanvasRenderingContext2D, menu: string, x: number, y: number) {
-  const letters = [...menu.toUpperCase()].map(letter => menuLetters[letter as keyof typeof menuLetters]);
-  let left = x - 8;
-  for (const rows of letters) {
-    if (!rows) continue;
-    const width = rows[0] > 15 ? 5 : rows[0] > 7 ? 4 : 3;
-    rows.forEach((bits, row) => {
-      for (let col = 0; col < width; col++) if (bits & (1 << (width - col - 1))) ctx.fillRect(left + col, y + row, 1, 1);
-    });
-    left += width + 1;
-  }
 }
 
 export function drawRadialInventory(ctx: CanvasRenderingContext2D, layout: ReturnType<typeof radialLayout>,
   pointer: Vec2 | null, menu: string, sealed: boolean, age: number, drawItem: (index: number, x: number, y: number) => void) {
-  ctx.drawImage(radialPlate(), layout.x - outer, layout.y - outer);
+  const diameter = 2 * outer + 1;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(radialPlate(), layout.x - outer, layout.y - outer, diameter, diameter);
+  ctx.imageSmoothingEnabled = false;
   layout.slots.forEach((slot, index) => {
     const progress = Math.max(0, Math.min(1, (age - index * 17) / 75));
     if (progress <= 0) return;
@@ -91,10 +92,18 @@ export function drawRadialInventory(ctx: CanvasRenderingContext2D, layout: Retur
   const lit = !!pointer && inside(pointer, layout.options);
   bevel(ctx, x, y, w, h, lit);
   ctx.fillStyle = lit ? '#fff0bf' : '#ddc18a';
-  drawMenuText(ctx, menu, layout.x, y + 2);
+  ctx.font = 'bold 5.1px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(menu.toUpperCase(), x + w / 2, y + h / 2 + .15, w - 2);
   if (sealed) {
-    ctx.fillStyle = '#d5ac68';
-    ctx.fillRect(layout.x - 2, layout.y - 2, 5, 1);
-    ctx.fillRect(layout.x, layout.y - 4, 1, 5);
+    ctx.save();
+    ctx.translate(layout.x + .5, layout.y - .5);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#a28b63';
+    ctx.fillRect(-2, -2, 4, 4);
+    ctx.fillStyle = '#285450';
+    ctx.fillRect(-1.35, -1.35, 2.7, 2.7);
+    ctx.restore();
   }
 }
