@@ -82,3 +82,5 @@ Decompiled JSON and generated, lossless browser packs may be committed. Original
 ## Forest quests
 
 After assets:world, run `npm run assets:forest -- "C:\path\to\DAT"`. This imports original quest EMC, WSA, DAT/CPS/MSC and VOC-derived timing into indexed browser packs and a compact runtime manifest. Verification hashes are written to `tests/fixtures/forest-pixels.json.gz`, outside the public build. Raw game archives stay local.
+
+Run `npm run assets:voices -- "C:\path\to\DAT"` with FFmpeg on PATH to export English CD speech. An optional second argument selects the FFmpeg executable. Each room bank contains independently decodable mono MP3 clips indexed by VOC ID. The intro uses the DOS CD cue IDs on the existing cutscene timeline.

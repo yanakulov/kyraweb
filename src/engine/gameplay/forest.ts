@@ -7,6 +7,7 @@ import type { RoomAction } from "./roomScript";
 import type { RoomSnapshot, Vec2, InventoryItemId } from "../core/types";
 import type { CursorTrack, WorldRoom } from "./world";
 import { actorScaleAt } from '../characters/brandonFrames';
+import { YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 
 export type ForestRoom = WorldRoom & {
   program: EmcProgram;
@@ -45,7 +46,7 @@ export type ForestState = {
 };
 export function createForestState(): ForestState {
   return {
-    flags: new Set([0, 1, 2, 3, 4, 55, 57, 172, 243, 253]),
+    flags: new Set([0, 1, 2, 3, 4, 55, 57, 72, 73, 74, 75, 172, 243, 253]),
     files: {},
     phasing: false,
     vase: -1,
@@ -110,6 +111,8 @@ export function traceForest(
     hand = originalItem(snapshot.itemInHand);
   const delays: Record<number, number> = { 0: snapshot.walkDelayTicks ?? 6, 1: 7, 2: 8 };
   const slots = new Map<number, string>();
+  // The marble altar's gem exchange belongs to the next quest.
+  if (room.name === 'TEMPLE' && fn === 1 && hand >= 0 && hand <= 12) return { actions, handled: false };
   const emit = (action: RoomAction) => actions.push(action);
   const duration = () => room.durations[voice] ?? 2000;
   const wait = (ms: number) => {
@@ -168,6 +171,8 @@ export function traceForest(
           case 0x2d:
             emit({ op: "exit", target: a[0], entry });
             return 0;
+          case 0x1d:
+            return a[0] === room.id ? room.exits[a[1] / 2] ?? -1 : -1;
           case 0x5f:
             emit({ op: "death" });
             return 0;
@@ -348,7 +353,11 @@ export function traceForest(
             slots.set(a[1], text[a[0]].slice(0, -4).toLowerCase());
             return 0;
           case 0x2a:
-            emit({ op: "close", clip: slots.get(a[0])! });
+            if (slots.has(a[0])) {
+              const clip = slots.get(a[0])!;
+              emit({ op: "close", clip });
+              if (clip === 'sngspell') frame('songbird-rest', 0, 184, 38, 0);
+            }
             slots.delete(a[0]);
             return 0;
           case 0x2b:
@@ -510,6 +519,21 @@ export function traceForest(
             setFlag(45, true);
             return 0;
           }
+          case 0x6b:
+            for (let i = 0; i < a[0]; i++) {
+              emit({ op: 'shake', ms: 32 });
+              wait(32);
+            }
+            wait((a[0] * a[1] * 1000) / 60);
+            return 0;
+          case 0x6c:
+            if (a[0] !== 1) throw new Error('Unsupported amulet jewel');
+            emit({ op: 'sfx', track: 0x5f });
+            for (let index = 0; index <= 10; index++) emit({ op: 'frame', clip: 'yellow-jewel', index,
+              ...YELLOW_JEWEL_POS, ms: 3 * 1000 / 60 });
+            setFlag(YELLOW_JEWEL_FLAG, true);
+            emit({ op: 'close', clip: 'yellow-jewel' });
+            return 0;
           case 0x66:
             emit({
               op: "sceneFile",
@@ -557,6 +581,8 @@ export function traceForest(
           case 0x57:
           case 0x78:
           case 0x79:
+          case 0x6f: // No water flasks are available before the scroll.
+          case 0x1f: // Random birthstone placement belongs to the next quest.
           case 0x95:
           case 0x96:
           case 0x98:
@@ -586,9 +612,17 @@ export function traceForest(
             );
         }
       },
-      { 0: room.id, 1: point.x | 0, 2: point.y | 0, 3: 0, 4: hand, 7: 0 },
+      { 0: room.id, 1: point.x | 0, 2: point.y | 0, 3: 0, 4: hand, 6: fn === 4 ? 1 : 0, 7: 0 },
     );
-    return { actions, handled: result.regs[3] !== 0, cursorTrack };
+    // The fire movie covers only part of the conversation frame. Closing the
+    // WSA leaves its pixels in place until the next movie draws over them.
+    const playback = room.name === 'SPELL' ? actions.filter((action, i) => {
+      if (action.op !== 'close') return true;
+      const nextFrame = actions[i + 1];
+      if (action.clip === 'brandyw2' && nextFrame?.op === 'frame' && nextFrame.clip === 'brandyw3') return false;
+      return action.clip !== 'brandyw3';
+    }) : actions;
+    return { actions: playback, handled: result.regs[3] !== 0, cursorTrack };
   } catch (error) {
     if (error !== paused) throw error;
     return { actions, handled: true };

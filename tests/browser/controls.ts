@@ -165,7 +165,15 @@ panelCheck.onclick = () => void runCheck(panelCheck,'Verify in-game panels',asyn
     assert(box.left>=-2&&box.right<=innerWidth+2&&box.top>=-2&&box.bottom<=innerHeight+2,`${label} escapes the viewport`);
     assert(box.left>=bounds.left-2&&box.right<=bounds.right+2&&box.top>=bounds.top-2&&box.bottom<=bounds.bottom+2,`${label} escapes its book page`);
     assert(dialog.contains(document.activeElement),`${label} lost keyboard focus`);
-    if(label==='Settings') assert(dialog.contains(document.querySelector('.folio-credits')),'Credits are outside the book');
+    if(label==='Settings') {
+      assert(dialog.contains(document.querySelector('.folio-credits')),'Credits are outside the book');
+      const voice = dialog.querySelector<HTMLInputElement>('#voice-volume');
+      assert(voice?.labels?.[0].textContent?.includes(t('Voice volume')), 'Voice volume is missing from the book');
+      const before = voice.value;
+      voice.value = '41'; voice.dispatchEvent(new Event('input', { bubbles: true })); await nextTick();
+      assert(localStorage.getItem('kyrandia.voiceVolume') === '0.41', 'Voice volume was not saved');
+      voice.value = before; voice.dispatchEvent(new Event('input', { bubbles: true })); await nextTick();
+    }
     const controls=[...dialog.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),a[href]')].filter(el=>el.getClientRects().length);
     assert(controls.length,`${label} has no usable controls`);
     controls.at(-1)!.focus(); controls.at(-1)!.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true}));

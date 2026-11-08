@@ -21,7 +21,7 @@ export function frameAtTime(times: number[], elapsedMs: number) {
 export function playIntro(
   canvas: HTMLCanvasElement,
   steps: IntroStep[],
-  options?: { onFirstFrame?: () => void; onStepChange?: (id: string) => void; onStepReady?: (id: string) => void; onSoundEffect?: (track: number) => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean; atmosphere?: () => boolean; onLoadingChange?: (loading: boolean) => void }
+  options?: { onFirstFrame?: () => void; onStepChange?: (id: string) => void; onStepReady?: (id: string) => void; onSoundEffect?: (track: number) => void; onVoiceSkip?: () => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean; atmosphere?: () => boolean; onLoadingChange?: (loading: boolean) => void }
 ): IntroPlayback {
   const ctx = canvas.getContext("2d");
   if (!ctx) {
@@ -116,7 +116,7 @@ export function playIntro(
           return;
         }
         const line = steps[stepIndex]?.subtitles?.find(line => elapsed >= line.startMs && elapsed < line.endMs);
-        if (line) stepStart -= line.endMs - elapsed;
+        if (line) { options?.onVoiceSkip?.(); stepStart -= line.endMs - elapsed; }
       };
       let activeSceneAnim: {
         anims: SceneAnimState[];

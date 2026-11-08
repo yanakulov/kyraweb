@@ -29,6 +29,7 @@ export type RoomAction =
       op: "say";
       text: string;
       voiceId: number;
+      voiceBank?: string;
       ms: number;
       x: number;
       y: number;
@@ -64,9 +65,11 @@ export type RoomAction =
   | { op: "vase"; item: number }
   | { op: "exit"; target: number; entry?: { x: number; y: number } }
   | { op: "death" }
+  | { op: "shake"; ms: number }
   | { op: "palette"; start: number; colors: number[]; ms: number }
   | { op: "ambientRun" | "ambientWait"; index: number }
-  | { op: "clearText" | "waitVoice" }
+  | { op: "clearText"; stopVoice?: boolean }
+  | { op: "waitVoice" }
   | { op: "wait"; ms: number; movement?: boolean }
   | { op: "ambient"; index: number; enabled: boolean; internal?: boolean }
   | { op: "commit"; x: number; y: number; w: number; h: number }
@@ -94,7 +97,7 @@ export class RoomScript {
     this.wait = 0;
     this.lineActive = false;
     this.clearAfterWait = false;
-    this.host.apply({ op: "clearText" });
+    this.host.apply({ op: "clearText", stopVoice: true });
     return true;
   }
   awaiting = false;
@@ -147,7 +150,7 @@ export class RoomScript {
   }
   stop() {
     this.cancelled = true;
-    this.host.apply({ op: "clearText" });
+    this.host.apply({ op: "clearText", stopVoice: true });
   }
   update(elapsedMs: number) {
     if (this.cancelled) return;
@@ -194,7 +197,7 @@ export class RoomScript {
       else if (action.op === "wait") this.wait = this.skipTalkAnimation && !action.movement ? 0 : action.ms * (action.movement ? (this.host.movementTempo?.() ?? 1) : 1);
       else {
         this.host.apply(action);
-        if (action.op === "frame" || action.op === "palette")
+        if (action.op === "frame" || action.op === "palette" || action.op === "shake")
           this.wait = action.op === 'frame' && this.skipTalkAnimation ? 0 : action.ms;
         if (action.op === 'clearText') { this.lineActive = false; this.skipTalkAnimation = false; }
         if (action.op === "say") {

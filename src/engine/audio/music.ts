@@ -6,15 +6,16 @@ import { readRoms, storeRoms, readRomFiles, type Mt32Roms } from './romStorage';
 import { introCue, wanderCue, type MusicCue } from './cues';
 import { readLocalRoms, isLocalMusicHost } from './localRoms';
 import { RecordedEffects } from './recordedEffects';
+import { Voices } from './voices';
 import { readSoundFonts, storeSoundFont, localSoundFonts, publicSoundFont, soundFontData, validateSoundFont, MAX_SOUNDFONT_BYTES, type SoundFontBank } from './soundfonts';
 
-export type MusicState = { renderer: string; banks: { id: string; name: string }[]; enabled: boolean; volume: number; sfxEnabled: boolean; sfxVolume: number; available: boolean; ready: boolean; busy: boolean; previewing: boolean; message: string; soundFontProgress?: number; romNames: string[]; source: 'none' | 'browser' | 'local' };
+export type MusicState = { renderer: string; banks: { id: string; name: string }[]; enabled: boolean; volume: number; sfxEnabled: boolean; sfxVolume: number; voiceEnabled: boolean; voiceVolume: number; available: boolean; ready: boolean; busy: boolean; previewing: boolean; message: string; soundFontProgress?: number; romNames: string[]; source: 'none' | 'browser' | 'local' };
 type Device = { context: AudioContext; node: AudioWorkletNode; gain: GainNode };
 function preference(key: string, fallback: string) { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 function remember(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Session controls still work. */ } }
 
 export class MusicPlayer {
-  readonly state: MusicState = { renderer: preference('kyrandia.renderer', 'mt32'), banks: [], enabled: preference('kyrandia.music', '0') === '1', volume: Math.max(0, Math.min(1, Number(preference('kyrandia.musicVolume', '.65')) || 0)), sfxEnabled: preference('kyrandia.sfx', '1') !== '0', sfxVolume: Math.max(0, Math.min(1, Number(preference('kyrandia.sfxVolume', '.8')) || 0)), available: false, ready: false, busy: false, previewing: false, message: '', romNames: [], source: 'none' };
+  readonly state: MusicState = { renderer: preference('kyrandia.renderer', 'mt32'), banks: [], enabled: preference('kyrandia.music', '0') === '1', volume: Math.max(0, Math.min(1, Number(preference('kyrandia.musicVolume', '.65')) || 0)), sfxEnabled: preference('kyrandia.sfx', '1') !== '0', sfxVolume: Math.max(0, Math.min(1, Number(preference('kyrandia.sfxVolume', '.8')) || 0)), voiceEnabled: preference('kyrandia.voice', '1') !== '0', voiceVolume: Math.max(0, Math.min(1, Number(preference('kyrandia.voiceVolume', '.85')) || 0)), available: false, ready: false, busy: false, previewing: false, message: '', romNames: [], source: 'none' };
   private roms?: Mt32Roms;
   private banks = new Map<string, SoundFontBank>();
   private selectedBank() { return this.state.renderer.startsWith('sf2:') ? this.banks.get(this.state.renderer.slice(4)) : undefined; }
@@ -39,6 +40,8 @@ export class MusicPlayer {
   private userActivated = false;
   private effectEpoch = 0;
   private recordedEffects = new RecordedEffects();
+  private voices = new Voices();
+  private voiceBank = 'INTRO';
   private usesNativeEffects() { return this.state.renderer === 'mt32' && !!this.roms; }
   private prepareRecordedEffects() {
     if (this.disposed || this.restoring || !this.userActivated || !this.state.sfxEnabled || this.usesNativeEffects()) return;
@@ -81,6 +84,10 @@ export class MusicPlayer {
   /** Call synchronously from a user gesture, before awaits, for browser autoplay rules. */
   unlock() {
     this.userActivated = true;
+    if (!this.disposed && this.state.voiceEnabled) {
+      this.voices.unlock(this.state.voiceVolume);
+      this.prepareVoice(this.voiceBank);
+    }
     this.prepareRecordedEffects();
     if (!this.disposed && !this.failed && this.restoring && !this.hasResources() && !this.warmContext && (this.wantsAudio() || isLocalMusicHost() && (this.state.sfxEnabled || preference('kyrandia.music', 'auto') !== '0'))) {
       try { this.warmContext = this.context(); } catch (error) { this.publish(this.error(error)); }
@@ -128,6 +135,27 @@ export class MusicPlayer {
     }).catch(error => { if (epoch === this.effectEpoch) this.publish(this.error(error)); });
   }
   stopEffects() { this.effectEpoch++; this.recordedEffects.stop(); this.device?.node.port.postMessage({ type: 'stopEffects' }); }
+  prepareVoice(bank: string) {
+    this.voiceBank = bank;
+    if (!this.disposed && this.userActivated && this.state.voiceEnabled && this.state.voiceVolume > 0) void this.voices.prepare(bank);
+  }
+  speak(bank: string, id: number) {
+    if (!this.disposed && this.userActivated && this.state.voiceEnabled && this.state.voiceVolume > 0) void this.voices.play(bank, id);
+  }
+  stopSpeech() { this.voices.stop(); }
+  setVoiceEnabled(value: boolean) {
+    this.state.voiceEnabled = value;
+    remember('kyrandia.voice', value ? '1' : '0');
+    if (value) this.unlock(); else this.stopSpeech();
+    this.publish();
+  }
+  setVoiceVolume(value: number) {
+    this.state.voiceVolume = Math.max(0, Math.min(1, value || 0));
+    remember('kyrandia.voiceVolume', String(this.state.voiceVolume));
+    this.voices.setVolume(this.state.voiceVolume);
+    this.prepareVoice(this.voiceBank);
+    this.publish();
+  }
   async importRoms(files: File[]) {
     if (this.state.busy || this.disposed) return;
     // Construct/resume in the file-input gesture, not after asynchronous disk reads.
@@ -291,7 +319,7 @@ export class MusicPlayer {
   intro(step: string) { const cue = introCue(step); if (cue) { this.command = -1; this.play(cue, true); } }
   beginGame() { this.command = -1; this.play({ file: 'KYRA1B', track: 0 }, true); }
   /** Older saves have no audio position. Restart the room's score, not the intro. */
-  restoreRoom(id: number) { this.command = -1; this.wander(({ 0: 41, 2: 5, 7: 3, 8: 7, 24: 11 } as Record<number, number>)[id] ?? 2, true); }
+  restoreRoom(id: number) { this.command = -1; this.wander(({ 0: 41, 2: 5, 7: 3, 8: 7, 27: 12, 36: 4 } as Record<number, number>)[id] ?? (id >= 17 ? 11 : 2), true); }
   wander(command: number, restart = false) {
     if (!restart && command === this.command) return;
     this.command = command;
@@ -299,7 +327,7 @@ export class MusicPlayer {
     if (cue) this.play(cue, true); else this.fade();
   }
   fade() { this.faded = true; this.request++; if (!this.state.previewing) this.device?.node.port.postMessage({ type: 'fade' }); }
-  stop() { this.faded = true; this.command = -1; this.request++; this.stopEffects(); this.device?.node.port.postMessage({ type: 'stop' }); }
+  stop() { this.faded = true; this.command = -1; this.request++; this.stopEffects(); this.stopSpeech(); this.device?.node.port.postMessage({ type: 'stop' }); }
   preview() {
     this.state.previewing = !this.state.previewing;
     this.applyCue(); this.syncPause(); this.syncVolumes(); this.publish(); this.unlock();
@@ -323,6 +351,7 @@ export class MusicPlayer {
   }
   private syncPause() {
     this.recordedEffects.setPaused(this.hidden || this.paused || this.state.previewing);
+    this.voices.setPaused(this.hidden || this.paused || this.state.previewing);
     this.device?.node.port.postMessage({ type: 'pause', value: this.hidden || this.paused && !this.state.previewing });
   }
   private closeContext(context: AudioContext) { this.contexts.delete(context); void context.close().catch(() => {}); }
@@ -330,5 +359,5 @@ export class MusicPlayer {
   private destroy() { this.request++; this.effectEpoch++; if (this.device) this.close(this.device); this.device = undefined; this.state.ready = false; }
   private error(error: unknown) { return error instanceof Error ? error.message : 'Music could not start.'; }
   private fail(message: string) { this.failed = true; this.destroy(); this.publish(message); }
-  dispose() { this.disposed = true; this.epoch++; this.destroy(); this.recordedEffects.dispose(); for (const context of this.contexts) this.closeContext(context); }
+  dispose() { this.disposed = true; this.epoch++; this.destroy(); this.recordedEffects.dispose(); this.voices.dispose(); for (const context of this.contexts) this.closeContext(context); }
 }

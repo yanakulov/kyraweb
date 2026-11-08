@@ -33,10 +33,18 @@ const textById: Record<number, string> = {
   30: introText.tree.is_it_not
 };
 
+// DOS CD SeqPlayer VOC IDs. Some CD lines span two separate floppy captions.
+const voiceByTextId: Record<number, number> = { 22: 19, 23: 20, 24: 21, 25: 22, 26: 23, 28: 25, 29: 27, 30: 27, 31: 28 };
+// These CD recordings are longer than the corresponding floppy caption windows.
+const voiceLead: Record<number, number> = { 23: 700, 25: 420 };
+
 // Frames and text use the same decoded DOS script clock; do not stretch the dialogue.
 export function timelineSubtitles(events: { startMs: number; endMs: number; textId: number; x: number; y: number; type: string }[]): IntroSubtitle[] {
-  return events.map(({ textId, ...event }) => ({
+  return events.map(({ textId, ...event }, i) => ({
     ...event,
+    startMs: Math.max(0, event.startMs - (voiceLead[textId] ?? 0)),
+    endMs: Math.min(event.endMs, events[i + 1] ? events[i + 1].startMs - (voiceLead[events[i + 1].textId] ?? 0) : Infinity),
+    voiceId: voiceByTextId[textId] ?? (textId <= 17 ? textId - 2 : textId >= 46 ? textId - 3 : undefined),
     text: textById[textId] ?? "",
     type: event.type as "text" | "talk",
     align: "center" as const,

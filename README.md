@@ -13,8 +13,9 @@ KyraWeb is an unofficial web remake of *The Legend of Kyrandia*, the first book 
 - Open the book to read the prologue and enter the intro. After the Westwood and AkulaFlow logos, the cutscene leads to Kallak’s desk and the **Start Journey** menu.
 - Follow Brandon into his home, discover what happened to Kallak, and speak to the tree. The tree conversation plays on your first attempt to leave if you haven’t spoken to it yet.
 - Explore the first forest region and complete the original quest chain through the bridge repair. Visit Brynn, heal the willow, follow Merith, find the amulet, and bring Herman the saw. You can cross the repaired bridge and return.
+- Continue into the Timbermist Woods. Meet Darm, Brandywine, and Nolby, plant the three seeds, and use the amulet to heal the songbird. Bring Darm the feather and collect his magic scroll.
 
-The game has English and Russian text. CD voice acting and the areas beyond the bridge landing are outside the current release.
+The game has English and Russian text and original English CD voices. The playable story reaches Darm's magic scroll, before the birthstone quest and the Serpent's Grotto.
 
 ## Controls and saves
 
@@ -24,7 +25,7 @@ On desktop, point and click to move or interact. On a touchscreen, swipe to guid
 
 ## Music and sound effects
 
-After opening the book, choose **Sound settings** to adjust music and effects before the intro. In-game, the same controls are under **Settings**.
+After opening the book, choose **Sound settings** to adjust music, effects, and voices independently before the intro. In-game, the same controls are under **Settings**. Voice recordings load by scene and follow the subtitle skip control.
 
 - **Roland MT‑32 / CM‑32L** uses Munt to synthesize the original DOS CD XMIDI music and effects in real time. Import your own matching Control and PCM ROM pair. The browser stores it locally. For localhost development or preview, you can also use the private `.local/mt32/` directory. [MT‑32 setup](docs/music.md)
 - **GeneralUser GS** downloads on selection, with progress shown in Settings. You can also import an `.sf2` bank. This mode uses approximate General MIDI instrument mapping for the score. [SoundFont setup](docs/soundfonts.ru.md)

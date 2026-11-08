@@ -12,7 +12,12 @@ const INVENTORY_ITEM_DEFS: Record<InventoryItemId, InventoryItem> = {
   marble: { id: "marble", name: "Marble", tileIndex: 43 },
   teardrop: { id: "teardrop", name: "Teardrop", tileIndex: 52 },
   apple: { id: "apple", name: "Apple", tileIndex: 19 },
-  appleEaten: { id: "appleEaten", name: "Apple (eaten)", tileIndex: 20 }
+  appleEaten: { id: "appleEaten", name: "Apple (eaten)", tileIndex: 20 },
+  'item-25': { id: 'item-25', name: 'Pinecone', tileIndex: 25 },
+  'item-26': { id: 'item-26', name: 'Acorn', tileIndex: 26 },
+  'item-27': { id: 'item-27', name: 'Walnut', tileIndex: 27 },
+  'item-46': { id: 'item-46', name: 'Feather', tileIndex: 46 },
+  'item-80': { id: 'item-80', name: 'Magic scroll', tileIndex: 80 },
 };
 
 const INVENTORY_SLOTS: InventorySlot[] = [
@@ -30,7 +35,7 @@ const INVENTORY_SLOTS: InventorySlot[] = [
 
 export function buildInventoryItems(): Map<InventoryItemId, InventoryItem> {
   const items = new Map<InventoryItemId, InventoryItem>(Object.values(INVENTORY_ITEM_DEFS).map(item => [item.id, { ...item }]));
-  for (let tileIndex=0;tileIndex<107;tileIndex++) { const id=`item-${tileIndex}` as InventoryItemId; items.set(id,{id,name:'Item',tileIndex}); }
+  for (let tileIndex=0;tileIndex<107;tileIndex++) { const id=`item-${tileIndex}` as InventoryItemId; if (!items.has(id)) items.set(id,{id,name:'Item',tileIndex}); }
   return items;
 }
 

@@ -90,6 +90,7 @@ export type IntroPlayback = {
 };
 
 export type IntroSubtitle = {
+  voiceId?: number;
   startMs: number;
   endMs: number;
   text: string;

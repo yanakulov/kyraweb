@@ -1,6 +1,6 @@
 import { sceneShuffle } from './sceneShuffle';
 import { locale, translateGameText } from '../../i18n';
-import { DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS } from "../core/constants";
+import { DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from "../core/constants";
 import { loadImage, loadMask, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
 import {
@@ -29,6 +29,9 @@ import { brandonTalkHead, actorScaleAt } from "../characters/brandonFrames";
 import { startWorldGame } from "./world";
 import { exitCursor, portalAtPoint } from "./navigation";
 import type { DropAnim, GameConfig, InventoryItemId, RoomRuntimeSnapshot, RoomSnapshot, SceneItem, SceneOverlayState, Vec2, WorldSave } from "../core/types";
+
+const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell']);
+const behindActors = (clip: string) => clip === 'face' || clip === 'face2' || clip === 'songbird-rest';
 
 export type RoomGame = Awaited<ReturnType<typeof startRoom>>;
 export async function startGame(canvas: HTMLCanvasElement, config: GameConfig): Promise<RoomGame> {
@@ -112,6 +115,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const heldNpcPoses = new Map<number,Extract<RoomAction,{op:'npc'}>>();
     let speaker = 0;
     let hasAmulet=config.amulet??false;
+    let hasYellowJewel = config.yellowJewel ?? false;
+    let shakeUntil = 0;
+    const reduceMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
     let dead=false;
     const roomPalette=packedBackground?.clip.info.palette.slice();
     let paletteFade:{from:number[];to:number[];ms:number;age:number;step:number}|null=null;
@@ -134,9 +140,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         clip: new IndexedClip(packedBackground.clip.pack, info), renderer: new IndexedRenderer(info, false)
       });
     }
-    if(config.amulet&&!scriptRenderers.has('amulet-rest')){
-      const pack=await loadScenePack(withBase('assets/forest/amulet.kyr.gz'),config.signal),info=pack.clips['amulet-rest'];
-      scriptRenderers.set('amulet-rest',{clip:new IndexedClip(pack,info),renderer:new IndexedRenderer(info,false)});
+    if(config.amulet){
+      const pack=await loadScenePack(withBase('assets/forest/amulet.kyr.gz'),config.signal);
+      for (const [name, info] of Object.entries(pack.clips)) {
+        if (!scriptRenderers.has(name)) scriptRenderers.set(name,{clip:new IndexedClip(pack,info),renderer:new IndexedRenderer(info,false)});
+      }
     }
     if (config.onActorInteract && !scriptRenderers.has('note')) {
       const pack = await loadScenePack(withBase('assets/forest/note.kyr.gz'), config.signal), info = pack.clips.note;
@@ -281,7 +289,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         }
         for (const layer of permanentLayers.values()) foregroundContext.drawImage(layer.image, layer.x, layer.y);
         if (spriteDefMap) drawSceneAnimShapes(foregroundContext, sceneShapesImage, spriteDefMap, questShapes);
-        for (const [name, layer] of scriptLayers) if (name === 'face' || name === 'face2') foregroundContext.drawImage(layer.image, layer.x, layer.y);
+        for (const [name, layer] of scriptLayers) if (behindActors(name)) foregroundContext.drawImage(layer.image, layer.x, layer.y);
         foregroundContext.globalCompositeOperation = 'source-over';
         foregroundFrames.set(layer, fg);
       }
@@ -310,7 +318,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (backgroundName === "room" && spriteDefMap) drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, questShapes);
       // FACE movies contain an opaque rectangle of the room, not just the mouth.
       // Composite them behind Brandon while he approaches the speaking tree.
-      for (const [name, layer] of scriptLayers) if (name === "face" || name === "face2") ctx.drawImage(layer.image, layer.x, layer.y);
+      for (const [name, layer] of scriptLayers) if (behindActors(name)) ctx.drawImage(layer.image, layer.x, layer.y);
 
       const drawNpcs = (front: boolean) => { for (const npc of [...npcs.values()].map(n=>heldNpcPoses.get(n.character)??n).sort((a,b)=>a.y-b.y)) { if ((npc.y > state.pos.y) !== front || npc.shape === 88 || !npc.visible || (npc.character===2 ? ['needsaw1','advice'] : ['tag','tag-0']).some(name=>scriptLayers.has(name))) continue;
         const scale=actorScaleAt(npc.y,scene.actorScale);
@@ -375,7 +383,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       drawAmbient(true);
       drawNpcs(true);
       if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
-      for (const [name, layer] of scriptLayers) if (name !== "face" && name !== "face2") ctx.drawImage(layer.image, layer.x, layer.y);
+      for (const [name, layer] of scriptLayers) if (!behindActors(name)) ctx.drawImage(layer.image, layer.x, layer.y);
 
       if (scene.opening && backgroundName === "room" && packedBackground && atmosphere && !reducedMotion?.matches) drawKallakAtmosphere(ctx, clockMs);
       ctx.restore();
@@ -396,6 +404,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if(hasAmulet&&rest)ctx.drawImage(rest.renderer.render(rest.clip.frame(0)),224,152);
       const amulet=scriptLayers.get('amulet');
       if(amulet)ctx.drawImage(amulet.image,amulet.x,amulet.y);
+      const yellow = scriptRenderers.get('yellow-jewel'), yellowAnim = scriptLayers.get('yellow-jewel');
+      if (yellowAnim) ctx.drawImage(yellowAnim.image, yellowAnim.x, yellowAnim.y);
+      else if (hasYellowJewel && yellow) ctx.drawImage(yellow.renderer.render(yellow.clip.frame(10)), YELLOW_JEWEL_POS.x, YELLOW_JEWEL_POS.y);
       drawInventory(ctx, itemsSheet, inventoryItems, state.inventorySlots);
       if (state.itemInHand && state.pointer && !exitCursor(availablePortals(), state.pointer)) {
         const item = inventoryItems.get(state.itemInHand);
@@ -438,6 +449,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         ctx.stroke();
       }
 
+      if (clockMs < shakeUntil && !reduceMotion?.matches) {
+        ctx.drawImage(canvas, 0, 4, LOGICAL_WIDTH, LOGICAL_HEIGHT - 4, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT - 4);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, LOGICAL_HEIGHT - 4, LOGICAL_WIDTH, 4);
+      }
     }
 
     function loop(now: number) {
@@ -520,6 +536,12 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (sequence) { sequence.skipLine(); return true; }
       if (dead) return true;
       if (state.drops.length) return true;
+      const jewel = YELLOW_JEWEL_HITBOX;
+      if (hasAmulet && config.onAmuletInteract && point.x >= jewel.x && point.x < jewel.x + jewel.w && point.y >= jewel.y && point.y < jewel.y + jewel.h) {
+        stopWalking();
+        playScript(config.onAmuletInteract(getSnapshot()));
+        return true;
+      }
       const portal = portalAtPoint(availablePortals(), point);
       // Every exit hit area must run the original first conversation, including
       // the corners/door rectangle and a click while carrying an item.
@@ -656,13 +678,18 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function soundEffect(track: number) { config.onScriptAction?.({ op: 'sfx', track }); }
     function applyScript(action: RoomAction) {
-      config.onScriptAction?.(action);
+      const openingBank = scene.opening && (backgroundName === 'trunk' || backgroundName === 'gem') ? backgroundName.toUpperCase() : undefined;
+      config.onScriptAction?.(action.op === 'say' && !action.voiceBank && openingBank ? { ...action, voiceBank: openingBank } : action);
       switch (action.op) {
         case 'choice':state.statusMessage='Click where you want to go.';state.statusMessageUntil=Infinity;break;
         case 'death':dead=true;actorVisible=false;break;
+        case 'shake': shakeUntil = clockMs + action.ms; break;
         case 'exit':config.onExit?.({id:'script',target:action.target,side:'north',entry:action.entry,rect:{x:0,y:0,w:0,h:0},point:state.pos});break;
         case 'palette':if(roomPalette){const to=roomPalette.slice();to.splice(action.start*3,action.colors.length,...action.colors);paletteFade={from:roomPalette.slice(),to,ms:action.ms,age:0,step:-1};updatePalette(0);}break;
-        case 'flag':if(action.flag===45)hasAmulet=action.value;break;
+        case 'flag':
+          if (action.flag === 45) hasAmulet = action.value;
+          if (action.flag === YELLOW_JEWEL_FLAG) hasYellowJewel = action.value;
+          break;
         case 'ambientWait':if(sceneAnims[action.index]?.play)ambientWait=action.index;break;
         case 'confirm':config.onContinueChange?.(true);break;
         case 'walkDelay':state.walkDelayTicks=Math.max(1,action.ticks);break;
@@ -716,13 +743,15 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           if(['needsaw1','advice'].includes(action.clip))heldNpcPoses.delete(2);
           if(['tag','tag-0'].includes(action.clip))heldNpcPoses.delete(1);
           if(action.clip==='tag')scriptLayers.delete('tag-0');
+          if (action.clip === 'brandyw2') scriptLayers.delete('brandyw3');
+          if (action.clip === 'song1' && scriptLayers.delete('songbird-rest')) foregroundFrames.clear();
           const animation = scriptRenderers.get(action.clip);
           if (!animation) throw new Error(`Missing script animation ${action.clip}`);
           const pixels=animation.clip.frame(action.index);
-          if(action.permanent || action.clip === 'face' || action.clip === 'face2') foregroundFrames.clear();
+          if(action.permanent || behindActors(action.clip)) foregroundFrames.clear();
           if(action.permanent){scriptLayers.delete(action.clip);permanentLayers.set(action.clip,{image:buildIndexedCanvas(animation.clip.info,pixels),index:action.index,x:action.x,y:action.y});}
           else {scriptLayers.delete(action.clip);scriptLayers.set(action.clip, { image: animation.renderer.render(pixels), index:action.index, x: action.x, y: action.y });}
-          if (["brantree", "touch", "brynn1", "brynn2", "brynn3", "raindrop", "wow", "tag", "agile", "balance2"].includes(action.clip)) actorVisible = false;
+          if (actorMovies.has(action.clip)) actorVisible = false;
           break;
         }
         case "close":
@@ -730,8 +759,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           // Closing the movie releases its decoder, not its last screen pixels.
           // TAG-0 is the resting boy while Brandon walks to the next TAG movie.
           if(action.clip!=='tag-0')scriptLayers.delete(action.clip);
-          if(action.clip === 'face' || action.clip === 'face2') foregroundFrames.clear();
-          if (["brantree", "touch", "brynn1", "brynn2", "brynn3", "raindrop", "wow", "tag", "agile", "balance2"].includes(action.clip)) actorVisible = true;
+          if (behindActors(action.clip)) foregroundFrames.clear();
+          if (actorMovies.has(action.clip)) actorVisible = true;
           break;
         case "say": {
           speaker=action.speaker??0;

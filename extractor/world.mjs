@@ -17,7 +17,17 @@ export const REGION = [
   ['FNORTH', null, 8, null, 5], ['FORESTB', null, 6, 12, 16],
   ['FORESTA', 11, null, 13, 8], ['XEDGE', 12, null, 9, null],
   ['ZROCK', 3, 4, null, null], ['NWCLIFB', null, null, null, 6],
-  ['FGOWEST', null, 11, null, null]
+  ['FGOWEST', null, 11, null, null],
+  ['FNORTH', null, 34, 23, 22], ['FORESTA', 32, 20, 36, 21],
+  ['FSOUTH', 20, null, null, 36], ['EDGE', 28, null, 19, 18],
+  ['CLIFF', 34, 18, null, 23], ['ZROCK', 31, 17, null, null],
+  ['ZROCK', 17, 21, null, null], ['CAVEB', null, 7, null, 26],
+  null, // Serpent's Grotto opens in the next quest.
+  ['EXTSPEL', null, 24, 33, null], ['SPELL', null, 26, null, null],
+  ['SPRING', null, null, 20, 32], ['TEMPLE', null, 33, null, 31],
+  ['SONG', null, null, 32, 33], ['OAKS', null, 29, 22, null],
+  ['WELL', 30, 28, 18, 34], ['SQUARE', 26, 30, 34, 29],
+  ['WISE', 33, 32, 21, 17], null, ['DEAD', 18, 19, null, null]
 ];
 
 // ScummVM copyBackgroundBlock: restore the interleaved forest backdrop columns.
@@ -72,12 +82,14 @@ export function decodeDat(bytes) {
 }
 
 export async function buildWorld(gameDir, outputDir = 'public/assets/world') {
-  const files = REGION.flatMap(([n]) => ['CPS', 'MSC', 'DAT', 'EMC'].map(ext => `${n}.${ext}`));
+  const files = REGION.filter(Boolean).flatMap(([n]) => ['CPS', 'MSC', 'DAT', 'EMC'].map(ext => `${n}.${ext}`));
   files.push('PALETTE.COL', 'DROPUP.WSA', 'DROPDOWN.WSA', 'LIFTUP.WSA', 'LIFTDOWN.WSA');
   const resources = await readGameResources(gameDir, files);
   const get = n => { const b = resources.get(n); if (!b) throw new Error(`Missing ${n}`); return b; };
   const rooms = [], slots = new Map(), staticFrames = [];
-  for (const [id, [name, ...exits]] of REGION.entries()) {
+  for (const [id, region] of REGION.entries()) {
+    if (!region) continue;
+    const [name, ...exits] = region;
     const dat = decodeDat(get(`${name}.DAT`)), program = parseEmc(get(`${name}.EMC`));
     const shapes = [], regions = [], portals = [];
     let scroll=0;
@@ -116,13 +128,15 @@ export async function buildWorld(gameDir, outputDir = 'public/assets/world') {
   }
   const more = await readGameResources(gameDir, staticFrames.map(f => f.file));
   for (const f of staticFrames) {
-    const room = rooms[f.room], movie = decodeWsa(more.get(f.file)), pixels = movie.frames[f.index];
+    const room = rooms.find(room => room.id === f.room), movie = decodeWsa(more.get(f.file)), pixels = movie.frames[f.index];
     for (let y = 0; y < movie.height; y++) for (let x = 0; x < movie.width; x++) room.image.pixels[(f.y + y) * 320 + f.x + x] = pixels[y * movie.width + x];
   }
   await mkdir(outputDir, { recursive: true });
   const manifest = [];
   for (const room of rooms) {
     const { image, mask, ...meta } = room;
+    // Timbermist room art is already in the script packs built by forest.mjs.
+    if (room.id >= 17) { manifest.push(meta); continue; }
     const clips = { room: { ...image, frames: [image.pixels], transparentIndex: -1 },
       mask: { width: 320, height: 144, palette: new Array(768).fill(0), frames: [mask.pixels], transparentIndex: -1 } };
     for (const n of room.name === 'TRUNK' ? ['DROPUP', 'DROPDOWN'] : room.name === 'GEM' ? ['LIFTUP', 'LIFTDOWN'] : []) {
@@ -136,7 +150,7 @@ export async function buildWorld(gameDir, outputDir = 'public/assets/world') {
     bytes: data.length, sha256: createHash('sha256').update(data).digest('hex')
   }]));
   await writeFile(join(outputDir, 'world.json'), JSON.stringify({ rooms: manifest, sources }) + '\n');
-  return { rooms: rooms.length, bytes: manifest.reduce((sum, r) => sum + r.bytes, 0), staticFrames };
+  return { rooms: rooms.length, bytes: manifest.reduce((sum, r) => sum + (r.bytes ?? 0), 0), staticFrames };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) console.log(await buildWorld(process.argv[2], process.argv[3]));

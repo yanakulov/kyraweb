@@ -8,6 +8,7 @@
     "assets:world": "node extractor/world.mjs",
     "assets:forest": "node extractor/forest.mjs",
     "assets:music": "node extractor/music.mjs",
+    "assets:voices": "node extractor/voices.mjs",
     "mu50:setup": "node extractor/mu50/setup.mjs",
     "mu50:build": "node extractor/mu50/build.mjs",
     "mu50:roms": "node extractor/mu50/check_roms.mjs",

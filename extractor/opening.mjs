@@ -13,7 +13,8 @@ export function vocDuration(bytes) {
       if (b[p + 1] !== 0) throw new Error('Unsupported compressed VOC');
       rate = 1_000_000 / (256 - b[p]); ms += (size - 2) * 1000 / rate;
     } else if (type === 2 && rate) ms += size * 1000 / rate;
-    else throw new Error(`Unsupported VOC block ${type}`);
+    else if (type === 3 && size === 3) ms += (b.readUInt16LE(p) + 1) * (256 - b[p + 2]) / 1000;
+    else if (type !== 4 && type !== 5) throw new Error(`Unsupported VOC block ${type}`);
     p += size;
   }
   return Math.round(ms);
