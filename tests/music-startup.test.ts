@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { MusicPlayer } from '../src/engine/audio/music';
+import { loadAdlib } from '../src/engine/audio/adlib';
 
 /** Controller-only tests: the actual WASM output has a separate integration check. */
-function environment(saved: string | null, delayed = false, host = 'localhost', voices = false) {
+function environment(saved: string | null, delayed = false, host = 'localhost', voices = false, renderer: string | null = host === 'localhost' ? 'mt32' : null) {
   const originals = new Map<string, PropertyDescriptor | undefined>();
   const contexts: FakeContext[] = [];
-  const audio = { workletEffects: [] as number[][], clips: [] as number[][], stopped: 0, banks: [] as string[] };
+  const audio = { workletEffects: [] as number[][], clips: [] as number[][], stopped: 0, banks: [] as string[], adlibTracks: [] as [string, number][], requests: [] as string[] };
   let release!: () => void;
   const gate = delayed ? new Promise<void>(resolve => { release = resolve; }) : Promise.resolve();
   class FakeContext {
@@ -23,22 +24,26 @@ function environment(saved: string | null, delayed = false, host = 'localhost', 
   }
   class FakeNode {
     onprocessorerror = null;
-    port = { onmessage: null as ((event: { data: { type: string } }) => void) | null, close() {}, postMessage: (data: { type: string; track?: { status: number; data: number[] }[] }) => {
+    port = { onmessage: null as ((event: { data: { type: string } }) => void) | null, close() {}, postMessage: (data: { type: string; file: string; bank?: ArrayBuffer; track?: number | { status: number; data: number[] }[] }) => {
       if (data.type === 'init') queueMicrotask(() => this.port.onmessage?.({ data: { type: 'ready' } }));
-      if (data.type === 'effect') audio.workletEffects.push(data.track!.filter(event => event.status >> 4 === 12).flatMap(event => event.data));
+      if (data.type === 'effect' && Array.isArray(data.track)) audio.workletEffects.push(data.track.filter(event => event.status >> 4 === 12).flatMap(event => event.data));
+      if (data.type === 'track' && data.bank && typeof data.track === 'number') audio.adlibTracks.push([data.file, data.track]);
     } };
     connect(target: unknown) { return target; } disconnect() {}
   }
   const values: Record<string, unknown> = {
     location: { hostname: host }, indexedDB: undefined, AudioContext: FakeContext, AudioWorkletNode: FakeNode,
-    localStorage: { getItem: (key: string) => key === 'kyrandia.music' ? saved : key === 'kyrandia.voice' && !voices ? '0' : null, setItem() {} },
+    localStorage: { getItem: (key: string) => key === 'kyrandia.music' ? saved : key === 'kyrandia.renderer' ? renderer : key === 'kyrandia.voice' && !voices ? '0' : null, setItem() {} },
     fetch: async (url: string) => {
+      audio.requests.push(url);
       if (url.endsWith('pair.json')) { await gate; return Response.json({ available: true }); }
       if (url.endsWith('/soundfonts/list.json')) return Response.json(['GeneralUser-GS.sf2']);
       if (url.endsWith('GeneralUser-GS.sf2')) return new Response(readFileSync('tests/fixtures/tiny.sf2'));
       if (url.endsWith('MT32_CONTROL.ROM')) return new Response(new Uint8Array(65536));
       if (url.endsWith('MT32_PCM.ROM')) return new Response(new Uint8Array(524288));
       if (url.endsWith('intro.xmi.gz')) return new Response(gunzipSync(readFileSync('public/assets/music/intro.xmi.gz')));
+      if (url.endsWith('.adl.gz')) return new Response(readFileSync(`public/assets/music/${url.split('/').at(-1)}`));
+      if (url.endsWith('adlib.wasm')) return new Response(new Uint8Array());
       if (url.endsWith('mt32emu.wasm')) return new Response(new Uint8Array());
       if (url.endsWith('tsf.wasm')) return new Response(new Uint8Array());
       if (url.endsWith('effects.mp3')) return new Response(new Uint8Array());
@@ -49,7 +54,7 @@ function environment(saved: string | null, delayed = false, host = 'localhost', 
   for (const [key, value] of Object.entries(values)) { originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key)); Object.defineProperty(globalThis, key, { value, configurable: true, writable: true }); }
   return { contexts, audio, release: () => release(), restore: () => { for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); } } };
 }
-test('local ROMs auto-enable without an import, but audio starts only after a gesture', async () => {
+test('a saved Roland device discovers the local pair and starts after a gesture', async () => {
   const env = environment(null); let ready!: () => void;
   const done = new Promise<void>(resolve => { ready = resolve; });
   const player = new MusicPlayer(state => { if (state.ready) ready(); });
@@ -129,14 +134,50 @@ test('the tree explosion uses original MT-32 patch 55 before and after switching
   } finally { player.dispose(); env.restore(); }
 });
 
-test('a browser without ROMs can play intro effects before configuring music', async () => {
+test('a fresh browser plays AdLib music and intro effects without ROMs or SF2', async () => {
   const env = environment(null, false, 'yanakulov.github.io'), player = new MusicPlayer(() => {});
   try {
     await player.restore(); player.unlock(); player.setPaused(false);
-    await new Promise(resolve => setImmediate(resolve));
+    player.intro('westwood');
+    for (let i = 0; i < 20 && !env.audio.adlibTracks.length; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(player.state.renderer, 'adlib');
+    assert.equal(player.state.enabled, true);
+    assert.equal(player.state.ready, true);
+    assert.deepEqual([player.state.volume, player.state.sfxVolume, player.state.voiceVolume], [.5, .25, .6]);
+    assert.deepEqual(env.audio.adlibTracks, [['INTRO', 2]]);
+    player.wander(2); player.wander(5);
+    for (let i = 0; i < 20 && env.audio.adlibTracks.length < 2; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.deepEqual(env.audio.adlibTracks.at(-1), ['KYRA1B', 2]);
+    assert.equal(env.audio.adlibTracks.length, 2, 'superseded cue never reaches the worklet');
+    assert.ok(env.audio.requests.every(url => !/\.ROM|\.sf2|\.xmi\./i.test(url)), 'AdLib only needs its own banks');
+    player.intro('westwood'); player.setEnabled(false);
     player.effect(25);
-    assert.equal(player.state.ready, false);
     assert.equal(env.audio.clips.length, 1);
     assert.deepEqual(env.audio.workletEffects, []);
   } finally { player.dispose(); env.restore(); }
+});
+
+test('missing saved Roland ROMs fall back to AdLib without overriding a saved mute', async () => {
+  const env = environment('0', false, 'yanakulov.github.io', false, 'mt32'), player = new MusicPlayer(() => {});
+  try {
+    await player.restore();
+    assert.equal(player.state.renderer, 'adlib');
+    player.unlock();
+    assert.equal(player.state.enabled, false);
+    assert.ok(env.audio.requests.every(url => !url.endsWith('.wasm')));
+  } finally { player.dispose(); env.restore(); }
+});
+
+test('the real AdLib WASM produces distinct title and forest signals from the DOS banks', async () => {
+  const synth = await loadAdlib(Uint8Array.from(readFileSync('public/assets/audio/adlib.wasm')).buffer, 48000);
+  const left = new Float32Array(48000), right = new Float32Array(48000);
+  function signal(file: string, track: number) {
+    const bank = Uint8Array.from(gunzipSync(readFileSync(`public/assets/music/${file.toLowerCase()}.adl.gz`))).buffer;
+    synth.play(bank, file, track);
+    for (let i = 0; i < 4; i++) synth.render(left, right);
+    return Math.sqrt(left.reduce((sum, sample) => sum + sample * sample, 0) / left.length);
+  }
+  const title = signal('INTRO', 2), forest = signal('KYRA1B', 2);
+  assert.ok(title > .002 && forest > .002 && title !== forest);
+  assert.equal(signal('KYRA1B', 0), 0, 'the stop command renders silence');
 });

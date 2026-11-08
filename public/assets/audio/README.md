@@ -16,6 +16,13 @@ The separate WASM file may be replaced with a compatible modified build.
 ROM files are not included, downloaded or uploaded. Users provide their own
 compatible MT-32 or CM-32L Control and PCM ROM pair locally in Settings.
 
+## AdLib
+
+`adlib.wasm` uses AdPlug's Westwood ADL driver and Nuked OPL3 in OPL2-compatible
+mode. The driver runs the original DOS AdLib music programs at 72 Hz. The
+emulator and driver are licensed under LGPL 2.1 or later. The source, license
+and build instructions are included in `adlib-source.tar.gz`.
+
 ## TinySoundFont
 
 `tsf.js` and `tsf.wasm` are from the same pinned mt32-web revision above.

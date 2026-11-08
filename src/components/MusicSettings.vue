@@ -14,13 +14,14 @@
       <p v-if="state.source === 'local'" class="music-note">{{ t('Local ROMs loaded automatically. They are not included in the published build.') }}</p>
       <p class="music-note">{{ t('Choose your own matching MT-32 or CM-32L Control and PCM ROMs. Files stay in this browser and are never uploaded.') }}</p>
     </template>
+    <p v-else-if="state.renderer === 'adlib'" class="music-note">{{ t('Original DOS AdLib music. No ROM or SoundFont required.') }}</p>
     <p v-else class="music-note">{{ t('SoundFont mode uses approximate MT-32 to GM instrument mapping. It is not MU50, Kawai, Casio or SBLive hardware emulation; custom timbres and effects can differ.') }}</p>
     <label class="rom-import" :class="{ 'is-busy': state.busy }">{{ t('Add SoundFont bank (.sf2)') }}<input type="file" accept=".sf2" :disabled="state.busy" @change="importFont" /></label>
     <p class="music-note">{{ t('Each imported bank becomes a separate choice. Files stay in this browser; local banks are loaded only when selected.') }}</p>
     <div class="music-buttons"><button type="button" :disabled="!state.ready || state.busy" @click="player.preview()">{{ t(state.previewing ? 'Stop test' : 'Test music') }}</button><button v-if="state.renderer === 'mt32' && state.available && state.source !== 'local'" type="button" :disabled="state.busy" @click="player.forgetRoms()">{{ t('Remove ROMs') }}</button></div>
     <p v-if="state.soundFontProgress !== undefined" class="music-note" role="status">{{ t('Loading SoundFont…') }} {{ state.soundFontProgress }}%</p>
     <p v-else-if="state.message" class="music-note" role="status">{{ t(state.message) }}</p>
-    <p class="music-note music-credit"><a :href="withBase('assets/audio/README.md')" target="_blank" rel="noopener">Munt / TinySoundFont</a> · <a :href="withBase('assets/audio/mt32-source.tar.gz')">{{ t('Emulator source') }}</a></p>
+    <p class="music-note music-credit"><a :href="withBase('assets/audio/README.md')" target="_blank" rel="noopener">AdPlug / Nuked OPL3 / Munt / TinySoundFont</a> · <a :href="withBase(state.renderer === 'adlib' ? 'assets/audio/adlib-source.tar.gz' : 'assets/audio/mt32-source.tar.gz')">{{ t('Emulator source') }}</a></p>
   </div>
 </template>
 
@@ -31,7 +32,7 @@ import { t } from '../i18n';
 import { withBase } from '../engine/core/assets';
 import type { MusicPlayer, MusicState } from '../engine/audio/music';
 const props = defineProps<{ player: MusicPlayer; state: MusicState }>();
-const devices = computed(() => [{ value: 'mt32', label: 'Roland MT-32 / CM-32L · Munt' }, ...props.state.banks.map(bank => ({ value: `sf2:${bank.id}`, label: `SF2 · ${bank.name}` }))]);
+const devices = computed(() => [{ value: 'adlib', label: 'AdLib (OPL2)' }, { value: 'mt32', label: 'Roland MT-32 / CM-32L · Munt' }, ...props.state.banks.map(bank => ({ value: `sf2:${bank.id}`, label: `SF2 · ${bank.name}` }))]);
 function importFiles(event: Event) {
   const input = event.target as HTMLInputElement;
   if (input.files?.length) void props.player.importRoms(Array.from(input.files));

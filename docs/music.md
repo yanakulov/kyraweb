@@ -1,25 +1,29 @@
 # Original DOS CD music
 
+**AdLib (OPL2)** is the default music device. Open the book to allow browser
+audio. The original Westwood music programs from `DAT/ADL.PAK` run at 72 Hz
+through AdPlug's driver and Nuked OPL3 in OPL2-compatible mode. Banks load as
+needed. This device needs neither a Roland ROM nor a SoundFont.
+
+The default levels are 50% music, 25% effects, and 60% voices. Existing volume
+and mute preferences are preserved.
+
 For the additional TinySoundFont/SF2 renderer, optional GeneralUser GS bank, import
 workflow and hardware-emulation limitations, see [SoundFont setup](soundfonts.ru.md).
 It is a distinct sample synthesizer with approximate MT-32-to-GM mapping, not
 an emulator of named Yamaha/Kawai/Casio/Creative devices. Munt remains available.
 
-The GOG DOS CD release contains synthesized music (`DAT/XMI.PAK` for Roland,
-`DAT/ADL.PAK` for AdLib), not Red Book CD audio tracks. This implementation plays
-the original XMIDI through **Munt / libmt32emu**, not GM instrument substitution,
-oscillator approximations or recordings.
+The **Roland MT-32 / CM-32L** device uses **Munt / libmt32emu** to synthesize
+the original XMIDI from `DAT/XMI.PAK` in real time.
 
-## Setup
+## Roland setup
 
 ### Automatic local setup
 
 On this machine, the compatible pair is installed in ignored `.local/mt32/` as
 `MT32_CONTROL.ROM` and `MT32_PCM.ROM`. `npm run dev` and `npm run preview` discover
-it automatically on localhost: no import dialog is needed. Music defaults on for
-this local pair unless the player explicitly saved Music off. Click Open the book
-to satisfy normal browser autoplay policy. A first click before ROM discovery
-finishes warms one AudioContext and resumes setup when the files arrive.
+it automatically on localhost. Select **Roland MT-32 / CM-32L** in Settings
+to use the pair. A saved Roland choice falls back to AdLib if its ROMs are missing.
 
 The Vite plugin serves only fixed filenames to loopback, same-origin clients;
 remote/LAN and cross-origin requests are rejected. Direct `.local/` filesystem
@@ -43,8 +47,8 @@ session-only playback with a warning. Invalid replacement imports preserve the
 previous working device and ROM pair. An initial user gesture is required by
 browser autoplay rules. HTTPS or localhost and AudioWorklet/WebAssembly are required.
 
-Without a local pair, music defaults off until configured. The saved device/volume choice is independent
-of walking speed and chapter saves. In-game Options/loading pause music; Test music
+The saved device and volume choices are independent of walking speed and chapter
+saves. In-game Options and loading pause music. Test music
 temporarily auditions the title without advancing the game. Hidden tabs suspend
 audio. Closing the settings stops the test. Disabling music closes the device.
 
@@ -54,13 +58,14 @@ audio. Closing the settings stops the test. Disabling music closes the device.
 npm run assets:music -- "C:\Program Files\GOG Galaxy\Games\Legend of Kyrandia"
 ```
 
-`extractor/music.mjs` accepts the installation or DAT directory. All ten XMI files
-are preserved losslessly as gzip, with original byte lengths/SHA-256 in
-`public/assets/music/manifest.json`. Files are loaded lazily; the source archive
-is not downloaded by the music player.
+`extractor/music.mjs` accepts the installation or DAT directory. It preserves
+all ten XMI and ten ADL banks as gzip with original byte lengths and SHA-256
+hashes in `public/assets/music/manifest.json`. The game loads each bank on demand.
 
 ## Playback
 
+- `adlib-worklet.ts`, `adlib.ts`: the Westwood driver runs the selected ADL track
+  through OPL2-compatible synthesis. The music gain and fades run in the worklet.
 - `src/engine/audio/xmidi.ts`: bounded IFF parsing, additive delays, VLQ note
   durations, 120-Hz timing, explicit note release and four-deep FOR/NEXT loops.
   A zero-time loop has a finite execution budget and stops with an error.
@@ -82,13 +87,9 @@ Reference semantics: ScummVM `audio/midiparser_xmidi.cpp`, `audio/miles_midi.cpp
 
 ## Scope and verification
 
-Music is connected to the implemented intro/opening and first forest EMC scripts.
-This is not a complete Miles driver or a complete Kyra audio implementation.
-Speech/VOC playback, AdLib/Sound Blaster and other sound cards are
-not yet implemented. Later-world XMI files are imported, but later-world gameplay
-is not added. Saves restart a room-appropriate cue; they do not restore the exact
-sample or all original score history. Intro cue boundaries follow the existing
-web scene cuts, not a newly reconstructed sample-perfect DOS CD timeline.
+Music is connected to the intro and the implemented rooms through the original
+EMC commands. Saves restart a room-appropriate cue. Intro cue boundaries follow
+the web scene cuts. Original English CD speech loads separately by scene.
 
 `npm test` checks every track and source hash (1120 sequences), timing, loops,
 note release, Miles messages, original mappings, ROM input bounds and the real
@@ -108,6 +109,8 @@ corresponding source, build recipe, authors and license texts ship alongside the
 separate replaceable WASM in `mt32-source.tar.gz`. The loader's only source change
 is an appended ESM export. Restore the pinned artifacts with
 `node extractor/vendor_mt32.mjs`; rebuild with Emscripten using the included recipe.
+AdPlug and Nuked OPL3 are LGPL-2.1-or-later. Rebuild the AdLib module with Zig
+using the source and instructions in `adlib-source.tar.gz`.
 
 The size check measures the whole distribution, optional source archive and book
 model separately. Shipping LGPL source does not mean fetching it during gameplay.
