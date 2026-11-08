@@ -1,6 +1,6 @@
 import { sceneShuffle } from './sceneShuffle';
 import { locale, t, translateGameText } from '../../i18n';
-import { DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from "../core/constants";
+import { DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, ROOM_ART, TICK_MS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from "../core/constants";
 import { loadImage, loadMask, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
 import {
@@ -9,19 +9,20 @@ import {
   drawSceneItems,
   findInventorySlot,
   findSceneItemAt,
+  getInventorySlotPositions,
   getItemStatusName,
   getTileRect,
   inside,
   initInventory
 } from "./inventory";
-import { drawRadialInventory, RADIAL_SLOT_SIZE, radialLayout } from "./radialInventory";
+import { drawRadialInventory, RADIAL_RENDER_SCALE, RADIAL_SLOT_SIZE, radialLayout } from "./radialInventory";
 import { buildMaskCanvas, buildForegroundFrame, isWalkable, resolveActorLayer } from "../scene/masks";
 import { findWalkPath, findClickPath } from "./pathfinding";
 import { facingDirection, getIdleFrame, getSequence, stepFacing } from "./movement";
 import { filterSceneAnimShapes, findOverlayAt, initSceneOverlays, drawSceneOverlays } from "../scene/overlays";
 import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
 import { buildSceneShapesCanvas, buildSpriteDefMap, drawSceneAnimShapes } from "../scene/sceneShapes";
-import { buildUiOverlay, drawLayerDebug, drawStatusLine } from "../core/ui";
+import { buildUiOverlay, drawInventoryTooltip, drawLayerDebug, drawStatusLine } from "../core/ui";
 import { loadPackedAnimation, createPackedAnimation } from "../resources/packedAnimation";
 import { drawKallakAtmosphere } from "../rendering/kallakAtmosphere";
 import { buildIndexedCanvas, IndexedRenderer } from "../rendering/indexedRenderer";
@@ -123,6 +124,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let dead=false;
     const roomPalette=packedBackground?.clip.info.palette.slice();
     let paletteFade:{from:number[];to:number[];ms:number;age:number;step:number}|null=null;
+    const backdrop = config.backdropCanvas?.getContext('2d');
+    let backdropDirty = true;
+    let backdropScene = '';
     function updatePalette(ms:number){
       if(!paletteFade||!roomPalette||!packedBackground)return;
       const fade=paletteFade;fade.age+=ms;
@@ -131,6 +135,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if(step===fade.step)return;fade.step=step;
       for(let i=0;i<roomPalette.length;i++)roomPalette[i]=fade.from[i]+Math.sign(fade.to[i]-fade.from[i])*Math.min(step,Math.abs(fade.to[i]-fade.from[i]));
       packedBackground.renderer.setPalette(roomPalette);
+      backdropDirty = true;
       if(sceneShapesCanvas){const next=buildSceneShapesCanvas({width:320,height:200,palette:roomPalette,rawBase64:''},packedBackground.clip.frame(0));const context=sceneShapesCanvas.getContext('2d')!;context.clearRect(0,0,320,200);context.drawImage(next,0,0);}
       foregroundFrames.clear();
       for(const [name,animation] of scriptRenderers){animation.renderer.setPalette(roomPalette);if(scriptLayers.has(name))animation.renderer.render(animation.clip.pixels);}
@@ -221,7 +226,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       radialOpenedAt = clockMs;
       if (radialCanvas) {
         const size = radial.radius * 2 + 1;
-        radialCanvas.width = radialCanvas.height = size;
+        radialCanvas.width = radialCanvas.height = size * RADIAL_RENDER_SCALE;
         radialCanvas.style.width = radialCanvas.style.height = `${size * scale}px`;
         radialCanvas.style.left = `${radial.x * 100 / LOGICAL_WIDTH}%`;
         radialCanvas.style.top = `${radial.y * 100 / canvas.height}%`;
@@ -347,7 +352,14 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     function render() {
       ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
       const outside = scriptRenderers.get(backgroundName);
-      ctx.drawImage(outside ? outside.renderer.render(outside.clip.frame(0)) : packedBackground ? packedBackground.render(0) : bg, 0, 0);
+      const background = outside ? outside.renderer.render(outside.clip.frame(0)) : packedBackground ? packedBackground.render(0) : bg;
+      ctx.drawImage(background, 0, 0);
+      if (modern && backdrop && (backdropDirty || backdropScene !== backgroundName)) {
+        const { x, y, w, h } = ROOM_ART;
+        backdrop.drawImage(background, x, y, w, h, 0, 0, w, h);
+        backdropDirty = false;
+        backdropScene = backgroundName;
+      }
       ctx.save();
       ctx.beginPath(); ctx.rect(8, 8, 304, scene.uiMaskY - 8); ctx.clip();
       if (backgroundName === "room" && spriteDefMap && filteredSceneAnimShapes.length) {
@@ -392,9 +404,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         drawDropAnims(ctx, itemsSheet, inventoryItems, state.drops);
       }
 
-      const sequence = getSequence(state.dir);
+      const walkFrames = getSequence(state.dir);
       const talkingFrame = speechRemaining > 0 && speaker === 0 ? frames.findIndex(frame => frame.shapeIndex === 16) : -1;
-      const frameIndex = state.moving ? sequence[state.frame] : talkingFrame >= 0 ? talkingFrame : actorShape !== null ? frames.findIndex(frame => frame.shapeIndex === actorShape) : getIdleFrame(state.dir);
+      const frameIndex = state.moving ? walkFrames[state.frame] : talkingFrame >= 0 ? talkingFrame : actorShape !== null ? frames.findIndex(frame => frame.shapeIndex === actorShape) : getIdleFrame(state.dir);
       // A hidden script pose (shape 88) has no sprite, but the rest of the frame still draws.
       const frame = frames[frameIndex] ?? frames[0];
       const scale = actorScaleAt(state.pos.y, scene.actorScale);
@@ -449,6 +461,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           uiContext.imageSmoothingEnabled = false;
           if (radialCanvas) {
             uiContext.clearRect(0, 0, radialCanvas.width, radialCanvas.height);
+            uiContext.scale(RADIAL_RENDER_SCALE, RADIAL_RENDER_SCALE);
             uiContext.translate(radial.radius - radial.x, radial.radius - radial.y);
           }
           const age = reducedMotion?.matches ? Infinity : clockMs - radialOpenedAt;
@@ -470,8 +483,16 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           }
           if (heldOverRadial && radialPointer) drawHeldItem(uiContext, radialPointer, RADIAL_SLOT_SIZE - 2);
           uiContext.restore();
+          const hovered = radialPointer ? findInventorySlot(radialPointer, radial.slots, RADIAL_SLOT_SIZE) : -1;
+          const id = state.inventorySlots[hovered];
+          if (id && age >= hovered * 17) {
+            const halfHeight = radial.radius * radialFootprint.y;
+            drawInventoryTooltip(ctx, t(getItemStatusName(id)), {
+              x: radial.x, top: radial.y - halfHeight, bottom: radial.y + halfHeight
+            }, ROOM_ART);
+          }
         } else if (state.statusMessage) {
-          drawStatusLine(ctx, translateGameText(state.statusMessage), scene.uiMaskY - 13, LOGICAL_WIDTH);
+          drawStatusLine(ctx, translateGameText(state.statusMessage), scene.uiMaskY - 13, ROOM_ART.x + ROOM_ART.w, ROOM_ART.x + 4);
         }
       } else {
         ctx.fillStyle = '#000';
@@ -487,6 +508,14 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         if (yellowAnim) ctx.drawImage(yellowAnim.image, yellowAnim.x, yellowAnim.y);
         else if (hasYellowJewel && yellow) ctx.drawImage(yellow.renderer.render(yellow.clip.frame(10)), YELLOW_JEWEL_POS.x, YELLOW_JEWEL_POS.y);
         drawInventory(ctx, itemsSheet, inventoryItems, state.inventorySlots);
+        const hovered = !sequence && state.pointer ? findInventorySlot(state.pointer) : -1;
+        const id = state.inventorySlots[hovered];
+        if (id) {
+          const slot = getInventorySlotPositions()[hovered];
+          drawInventoryTooltip(ctx, t(getItemStatusName(id)), {
+            x: slot.x + INVENTORY_ICON_SIZE / 2, top: slot.y, bottom: slot.y + INVENTORY_ICON_SIZE
+          }, { x: 0, y: 0, w: LOGICAL_WIDTH, h: LOGICAL_HEIGHT });
+        }
       }
       if (!heldOverRadial && state.itemInHand && state.pointer && !exitCursor(availablePortals(), state.pointer))
         drawHeldItem(ctx, state.pointer, INVENTORY_ICON_SIZE);
@@ -778,7 +807,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         case 'exit':config.onExit?.({id:'script',target:action.target,side:'north',entry:action.entry,rect:{x:0,y:0,w:0,h:0},point:state.pos});break;
         case 'palette':if(roomPalette){const to=roomPalette.slice();to.splice(action.start*3,action.colors.length,...action.colors);paletteFade={from:roomPalette.slice(),to,ms:action.ms,age:0,step:-1};updatePalette(0);}break;
         case 'flag':
-          if (action.flag === 45) hasAmulet = action.value;
+          if (action.flag === 45) {
+            hasAmulet = action.value;
+            amuletMovieActive = false;
+            scriptLayers.delete('amulet');
+          }
           if (action.flag === YELLOW_JEWEL_FLAG) hasYellowJewel = action.value;
           break;
         case 'ambientWait':if(sceneAnims[action.index]?.play)ambientWait=action.index;break;
@@ -835,6 +868,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
             openRadialAt(state.pointer ?? state.pos);
             amuletMovieActive = true;
           }
+          if (action.clip === 'yellow-jewel' && sequence && !scriptLayers.has(action.clip))
+            openRadialAt(state.pointer ?? state.pos);
           if(['needsaw1','advice'].includes(action.clip))heldNpcPoses.delete(2);
           if(['tag','tag-0'].includes(action.clip))heldNpcPoses.delete(1);
           if(action.clip==='tag')scriptLayers.delete('tag-0');

@@ -14,6 +14,7 @@
         @start-journey="startJourney" @read-prologue="readingHistory = true" @resume="resumeBook" @save="saveChapter" @load="loadChapter" @fullscreen="toggleFullscreen" @main-menu="leaveBook('menu')" @replay-intro="leaveBook('intro')" />
     </FantasyBook>
     <div class="game-frame" :class="{ 'is-concealed': !bookOpened }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot">
+      <canvas ref="sceneBackdrop" class="scene-backdrop" :width="ROOM_ART.w" :height="ROOM_ART.h" aria-hidden="true"></canvas>
       <div class="stage" :class="{ 'cursor-controlled': customCursor }" :aria-busy="loading"
         @pointerenter="handleMove" @pointermove="handleMove" @pointerleave="leaveStage"
         @pointerdown="handlePointerDown" @pointerup="handlePointerUp" @pointercancel="cancelGesture" @contextmenu.prevent="handleContextMenu">
@@ -163,6 +164,7 @@ const fullscreenAvailable = ref(false);
 const isFullscreen = ref(false);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const inventoryCanvas = ref<HTMLCanvasElement | null>(null);
+const sceneBackdrop = ref<HTMLCanvasElement | null>(null);
 let game: Awaited<ReturnType<typeof startGame>> | null = null;
 let gameLoadController: AbortController | null = null;
 let restoreController: AbortController | null = null;
@@ -323,7 +325,8 @@ async function restoreChapter(record: SaveRecord) {
   let committed = false, restoredLocation = record.location, restoredVoiceBank: string | undefined;
   const oldFrame = captureFrame();
   try {
-    const candidate = await startGame(canvasRef.value, { ...config, inventoryCanvas: inventoryCanvas.value ?? undefined, controlMode: controlMode.value, saveState: record.state, paused: true, signal: controller.signal,
+    const candidate = await startGame(canvasRef.value, { ...config, inventoryCanvas: inventoryCanvas.value ?? undefined,
+      backdropCanvas: sceneBackdrop.value ?? undefined, controlMode: controlMode.value, saveState: record.state, paused: true, signal: controller.signal,
       onDeath: () => { if (committed) config.onDeath(); },
       onCheckpoint: () => { if (committed) config.onCheckpoint(); },
       onContinueChange: value => { if (committed) config.onContinueChange(value); },
@@ -464,7 +467,8 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   if (!canvasRef.value) return;
   loading.value = true;
   gameLoadController = new AbortController();
-  const startedGame = await startGame(canvasRef.value, { ...config, inventoryCanvas: inventoryCanvas.value ?? undefined, controlMode: controlMode.value,
+  const startedGame = await startGame(canvasRef.value, { ...config, inventoryCanvas: inventoryCanvas.value ?? undefined,
+    backdropCanvas: sceneBackdrop.value ?? undefined, controlMode: controlMode.value,
     signal: gameLoadController.signal,
     onCheckpoint: () => { if (runId === introRunId) config.onCheckpoint(); },
     onLocationChange: (name, id, bank) => { if (runId === introRunId) config.onLocationChange(name, id, bank); },
