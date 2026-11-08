@@ -5,6 +5,7 @@ export type ControlMode = 'modern' | 'classic';
 
 export type GameConfig = {
   inventoryCanvas?: HTMLCanvasElement;
+  backdropCanvas?: HTMLCanvasElement;
   scene: SceneConfig;
   controlMode?: ControlMode;
   onOptions?: () => void;

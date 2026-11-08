@@ -49,7 +49,7 @@ body {
   margin-inline: auto;
 }
 .app.is-modern { width: 100%; }
-.app.is-modern .game-frame { position: fixed; inset: 0; }
+.app.is-modern .game-frame { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; }
 
 .game-frame {
   position: relative;
@@ -66,7 +66,18 @@ body {
   container-type: inline-size;
   isolation: isolate;
 }
-.is-modern .stage { height: 100%; aspect-ratio: auto; }
+.is-modern .stage { width: min(100%, calc(100dvh * 19 / 8)); aspect-ratio: 19 / 8; }
+.scene-backdrop { display: none; }
+.is-modern .scene-backdrop {
+  display: block;
+  position: absolute;
+  inset: -32px;
+  width: calc(100% + 64px);
+  height: calc(100% + 64px);
+  object-fit: cover;
+  filter: blur(16px) brightness(.56);
+  pointer-events: none;
+}
 .scene-plane { position: absolute; inset: 0; }
 /* Display the room art from (8, 8) to (312, 136). Keep input in original coordinates. */
 .is-modern .scene-plane { inset: -6.25% -2.631579% 0; }

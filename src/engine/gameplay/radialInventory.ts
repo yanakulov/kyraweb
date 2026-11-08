@@ -2,8 +2,9 @@ import { LOGICAL_WIDTH, ROOM_ART, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from '
 import type { Vec2 } from '../core/types';
 import { getInventorySlotPositions, inside } from './inventory';
 
-export const RADIAL_SLOT_SIZE = 9;
-const orbit = 18, outer = 23, amuletScale = .325;
+export const RADIAL_SLOT_SIZE = 13;
+const orbit = 24, outer = 32, amuletScale = .4;
+const halfSlot = Math.floor(RADIAL_SLOT_SIZE / 2);
 
 export function radialLayout(height: number, anchor?: Vec2 | null, footprint = { x: 1, y: 1 }) {
   const marginX = Math.ceil(outer * footprint.x), marginY = Math.ceil(outer * footprint.y);
@@ -12,15 +13,15 @@ export function radialLayout(height: number, anchor?: Vec2 | null, footprint = {
   const count = getInventorySlotPositions().length;
   const slots = Array.from({ length: count }, (_, index) => {
     const angle = index * Math.PI * 2 / count;
-    return { x: Math.round(x + Math.sin(angle) * orbit) - 4, y: Math.round(y - Math.cos(angle) * orbit) - 4 };
+    return { x: Math.round(x + Math.sin(angle) * orbit) - halfSlot, y: Math.round(y - Math.cos(angle) * orbit) - halfSlot };
   });
-  const amulet = { x: x - 13, y: y - 10, w: 26, h: 16 };
+  const amulet = { x: x - 16, y: y - 12, w: 32, h: 19 };
   const scale = (value: number) => Math.round(value * amuletScale);
   return { x, y, radius: outer, slots, amulet,
     jewel: { x: amulet.x + scale(YELLOW_JEWEL_POS.x - 224), y: amulet.y + scale(YELLOW_JEWEL_POS.y - 152), w: scale(32), h: scale(17) },
     jewelHit: { x: amulet.x + scale(YELLOW_JEWEL_HITBOX.x - 224), y: amulet.y + scale(YELLOW_JEWEL_HITBOX.y - 152),
       w: scale(YELLOW_JEWEL_HITBOX.w), h: scale(YELLOW_JEWEL_HITBOX.h) },
-    options: { x: x - 10, y: y + 6, w: 21, h: 8 } };
+    options: { x: x - 10, y: y + 9, w: 21, h: 8 } };
 }
 
 function disk(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string) {
@@ -50,8 +51,8 @@ function radialPlate() {
   ctx.globalCompositeOperation = 'destination-out';
   disk(ctx, outer, outer, orbit - 2, '#fff');
   ctx.globalCompositeOperation = 'source-over';
-  disk(ctx, outer, outer, 11, '#8b6844');
-  disk(ctx, outer, outer, 10, '#191d27');
+  disk(ctx, outer, outer, 14, '#8b6844');
+  disk(ctx, outer, outer, 13, '#191d27');
   return plate;
 }
 
@@ -79,8 +80,8 @@ export function drawRadialInventory(ctx: CanvasRenderingContext2D, layout: Retur
     const progress = Math.max(0, Math.min(1, (age - index * 17) / 75));
     if (progress <= 0) return;
     const easing = 1 - (1 - progress) ** 3;
-    const x = slot.x + Math.round((layout.x - slot.x - 4) * .2 * (1 - easing));
-    const y = slot.y + Math.round((layout.y - slot.y - 4) * .2 * (1 - easing));
+    const x = slot.x + Math.round((layout.x - slot.x - halfSlot) * .2 * (1 - easing));
+    const y = slot.y + Math.round((layout.y - slot.y - halfSlot) * .2 * (1 - easing));
     ctx.save(); ctx.globalAlpha = easing;
     bevel(ctx, x, y, RADIAL_SLOT_SIZE, RADIAL_SLOT_SIZE, !!pointer && inside(pointer, { ...slot, w: RADIAL_SLOT_SIZE, h: RADIAL_SLOT_SIZE }));
     drawItem(index, x + 1, y + 1);
