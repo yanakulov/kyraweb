@@ -8,7 +8,7 @@
     </FantasyBook>
     <FantasyBook v-if="bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
       <BookPrologue v-if="readingHistory" :ready="bookReady" returning @continue="readingHistory = false" />
-      <BookMenu v-else :gameplay="!introActive" :main-menu="kallakMenu" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookMessage" :slots="bookSlots" :initial-view="bookInitialView"
+      <BookMenu v-else :gameplay="!introActive" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookMessage" :slots="bookSlots" :initial-view="bookInitialView"
         v-model:walk-speed="walkSpeed" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen" :music-player="music" :music-state="musicState"
         @start-journey="startJourney" @read-prologue="readingHistory = true" @resume="resumeBook" @save="saveChapter" @load="loadChapter" @fullscreen="toggleFullscreen" @main-menu="leaveBook('menu')" @replay-intro="leaveBook('intro')" />
     </FantasyBook>
@@ -43,7 +43,7 @@ import { MusicPlayer, type MusicState } from './engine/audio/music';
 const musicState = shallowRef<MusicState>();
 const music = new MusicPlayer(state => { musicState.value = state; });
 musicState.value = { ...music.state };
-import { readSaveSlots, writeSaveSlot, type SaveRecord, type SaveSlot } from './engine/gameplay/saveStorage';
+import { AUTOSAVE_SLOT, readAutosave, readSaveSlots, writeAutosave, writeSaveSlot, type SaveRecord, type SaveSlot } from './engine/gameplay/saveStorage';
 const bookOpened = ref(false);
 function hasReadPrologue() { try { return localStorage.getItem('kyrandia.prologueSeen') === '1'; } catch { return false; } }
 const prologueSeen = hasReadPrologue();
@@ -51,7 +51,7 @@ const openingPrologue = ref(true), openingReadingReady = ref(false), readingHist
 function finishPrologue() { try { localStorage.setItem('kyrandia.prologueSeen', '1'); } catch { /* Reading remains available without storage. */ } openingPrologue.value = false; }
 const openingBook = ref<{ openBook: () => void } | null>(null);
 const openingSnapshot = shallowRef<HTMLCanvasElement | null>(null), bookSnapshot = shallowRef<HTMLCanvasElement | null>(null);
-const bookReturning = ref(false), bookReady = ref(false), bookBusy = ref(false), canSave = ref(false);
+const bookReturning = ref(false), bookReady = ref(false), bookBusy = ref(false), canSave = ref(false), gameOver = ref(false);
 const bookMessage = ref(''), bookInitialView = ref<'main' | 'load'>('main');
 const saveSlots = shallowRef<SaveSlot[]>([]);
 const latestSave = computed(() => saveSlots.value.filter(slot => slot.save).sort((a,b) => b.save!.savedAt.localeCompare(a.save!.savedAt))[0]);
@@ -166,12 +166,13 @@ const subtitleScale = ref(1);
 
 
 const config = {
-  onDeath: () => { gameError.value = "Brandon has died. Start a new journey."; },
+  onDeath: () => { gameOver.value = true; music.stop(); showBookOptions(); },
+  onCheckpoint: scheduleAutosave,
   onContinueChange: (waiting: boolean) => { awaitingContinue.value = waiting; },
   onNoteChange: (visible: boolean) => { noteVisible.value = visible; },
   scene: gemCutScene,
   world: import.meta.env.BASE_URL + "assets/world/world.json",
-  onLocationChange: (name: string, _id?: number) => { locationName.value = name; queueMicrotask(syncControls); },
+  onLocationChange: (name: string, _id?: number) => { locationName.value = name; queueMicrotask(syncControls); scheduleAutosave(); },
   onScriptAction: (action: import('./engine/gameplay/roomScript').RoomAction) => { if (action.op === 'music') music.wander(action.command, action.restart); else if (action.op === 'sfx') music.effect(action.track); },
   onLoadingChange: (value: boolean) => { if (value) music.stopEffects(); loading.value = value; queueMicrotask(syncControls); },
   onNavigationError: (message: string) => { navigationError.value = message; },
@@ -180,7 +181,7 @@ const config = {
 };
 
 function refreshSaveSlots() {
-  try { saveSlots.value = readSaveSlots(); return true; }
+  try { saveSlots.value = [...readSaveSlots(), readAutosave()]; return true; }
   catch (error) { bookMessage.value = error instanceof Error ? error.message : 'Saved chapters are unavailable.'; return false; }
 }
 function captureFrame() {
@@ -188,13 +189,28 @@ function captureFrame() {
   if (canvasRef.value) copy.getContext('2d')!.drawImage(canvasRef.value, 0, 0);
   return copy;
 }
+let autosaveFrame = 0;
+function scheduleAutosave() {
+  if (autosaveFrame || !game || gameOver.value || !bookOpened.value) return;
+  const owner = game;
+  autosaveFrame = requestAnimationFrame(() => {
+    autosaveFrame = 0;
+    if (game !== owner || gameOver.value || bookBusy.value || gameError.value) return;
+    const state = owner.getSaveState();
+    if (!state) return;
+    try {
+      const save = writeAutosave({ location: locationName.value, thumbnail: captureFrame().toDataURL('image/webp', .8), state });
+      saveSlots.value = [...saveSlots.value.filter(slot => slot.index !== AUTOSAVE_SLOT), { index: AUTOSAVE_SLOT, save, error: null }];
+    } catch { /* Keep the last saved chapter when storage is unavailable. */ }
+  });
+}
 function showBookOptions(view: 'main' | 'load' = 'main') {
   if (bookSnapshot.value || loading.value || sequenceActive.value || !canvasRef.value) return;
   syncControls(); cancelGesture();
   intro?.setPaused(true); game?.setPaused(true);
   bookMessage.value = ''; refreshSaveSlots();
   canSave.value = !!game?.getSaveState();
-  if (!introActive.value && !canSave.value && !gameError.value && !bookMessage.value) bookMessage.value = 'Resume to finish the current action before saving.';
+  if (!introActive.value && !canSave.value && !gameOver.value && !gameError.value && !bookMessage.value) bookMessage.value = 'Resume to finish the current action before saving.';
   bookInitialView.value = view; bookReady.value = false; bookReturning.value = false;
   readingHistory.value = false;
   bookSnapshot.value = captureFrame();
@@ -203,7 +219,7 @@ async function bookOptionsReady() {
   bookReady.value = true; await nextTick();
   appRef.value?.querySelector<HTMLElement>('[role="dialog"]')?.focus();
 }
-function resumeBook() { if (bookBusy.value || !bookSnapshot.value || bookReturning.value) return; bookReturning.value = true; }
+function resumeBook() { if (gameOver.value || bookBusy.value || !bookSnapshot.value || bookReturning.value) return; bookReturning.value = true; }
 function finishBookResume() {
   bookSnapshot.value = null; bookReady.value = false; bookReturning.value = false;
   intro?.setPaused(false); game?.setPaused(false); syncControls();
@@ -238,6 +254,7 @@ async function restoreChapter(record: SaveRecord) {
   try {
     const candidate = await startGame(canvasRef.value, { ...config, saveState: record.state, paused: true, signal: controller.signal,
       onDeath: () => { if (committed) config.onDeath(); },
+      onCheckpoint: () => { if (committed) config.onCheckpoint(); },
       onContinueChange: value => { if (committed) config.onContinueChange(value); },
       onNoteChange: value => { if (committed) config.onNoteChange(value); },
       onLocationChange: (name, id) => { restoredLocation = name; if (committed) config.onLocationChange(name, id); },
@@ -252,7 +269,7 @@ async function restoreChapter(record: SaveRecord) {
     gameLoadController = controller; game = candidate; committed = true;
     introActive.value = false; kallakMenu.value = false; noteVisible.value = false;
     music.stop(); music.restoreRoom(record.state.currentRoom);
-    gameError.value = ''; navigationError.value = ''; loading.value = false;
+    gameError.value = ''; gameOver.value = false; navigationError.value = ''; loading.value = false;
     sequenceActive.value = awaitingContinue.value = false; subtitleLines.value = []; subtitleAlpha.value = 1;
     locationName.value = restoredLocation;
     walkSpeed.value = record.state.settings.walkSpeed;
@@ -266,8 +283,9 @@ async function restoreChapter(record: SaveRecord) {
 }
 async function loadChapter(index: number) {
   if (bookBusy.value || !refreshSaveSlots()) return;
-  const record = saveSlots.value[index]?.save;
-  if (!record) { bookMessage.value = saveSlots.value[index]?.error || 'This page has no saved chapter.'; return; }
+  const slot = saveSlots.value.find(slot => slot.index === index);
+  const record = slot?.save;
+  if (!record) { bookMessage.value = slot?.error || 'This page has no saved chapter.'; return; }
   bookBusy.value = true; bookMessage.value = 'Opening your saved chapter…';
   try {
     await restoreChapter(record);
@@ -311,6 +329,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     game = null;
   }
   introActive.value = true;
+  gameOver.value = false;
   music.stop();
   kallakMenu.value = false; noteVisible.value = false;
   sequenceActive.value = false;
@@ -360,6 +379,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   gameLoadController = new AbortController();
   const startedGame = await startGame(canvasRef.value, { ...config,
     signal: gameLoadController.signal,
+    onCheckpoint: () => { if (runId === introRunId) config.onCheckpoint(); },
     onLocationChange: (name, id) => { if (runId === introRunId) config.onLocationChange(name, id); },
     onScriptAction: action => { if (runId === introRunId) config.onScriptAction(action); },
     onNoteChange: visible => { if (runId === introRunId) config.onNoteChange(visible); },
@@ -382,6 +402,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   });
   game.setWalkSpeed(walkSpeed.value);
   game.setAnimStepInterval(animStepInterval.value);
+  scheduleAutosave();
 }
 
 const gameHint = computed(() => {
@@ -500,6 +521,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  cancelAnimationFrame(autosaveFrame);
   music.dispose(); document.removeEventListener('visibilitychange', musicVisibility);
   introRunId++;
   document.removeEventListener('keydown', handlePanelKey);

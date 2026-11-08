@@ -211,6 +211,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (ambientWait !== null && !sceneAnims[ambientWait]?.play) ambientWait = null;
       if (state.drops.length) {
         updateDrops(state.drops, state.sceneItems, dt * 1000, soundEffect);
+        if (!state.drops.length) config.onCheckpoint?.();
       }
 
       const stepInterval = state.walkDelayTicks * TICK_MS;
@@ -248,6 +249,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         config.onSequenceChange?.(false);
         config.onContinueChange?.(false);
         const done = sequenceDone; sequenceDone = null; done?.();
+        if (!dead) config.onCheckpoint?.();
       }
     }
 
@@ -310,7 +312,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       // Composite them behind Brandon while he approaches the speaking tree.
       for (const [name, layer] of scriptLayers) if (name === "face" || name === "face2") ctx.drawImage(layer.image, layer.x, layer.y);
 
-      const drawNpcs = (front: boolean) => { for (const npc of [...npcs.values()].map(n=>heldNpcPoses.get(n.character)??n).sort((a,b)=>a.y-b.y)) { if ((npc.y > state.pos.y) !== front || npc.shape === 88 || !npc.visible || (npc.character===2 ? ['needsaw1','advice','balance2'] : ['tag','tag-0']).some(name=>scriptLayers.has(name))) continue;
+      const drawNpcs = (front: boolean) => { for (const npc of [...npcs.values()].map(n=>heldNpcPoses.get(n.character)??n).sort((a,b)=>a.y-b.y)) { if ((npc.y > state.pos.y) !== front || npc.shape === 88 || !npc.visible || (npc.character===2 ? ['needsaw1','advice'] : ['tag','tag-0']).some(name=>scriptLayers.has(name))) continue;
         const scale=actorScaleAt(npc.y,scene.actorScale);
         const drawNpc=(shape:number,x:number,y:number,flip:boolean)=>{
           const animation=scriptRenderers.get(`npc-${shape}`),def=config.npcFrames?.[shape];
@@ -338,11 +340,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       const sequence = getSequence(state.dir);
       const talkingFrame = speechRemaining > 0 && speaker === 0 ? frames.findIndex(frame => frame.shapeIndex === 16) : -1;
       const frameIndex = state.moving ? sequence[state.frame] : talkingFrame >= 0 ? talkingFrame : actorShape !== null ? frames.findIndex(frame => frame.shapeIndex === actorShape) : getIdleFrame(state.dir);
-      const frame = frames[Math.min(frames.length - 1, frameIndex)];
-      if (!frame) {
-        ctx.restore();
-        return;
-      }
+      // A hidden script pose (shape 88) has no sprite, but the rest of the frame still draws.
+      const frame = frames[frameIndex] ?? frames[0];
       const scale = actorScaleAt(state.pos.y, scene.actorScale);
       const drawX = state.pos.x + Math.trunc(frame.xOffset * scale);
       const drawY = state.pos.y + Math.trunc(frame.yOffset * scale);
@@ -450,6 +449,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       update(dt, clockMs);
       render();
       if (transition?.active) transition.draw(ctx);
+      if (dead && !sequence) { config.onDeath?.(); return; }
       if (running && !paused) animationFrame = requestAnimationFrame(loop);
     }
 
@@ -547,13 +547,17 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         if (overlay && !state.itemInHand && sceneItemIndex === -1) {
           stopWalking();
           pickOverlayItem(overlay);
+          config.onCheckpoint?.();
           return true;
         }
       }
       const slot = findInventorySlot(point);
       if (slot !== -1) {
         stopWalking();
-        exchangeInventorySlot(slot);
+        if (state.inventorySlots[slot] || state.itemInHand) {
+          exchangeInventorySlot(slot);
+          config.onCheckpoint?.();
+        }
         return true;
       }
       if (point.y < scene.uiMaskY) {
@@ -571,6 +575,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           }
           setStatusMessage(`Took ${getItemStatusName(state.itemInHand)}`);
           soundEffect(53);
+          config.onCheckpoint?.();
           return true;
         }
       }
@@ -654,7 +659,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       config.onScriptAction?.(action);
       switch (action.op) {
         case 'choice':state.statusMessage='Click where you want to go.';state.statusMessageUntil=Infinity;break;
-        case 'death':dead=true;actorVisible=false;config.onDeath?.();break;
+        case 'death':dead=true;actorVisible=false;break;
         case 'exit':config.onExit?.({id:'script',target:action.target,side:'north',entry:action.entry,rect:{x:0,y:0,w:0,h:0},point:state.pos});break;
         case 'palette':if(roomPalette){const to=roomPalette.slice();to.splice(action.start*3,action.colors.length,...action.colors);paletteFade={from:roomPalette.slice(),to,ms:action.ms,age:0,step:-1};updatePalette(0);}break;
         case 'flag':if(action.flag===45)hasAmulet=action.value;break;
@@ -670,7 +675,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           } else heldNpcPoses.delete(action.character);
           npcs.set(action.character,action);
           // Refreshing Herman transfers drawing from the WSA to the walking actor.
-          if(action.visible && action.shape!==88)for(const name of action.character===2?['needsaw1','advice','balance2']:['tag','tag-0'])scriptLayers.delete(name);
+          if(action.visible && action.shape!==88)for(const name of action.character===2?['needsaw1','advice']:['tag','tag-0'])scriptLayers.delete(name);
           break;
         case 'hand':state.itemInHand=action.item;break;
         case 'item':state.sceneItems.push({id:action.item,x:action.x,y:action.y});break;
@@ -708,7 +713,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         case "face": face(action.facing); actorShape = action.shape < 0 ? null : action.shape;if(action.shape===88)actorVisible=false;break;
         case "frame": {
           if (action.clip === 'note') config.onNoteChange?.(true);
-          if(['needsaw1','advice','balance2'].includes(action.clip))heldNpcPoses.delete(2);
+          if(['needsaw1','advice'].includes(action.clip))heldNpcPoses.delete(2);
           if(['tag','tag-0'].includes(action.clip))heldNpcPoses.delete(1);
           if(action.clip==='tag')scriptLayers.delete('tag-0');
           const animation = scriptRenderers.get(action.clip);
@@ -807,7 +812,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       return running && !dead && !sequence && !transition?.active && !state.drops.length && !paletteFade && ambientWait === null && backgroundName === 'room' && actorVisible ? getSnapshot() : null;
     }
     function setPaused(value: boolean) {
-      if (!running || paused === value) return;
+      if (!running || paused === value || dead && !value) return;
       paused = value;
       cancelAnimationFrame(animationFrame);
       // Wall time while a menu is open never enters any game, script or scene clock.

@@ -6,6 +6,8 @@ export type SaveRecord = {
 export type SaveSlot = { index: number; save: SaveRecord | null; error: string | null };
 
 const SLOT_COUNT = 3, MAX_RECORD_LENGTH = 1_000_000, MAX_THUMBNAIL_LENGTH = 400_000;
+export const AUTOSAVE_SLOT = SLOT_COUNT;
+const AUTOSAVE_KEY = 'kyrandia.autosave';
 const forestFiles = new Set('GEMCUT HEALER SICKWIL ALTAR BROKEN BRIDGE SORROW TRUNK FNORTH FGOWEST WILLOW FORESTB FORESTA XEDGE XEDGEC CAVEB NWCLIFB'.split(' '));
 const itemNames = new Set('letter ruby saw apple appleEaten rose silverRose marble teardrop'.split(' '));
 const slotKey = (index: number) => `kyrandia.save.${index + 1}`;
@@ -157,29 +159,32 @@ function storage(): Storage {
   throw new Error('Browser storage is unavailable. Allow storage for this site to use saved games.');
 }
 
-export function readSaveSlots(): SaveSlot[] {
-  const store = storage();
-  return Array.from({ length: SLOT_COUNT }, (_, index) => {
-    let raw: string | null;
-    try { raw = store.getItem(slotKey(index)); }
-    catch { throw new Error('Saved games could not be read. Allow storage for this site and try again.'); }
-    if (raw === null) return { index, save: null, error: null };
-    try {
-      if (raw.length > MAX_RECORD_LENGTH) throw new Error('This save is too large to load. Choose another slot.');
-      return { index, save: saveRecord(JSON.parse(raw)), error: null };
-    } catch (error) {
-      return { index, save: null, error: error instanceof SyntaxError ? 'This save is damaged. Choose another slot or save again.' : error instanceof Error ? error.message : 'This save could not be loaded.' };
-    }
-  });
+function readSlot(store: Storage, key: string, index: number): SaveSlot {
+  let raw: string | null;
+  try { raw = store.getItem(key); }
+  catch { throw new Error('Saved games could not be read. Allow storage for this site and try again.'); }
+  if (raw === null) return { index, save: null, error: null };
+  try {
+    if (raw.length > MAX_RECORD_LENGTH) throw new Error('This save is too large to load. Choose another slot.');
+    return { index, save: saveRecord(JSON.parse(raw)), error: null };
+  } catch (error) {
+    return { index, save: null, error: error instanceof SyntaxError ? 'This save is damaged. Choose another slot or save again.' : error instanceof Error ? error.message : 'This save could not be loaded.' };
+  }
 }
 
-export function writeSaveSlot(index: number, value: Pick<SaveRecord, 'name' | 'location' | 'thumbnail' | 'state'>): SaveRecord {
-  if (!Number.isInteger(index) || index < 0 || index >= SLOT_COUNT) throw new Error('Choose one of the three save slots.');
+export function readSaveSlots(): SaveSlot[] {
+  const store = storage();
+  return Array.from({ length: SLOT_COUNT }, (_, index) => readSlot(store, slotKey(index), index));
+}
+
+export function readAutosave(): SaveSlot { return readSlot(storage(), AUTOSAVE_KEY, AUTOSAVE_SLOT); }
+
+function writeRecord(key: string, value: Pick<SaveRecord, 'name' | 'location' | 'thumbnail' | 'state'>): SaveRecord {
   const save = saveRecord({ ...value, version: 1, savedAt: new Date().toISOString() });
   const encoded = JSON.stringify(save);
   if (encoded.length > MAX_RECORD_LENGTH) throw new Error('The save is too large. Existing saves have not changed.');
   const store = storage();
-  try { store.setItem(slotKey(index), encoded); }
+  try { store.setItem(key, encoded); }
   catch (error) {
     const name = error instanceof Error ? error.name : '';
     throw new Error(name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED'
@@ -187,4 +192,13 @@ export function writeSaveSlot(index: number, value: Pick<SaveRecord, 'name' | 'l
       : 'The game could not be saved. Allow storage for this site and try again; existing saves have not changed.');
   }
   return save;
+}
+
+export function writeSaveSlot(index: number, value: Pick<SaveRecord, 'name' | 'location' | 'thumbnail' | 'state'>): SaveRecord {
+  if (!Number.isInteger(index) || index < 0 || index >= SLOT_COUNT) throw new Error('Choose one of the three save slots.');
+  return writeRecord(slotKey(index), value);
+}
+
+export function writeAutosave(value: Pick<SaveRecord, 'location' | 'thumbnail' | 'state'>): SaveRecord {
+  return writeRecord(AUTOSAVE_KEY, { ...value, name: 'Autosave' });
 }

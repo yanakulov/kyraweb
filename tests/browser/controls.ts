@@ -1,6 +1,8 @@
 import { createApp, nextTick } from 'vue';
 import App from '../../src/App.vue';
-import { readSaveSlots, writeSaveSlot } from '../../src/engine/gameplay/saveStorage';
+import { readAutosave, readSaveSlots, writeAutosave, writeSaveSlot } from '../../src/engine/gameplay/saveStorage';
+import { startGame } from '../../src/engine/gameplay/game';
+import { gemCutScene } from '../../src/engine/scenes/gemCut';
 import { t } from '../../src/i18n';
 import '../../src/styles.css';
 
@@ -209,6 +211,48 @@ addCheck('Verify saved chapter round trip',async()=>{
   assert(localStorage.getItem('kyrandia.save.1')===untouched[0]&&localStorage.getItem('kyrandia.save.2')===untouched[1],'Another save slot changed');
   await closeOptions();
 },'chapter 3 saved, changed and restored through UI');
+
+addCheck('Verify death book and autosave', async () => {
+  hud();
+  const record = readAutosave().save;
+  assert(record?.state.currentRoom === 0, 'The opening did not create a home checkpoint');
+  const previous = localStorage.getItem('kyrandia.autosave')!;
+  const state = structuredClone(record.state);
+  state.rooms[0].treeSpoken = true;
+  if (!state.quest.flags.includes(53)) state.quest.flags.push(53);
+  const preview = document.createElement('canvas');
+  const helper = await startGame(preview, { scene: gemCutScene, world: '/kyraweb/assets/world/world.json', saveState: state });
+  try {
+    helper.runSequence([{ op: 'exit', target: 7, entry: { x: 280, y: 110 } }]);
+    await until(() => helper.getSaveState()?.currentRoom === 7, 'Bridge checkpoint could not be prepared');
+    writeAutosave({ state: helper.getSaveState()!, location: 'A ruined bridge', thumbnail: preview.toDataURL() });
+  } finally { helper.stop(); }
+  const canvas = document.querySelector<HTMLCanvasElement>('.stage canvas')!, area = canvas.getBoundingClientRect();
+  const sceneClick = (x: number, y: number) => {
+    const point = { bubbles: true, clientX: area.left + x * area.width / 320, clientY: area.top + y * area.height / 200 };
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { ...point, pointerType: 'mouse' }));
+    canvas.dispatchEvent(new MouseEvent('click', point));
+  };
+  try {
+    await openOptions(); await click('Load game', menu());
+    const auto = [...menu().querySelectorAll('li')].find(slot => slot.querySelector('strong')?.textContent === t('Autosave'));
+    assert(auto, 'The book did not list the autosave');
+    await click('Load chapter', auto); await until(() => !book(), 'The bridge autosave did not load');
+    // Visit the cave and come back to create a real checkpoint in the app.
+    sceneClick(317, 100);
+    await until(() => readAutosave().save?.state.currentRoom === 9, 'Entering the cave did not autosave');
+    sceneClick(10, 100);
+    await until(() => readAutosave().save?.state.currentRoom === 7 && !!document.querySelector('.hud-options'), 'Returning to the bridge did not autosave');
+    const safeBytes = localStorage.getItem('kyrandia.autosave');
+    sceneClick(40, 100); await advance(45000);
+    sceneClick(40, 100);
+    await bookReady();
+    assert(menu().querySelector('h2')?.textContent === t("It didn't happen that way!"), 'The death book did not show the story’s correction');
+    assert(localStorage.getItem('kyrandia.autosave') === safeBytes, 'Death overwrote the last safe checkpoint');
+    await click('Continue from autosave', menu());
+    await until(() => !book() && !!document.querySelector('.hud-options'), 'The death book did not return to live gameplay');
+  } finally { localStorage.setItem('kyrandia.autosave', previous); }
+}, 'safe checkpoint, death book and restored gameplay');
 
 addCheck('Verify Russian book',async()=>{
   await openOptions(); await click('Settings',menu());

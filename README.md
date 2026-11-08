@@ -20,7 +20,7 @@ The game has English and Russian text. CD voice acting and the areas beyond the 
 
 On desktop, point and click to move or interact. On a touchscreen, swipe to guide the persistent cursor and tap to act at its position. The cursor becomes a directional arrow over an open exit. During dialogue, click or tap to advance the current line.
 
-**Options** pauses the game and pulls the camera back to the book. Use it to resume, change language or walk speed, replay the intro, or save and load. The three save slots stay in the current browser and remember the room, inventory, quest progress, and items left behind.
+**Options** pauses the game and pulls the camera back to the book. Use it to resume, change language or walk speed, replay the intro, or save and load. Three manual slots and one autosave stay in the current browser. The autosave updates at safe points such as room arrivals and completed scenes. After a fatal mistake, the book lets you continue from the last autosave.
 
 ## Music and sound effects
 
