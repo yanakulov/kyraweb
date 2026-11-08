@@ -62,21 +62,23 @@ export function drawLayerDebug(
 const statusFont = '8px "Kyrandia", "Segoe UI", sans-serif';
 let statusBitmap: { text: string; width: number; image: HTMLCanvasElement } | undefined;
 
-function labelWidth(ctx: CanvasRenderingContext2D, text: string) {
+function labelWidth(ctx: CanvasRenderingContext2D, text: string, spacing = 1) {
   let width = 0;
-  for (const letter of text) width += Math.ceil(ctx.measureText(letter).width) + 1;
-  return Math.max(0, width - 1);
+  for (const letter of text) width += Math.ceil(ctx.measureText(letter).width) + spacing;
+  return Math.max(0, width - spacing);
 }
 
-function paintLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number) {
+export function paintLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, spacing = 1) {
   ctx.save();
-  const width = labelWidth(ctx, text);
-  ctx.translate(x, y);
+  const width = labelWidth(ctx, text, spacing);
+  const left = ctx.textAlign === 'center' ? x - Math.min(width, maxWidth) / 2 : x;
+  ctx.textAlign = 'left';
+  ctx.translate(left, y);
   if (width > maxWidth) ctx.scale(maxWidth / width, 1);
   let offset = 0;
   for (const letter of text) {
     ctx.fillText(letter, offset, 0);
-    offset += Math.ceil(ctx.measureText(letter).width) + 1;
+    offset += Math.ceil(ctx.measureText(letter).width) + spacing;
   }
   ctx.restore();
 }
@@ -123,9 +125,11 @@ export function drawStatusLine(ctx: CanvasRenderingContext2D, text: string, y: n
 export function drawInventoryTooltip(ctx: CanvasRenderingContext2D, text: string,
   anchor: { x: number; top: number; bottom: number }, bounds: { x: number; y: number; w: number; h: number },
   surface?: HTMLCanvasElement) {
-  const font = '6.5px Tahoma, "Segoe UI", sans-serif';
+  const font = '6.5px "Kyrandia", monospace';
+  const spacing = .5;
+  text = text.normalize('NFC');
   ctx.save(); ctx.font = font;
-  const width = Math.min(bounds.w - 4, Math.ceil(ctx.measureText(text).width) + 8), height = 11;
+  const width = Math.min(bounds.w - 4, Math.ceil(labelWidth(ctx, text, spacing)) + 8), height = 11;
   ctx.restore();
   const x = Math.round(Math.max(bounds.x + 2, Math.min(anchor.x - width / 2, bounds.x + bounds.w - width - 2)));
   const above = Math.floor(anchor.top - height - 2);
@@ -155,7 +159,7 @@ export function drawInventoryTooltip(ctx: CanvasRenderingContext2D, text: string
   target.textBaseline = 'middle';
   target.textAlign = 'center';
   target.fillStyle = '#f1e4c5';
-  target.fillText(text, width / 2, height / 2, width - 6);
+  paintLabel(target, text, width / 2, height / 2, width - 6, spacing);
   target.restore();
 }
 
