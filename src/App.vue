@@ -172,12 +172,17 @@ const config = {
   onNoteChange: (visible: boolean) => { noteVisible.value = visible; },
   scene: gemCutScene,
   world: import.meta.env.BASE_URL + "assets/world/world.json",
-  onLocationChange: (name: string, _id?: number) => { locationName.value = name; queueMicrotask(syncControls); scheduleAutosave(); },
-  onScriptAction: (action: import('./engine/gameplay/roomScript').RoomAction) => { if (action.op === 'music') music.wander(action.command, action.restart); else if (action.op === 'sfx') music.effect(action.track); },
-  onLoadingChange: (value: boolean) => { if (value) music.stopEffects(); loading.value = value; queueMicrotask(syncControls); },
+  onLocationChange: (name: string, _id?: number, bank?: string) => { if (bank) music.prepareVoice(bank); locationName.value = name; queueMicrotask(syncControls); scheduleAutosave(); },
+  onScriptAction: (action: import('./engine/gameplay/roomScript').RoomAction) => {
+    if (action.op === 'music') music.wander(action.command, action.restart);
+    else if (action.op === 'sfx') music.effect(action.track);
+    else if (action.op === 'say' && action.voiceBank) music.speak(action.voiceBank, action.voiceId);
+    else if (action.op === 'clearText' && action.stopVoice) music.stopSpeech();
+  },
+  onLoadingChange: (value: boolean) => { if (value) { music.stopEffects(); music.stopSpeech(); } loading.value = value; queueMicrotask(syncControls); },
   onNavigationError: (message: string) => { navigationError.value = message; },
   onSubtitleChange: (lines: import('./engine/intro/types').IntroSubtitle[]) => { subtitleLines.value = lines; },
-  onSequenceChange: (active: boolean) => { sequenceActive.value = active; queueMicrotask(syncControls); }
+  onSequenceChange: (active: boolean) => { if (!active) music.stopSpeech(); sequenceActive.value = active; queueMicrotask(syncControls); }
 };
 
 function refreshSaveSlots() {
@@ -249,7 +254,7 @@ async function restoreChapter(record: SaveRecord) {
   if (!canvasRef.value) throw new Error('The game is not ready.');
   const controller = new AbortController();
   restoreController = controller;
-  let committed = false, restoredLocation = record.location;
+  let committed = false, restoredLocation = record.location, restoredVoiceBank: string | undefined;
   const oldFrame = captureFrame();
   try {
     const candidate = await startGame(canvasRef.value, { ...config, saveState: record.state, paused: true, signal: controller.signal,
@@ -257,7 +262,7 @@ async function restoreChapter(record: SaveRecord) {
       onCheckpoint: () => { if (committed) config.onCheckpoint(); },
       onContinueChange: value => { if (committed) config.onContinueChange(value); },
       onNoteChange: value => { if (committed) config.onNoteChange(value); },
-      onLocationChange: (name, id) => { restoredLocation = name; if (committed) config.onLocationChange(name, id); },
+      onLocationChange: (name, id, bank) => { restoredLocation = name; restoredVoiceBank = bank; if (committed) config.onLocationChange(name, id, bank); },
       onScriptAction: action => { if (committed) config.onScriptAction(action); },
       onLoadingChange: value => { if (committed) config.onLoadingChange(value); },
       onNavigationError: message => { if (committed) config.onNavigationError(message); },
@@ -269,6 +274,7 @@ async function restoreChapter(record: SaveRecord) {
     gameLoadController = controller; game = candidate; committed = true;
     introActive.value = false; kallakMenu.value = false; noteVisible.value = false;
     music.stop(); music.restoreRoom(record.state.currentRoom);
+    if (restoredVoiceBank) music.prepareVoice(restoredVoiceBank);
     gameError.value = ''; gameOver.value = false; navigationError.value = ''; loading.value = false;
     sequenceActive.value = awaitingContinue.value = false; subtitleLines.value = []; subtitleAlpha.value = 1;
     locationName.value = restoredLocation;
@@ -331,12 +337,14 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   introActive.value = true;
   gameOver.value = false;
   music.stop();
+  music.prepareVoice('INTRO');
   kallakMenu.value = false; noteVisible.value = false;
   sequenceActive.value = false;
   navigationError.value = "";
   subtitleLines.value = [];
   const runId = introRunId;
   const steps = introSteps.slice(startIndex);
+  let introVoice: number | undefined;
   introFrameReady = false;
   intro = playIntro(canvasRef.value, steps, {
     onFirstFrame: () => {
@@ -347,8 +355,10 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     renderSubtitlesOnCanvas: false,
     atmosphere: () => true,
     onSoundEffect: track => { if (runId === introRunId) music.effect(track); },
+    onVoiceSkip: () => { if (runId === introRunId) music.stopSpeech(); },
     onLoadingChange: (value) => { loading.value = value; },
     onStepChange: (id) => {
+      introVoice = undefined; music.stopSpeech();
       currentIntroStep.value = id;
       music.intro(id);
       if (id === "kallak_writing" && autoStartGame) {
@@ -359,6 +369,13 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
       if (id === 'kallak_writing' && autoStartGame && runId === introRunId) { kallakMenu.value = true; showBookOptions(); }
     },
     onSubtitleChange: (payload) => {
+      if (runId !== introRunId) return;
+      if (!payload.stepId) music.stopSpeech();
+      const voice = payload.lines.find(line => line.voiceId !== undefined)?.voiceId;
+      if (voice !== undefined && voice !== introVoice) {
+        introVoice = voice;
+        music.speak('INTRO', voice);
+      }
       subtitleLines.value = payload.lines;
       subtitleAlpha.value = payload.alpha;
     }
@@ -380,7 +397,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   const startedGame = await startGame(canvasRef.value, { ...config,
     signal: gameLoadController.signal,
     onCheckpoint: () => { if (runId === introRunId) config.onCheckpoint(); },
-    onLocationChange: (name, id) => { if (runId === introRunId) config.onLocationChange(name, id); },
+    onLocationChange: (name, id, bank) => { if (runId === introRunId) config.onLocationChange(name, id, bank); },
     onScriptAction: action => { if (runId === introRunId) config.onScriptAction(action); },
     onNoteChange: visible => { if (runId === introRunId) config.onNoteChange(visible); },
     onLoadingChange: value => { if (runId === introRunId) config.onLoadingChange(value); },

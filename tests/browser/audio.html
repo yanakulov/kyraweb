@@ -4,6 +4,7 @@
 <button id="sfx">Test SFX with music disabled</button><pre id="sfx-result">Waiting for SFX test.</pre>
 <button id="sf2">Test SoundFont renderer</button><pre id="sf2-result">Waiting for SoundFont test.</pre>
 <button id="switch-sfx">Test tree SFX across device switches</button><pre id="switch-result">Waiting for device switch test.</pre>
+<button id="voices">Test CD voices and skip</button><pre id="voice-result">Waiting for CD speech test.</pre>
 <script type="module">
 import { MusicPlayer } from '/src/engine/audio/music.ts';
 const button = document.querySelector('#run'), result = document.querySelector('#result');
@@ -23,6 +24,39 @@ const localPlayer = new MusicPlayer(state => {
   if (!monitoring) localResult.textContent = state.message || (state.available ? 'Local ROM pair available.' : 'No local ROM pair.');
 });
 void localPlayer.restore();
+document.querySelector('#voices').onclick = async () => {
+  const result = document.querySelector('#voice-result');
+  const player = new MusicPlayer(() => {});
+  const keys = ['kyrandia.music', 'kyrandia.sfx', 'kyrandia.voice', 'kyrandia.voiceVolume'];
+  const preferences = keys.map(key => localStorage.getItem(key));
+  const until = async (condition, message) => {
+    const end = performance.now() + 7000;
+    while (!condition()) {
+      if (performance.now() > end) throw Error(message);
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  };
+  try {
+    player.setEnabled(false); player.setSfxEnabled(false); player.setVoiceVolume(.85); player.setVoiceEnabled(true); player.setPaused(false);
+    const { context, gain } = player.voices;
+    const analyser = context.createAnalyser(); gain.connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    const audible = () => { analyser.getFloatTimeDomainData(samples); return samples.some(sample => Math.abs(sample) > .01); };
+    player.speak('INTRO', 0);
+    await until(audible, 'Intro voice did not reach the speakers');
+    player.stopSpeech();
+    await until(() => !audible(), 'Skipped voice kept playing');
+    player.speak('SPELL', 43);
+    await until(audible, 'Brandywine voice did not reach the speakers');
+    player.setVoiceVolume(0);
+    await until(() => !audible(), 'Voice volume did not mute speech');
+    result.textContent = 'PASS: original intro and Brandywine voices decode and play with music and effects off. Skip and voice volume mute playback.';
+  } catch (error) { result.textContent = `FAIL: ${error.message}`; }
+  finally {
+    player.dispose();
+    keys.forEach((key, i) => preferences[i] === null ? localStorage.removeItem(key) : localStorage.setItem(key, preferences[i]));
+  }
+};
 document.querySelector('#stop').onclick = () => { localPlayer.setPaused(true); localPlayer.stop(); };
 document.querySelector('#local').onclick = async () => {
   const began = performance.now();

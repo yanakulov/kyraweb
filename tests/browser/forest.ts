@@ -27,6 +27,7 @@ window.addEventListener("error", (event) => {
   results.textContent += `\nERROR ${error}`;
 });
 const lines: string[] = [];
+let fireFrame = -1, featherFalling = false;
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   try {
@@ -42,7 +43,11 @@ const config: GameConfig = {
   onDeath: () => {
     dead = true;
   },
-  onScriptAction: action => { if (action.op === 'frame' && action.clip === 'balance2') onRope = true; },
+  onScriptAction: action => {
+    if (action.op === 'frame' && action.clip === 'balance2') onRope = true;
+    if (action.op === 'frame' && action.clip === 'brandyw3') fireFrame = action.index;
+    if (action.op === 'ambientRun' && id === 30) featherFalling = true;
+  },
   onLocationChange: (name, room) => {
     id = room!;
     document.querySelector("#location")!.textContent = `${id}: ${name}`;
@@ -100,6 +105,11 @@ async function settle() {
 async function click(x: number, y: number) {
   game.handleClick({ x, y });
   await settle();
+}
+function assertScenePixels(clip: IndexedClip, frame: number, x: number, y: number, sx: number, sy: number, width: number, height: number, message: string) {
+  const actual = canvas.getContext('2d')!.getImageData(x, y, width, height).data;
+  const indices = clip.frame(frame), palette = clip.info.palette;
+  if (actual.some((value, i) => i % 4 < 3 && value !== palette[indices[(sy + Math.floor(i / (width * 4))) * clip.info.width + sx + Math.floor(i / 4) % width] * 3 + i % 4])) throw Error(message);
 }
 async function travel(target: number) {
   const portal = game.getPortals().find((p) => p.target === target);
@@ -205,7 +215,12 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     game.stop();
     game = await startGame(canvas, { ...config, saveState: bridgeSave });
     await route(24, 26, 27);
-    await click(130, 76);
+    const spellPack = await loadScenePack('/kyraweb/assets/forest/spell.kyr.gz');
+    game.handleClick({ x: 130, y: 76 });
+    await until(() => fireFrame >= 4, 'Brandywine breathing fire');
+    assertScenePixels(new IndexedClip(spellPack, spellPack.clips.brandyw2), 50, 152, 103, 112, 52, 27, 21, 'The resting dragon head returned beneath the fire clip');
+    capture('Brandywine breathing fire', false);
+    await settle();
     if (!lines.includes("I'll need a quill.")) throw Error('Darm did not ask for a quill');
     capture('Darm and Brandywine');
     await route(26, 33, 30);
@@ -236,7 +251,12 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     game.stop();
     game = await startGame(canvas, { ...config, saveState: groveSave });
     await route(18, 32, 30);
-    await click(263, 165);
+    const songPack = await loadScenePack('/kyraweb/assets/forest/song.kyr.gz');
+    game.handleClick({ x: 263, y: 165 });
+    await until(() => featherFalling, 'the feather falling from the nest');
+    assertScenePixels(new IndexedClip(songPack, songPack.clips['songbird-rest']), 0, 186, 38, 2, 0, 11, 8, 'The bird disappeared while the feather was falling');
+    capture('The healed bird stays in the nest while the feather falls', false);
+    await settle();
     if (!lines.some(line => line.includes('heal his wing'))) throw Error('The yellow jewel did not heal the songbird');
     capture('Healed songbird');
     await click(183, 125);

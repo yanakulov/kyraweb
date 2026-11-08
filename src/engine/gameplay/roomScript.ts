@@ -29,6 +29,7 @@ export type RoomAction =
       op: "say";
       text: string;
       voiceId: number;
+      voiceBank?: string;
       ms: number;
       x: number;
       y: number;
@@ -67,7 +68,8 @@ export type RoomAction =
   | { op: "shake"; ms: number }
   | { op: "palette"; start: number; colors: number[]; ms: number }
   | { op: "ambientRun" | "ambientWait"; index: number }
-  | { op: "clearText" | "waitVoice" }
+  | { op: "clearText"; stopVoice?: boolean }
+  | { op: "waitVoice" }
   | { op: "wait"; ms: number; movement?: boolean }
   | { op: "ambient"; index: number; enabled: boolean; internal?: boolean }
   | { op: "commit"; x: number; y: number; w: number; h: number }
@@ -95,7 +97,7 @@ export class RoomScript {
     this.wait = 0;
     this.lineActive = false;
     this.clearAfterWait = false;
-    this.host.apply({ op: "clearText" });
+    this.host.apply({ op: "clearText", stopVoice: true });
     return true;
   }
   awaiting = false;
@@ -148,7 +150,7 @@ export class RoomScript {
   }
   stop() {
     this.cancelled = true;
-    this.host.apply({ op: "clearText" });
+    this.host.apply({ op: "clearText", stopVoice: true });
   }
   update(elapsedMs: number) {
     if (this.cancelled) return;

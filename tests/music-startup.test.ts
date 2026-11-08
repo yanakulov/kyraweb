@@ -5,10 +5,10 @@ import { gunzipSync } from 'node:zlib';
 import { MusicPlayer } from '../src/engine/audio/music';
 
 /** Controller-only tests: the actual WASM output has a separate integration check. */
-function environment(saved: string | null, delayed = false, host = 'localhost') {
+function environment(saved: string | null, delayed = false, host = 'localhost', voices = false) {
   const originals = new Map<string, PropertyDescriptor | undefined>();
   const contexts: FakeContext[] = [];
-  const audio = { workletEffects: [] as number[][], clips: [] as number[][] };
+  const audio = { workletEffects: [] as number[][], clips: [] as number[][], stopped: 0, banks: [] as string[] };
   let release!: () => void;
   const gate = delayed ? new Promise<void>(resolve => { release = resolve; }) : Promise.resolve();
   class FakeContext {
@@ -18,8 +18,8 @@ function environment(saved: string | null, delayed = false, host = 'localhost') 
     async close() { this.state = 'closed'; }
     async suspend() { this.state = 'suspended'; }
     createGain() { return { gain: { value: 0, setTargetAtTime() {} }, connect() { return this; }, disconnect() {} }; }
-    async decodeAudioData() { return {}; }
-    createBufferSource() { return { connect() {}, disconnect() {}, stop() {}, start: (...args: number[]) => audio.clips.push(args) }; }
+    async decodeAudioData() { return { duration: 3 }; }
+    createBufferSource() { return { connect() {}, disconnect() {}, stop() { audio.stopped++; }, start: (...args: number[]) => audio.clips.push(args) }; }
   }
   class FakeNode {
     onprocessorerror = null;
@@ -31,7 +31,7 @@ function environment(saved: string | null, delayed = false, host = 'localhost') 
   }
   const values: Record<string, unknown> = {
     location: { hostname: host }, indexedDB: undefined, AudioContext: FakeContext, AudioWorkletNode: FakeNode,
-    localStorage: { getItem: (key: string) => key === 'kyrandia.music' ? saved : null, setItem() {} },
+    localStorage: { getItem: (key: string) => key === 'kyrandia.music' ? saved : key === 'kyrandia.voice' && !voices ? '0' : null, setItem() {} },
     fetch: async (url: string) => {
       if (url.endsWith('pair.json')) { await gate; return Response.json({ available: true }); }
       if (url.endsWith('/soundfonts/list.json')) return Response.json(['GeneralUser-GS.sf2']);
@@ -42,6 +42,7 @@ function environment(saved: string | null, delayed = false, host = 'localhost') 
       if (url.endsWith('mt32emu.wasm')) return new Response(new Uint8Array());
       if (url.endsWith('tsf.wasm')) return new Response(new Uint8Array());
       if (url.endsWith('effects.mp3')) return new Response(new Uint8Array());
+      if (url.endsWith('.mp3bank')) { audio.banks.push(url); return new Response(readFileSync(`public/assets/voices/${url.split('/').at(-1)}`)); }
       throw new Error(`Unexpected fetch: ${url}`);
     }
   };
@@ -56,6 +57,27 @@ test('local ROMs auto-enable without an import, but audio starts only after a ge
     await player.restore(); assert.equal(player.state.source, 'local'); assert.equal(player.state.enabled, true); assert.equal(env.contexts.length, 0);
     player.unlock(); await done; assert.equal(player.state.ready, true); assert.equal(env.contexts.length, 1);
   } finally { player.dispose(); assert.ok(env.contexts.every(c => c.state === 'closed')); env.restore(); }
+});
+
+test('CD speech starts separately from music and effects and a skip cancels pending and playing lines', async () => {
+  const env = environment('0', false, 'yanakulov.github.io', true), player = new MusicPlayer(() => {});
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  try {
+    player.setSfxEnabled(false);
+    player.unlock(); player.setPaused(false);
+    player.speak('INTRO', 0); player.stopSpeech();
+    await settle();
+    assert.equal(env.audio.clips.length, 0);
+    player.speak('INTRO', 1); await settle();
+    assert.deepEqual(env.audio.clips, [[0, 0]]);
+    assert.equal(env.audio.banks.length, 1);
+    player.setPaused(true); assert.equal(env.contexts[0].state, 'suspended');
+    player.setPaused(false); assert.equal(env.contexts[0].state, 'running');
+    player.setVoiceEnabled(false); assert.equal(env.audio.stopped, 1);
+    player.speak('SPELL', 42); await settle();
+    assert.equal(env.audio.clips.length, 1);
+    assert.equal(env.audio.banks.length, 1);
+  } finally { player.dispose(); env.restore(); }
 });
 test('an early opening click warms one context and starts when ROM discovery completes', async () => {
   const env = environment(null, true); let ready!: () => void;

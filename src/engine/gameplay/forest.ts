@@ -353,7 +353,11 @@ export function traceForest(
             slots.set(a[1], text[a[0]].slice(0, -4).toLowerCase());
             return 0;
           case 0x2a:
-            emit({ op: "close", clip: slots.get(a[0])! });
+            if (slots.has(a[0])) {
+              const clip = slots.get(a[0])!;
+              emit({ op: "close", clip });
+              if (clip === 'sngspell') frame('songbird-rest', 0, 184, 38, 0);
+            }
             slots.delete(a[0]);
             return 0;
           case 0x2b:
@@ -610,7 +614,15 @@ export function traceForest(
       },
       { 0: room.id, 1: point.x | 0, 2: point.y | 0, 3: 0, 4: hand, 6: fn === 4 ? 1 : 0, 7: 0 },
     );
-    return { actions, handled: result.regs[3] !== 0, cursorTrack };
+    // The fire movie covers only part of the conversation frame. Closing the
+    // WSA leaves its pixels in place until the next movie draws over them.
+    const playback = room.name === 'SPELL' ? actions.filter((action, i) => {
+      if (action.op !== 'close') return true;
+      const nextFrame = actions[i + 1];
+      if (action.clip === 'brandyw2' && nextFrame?.op === 'frame' && nextFrame.clip === 'brandyw3') return false;
+      return action.clip !== 'brandyw3';
+    }) : actions;
+    return { actions: playback, handled: result.regs[3] !== 0, cursorTrack };
   } catch (error) {
     if (error !== paused) throw error;
     return { actions, handled: true };

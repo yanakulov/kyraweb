@@ -16,6 +16,8 @@ export function setLocale(value: string) { if (value === 'en' || value === 'ru')
 
 export const russian: Record<string, string> = {
   ...gameRussian,
+  'CD voices (English)': 'Озвучка CD (английская)',
+  'Voice volume': 'Громкость озвучки',
   'Open the book': 'Открыть книгу',
   'Preparing your story…': 'Готовим вашу историю…',
   'The story begins…': 'История начинается…',

@@ -5,6 +5,8 @@
     <label class="music-volume" for="music-volume">{{ t('Music volume') }} <span>{{ Math.round(state.volume * 100) }}%</span><input id="music-volume" type="range" min="0" max="100" step="1" :value="state.volume * 100" @input="player.setVolume(Number(($event.target as HTMLInputElement).value) / 100)" /></label>
     <label class="sfx-switch"><input type="checkbox" :checked="state.sfxEnabled" :disabled="state.busy" @change="player.setSfxEnabled(($event.target as HTMLInputElement).checked)" />{{ t('Sound effects') }}</label>
     <label class="music-volume" for="sfx-volume">{{ t('Effects volume') }} <span>{{ Math.round(state.sfxVolume * 100) }}%</span><input id="sfx-volume" type="range" min="0" max="100" step="1" :value="state.sfxVolume * 100" @input="player.setSfxVolume(Number(($event.target as HTMLInputElement).value) / 100)" /></label>
+    <label class="sfx-switch"><input type="checkbox" :checked="state.voiceEnabled" @change="player.setVoiceEnabled(($event.target as HTMLInputElement).checked)" />{{ t('CD voices (English)') }}</label>
+    <label class="music-volume" for="voice-volume">{{ t('Voice volume') }} <span>{{ Math.round(state.voiceVolume * 100) }}%</span><input id="voice-volume" type="range" min="0" max="100" step="1" :value="state.voiceVolume * 100" @input="player.setVoiceVolume(Number(($event.target as HTMLInputElement).value) / 100)" /></label>
     <template v-if="state.renderer === 'mt32'">
       <p class="music-note">{{ t('Original XMIDI music, synthesized by Munt. No Roland ROMs are included.') }}</p>
       <label class="rom-import" :class="{ 'is-busy': state.busy }">{{ t(state.available ? 'Replace ROM pair' : 'Import ROM pair') }}<input type="file" accept=".rom,.bin" multiple :disabled="state.busy" @change="importFiles" /></label>

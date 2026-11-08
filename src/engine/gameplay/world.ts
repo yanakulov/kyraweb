@@ -183,22 +183,22 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       playOpening: !restoring && !from && config.playOpening !== false, entryActions, setupActions, amulet:quest.flags.has(45), npcFrames:questRoom?.npcFrames, portals,
       yellowJewel: quest.flags.has(YELLOW_JEWEL_FLAG),
       onAmuletInteract: snapshot => {
-        const say = (text: string): RoomAction => ({ op: 'say', text, voiceId: 0, ms: 2000,
+        const say = (text: string, voiceId: number, ms: number): RoomAction => ({ op: 'say', text, voiceId, voiceBank: 'CHAPTER1', ms,
           x: snapshot.pos.x, y: snapshot.pos.y - 56, speaker: 0, color: 15, blocking: true });
-        if (snapshot.itemInHand) return [say("Maybe I'd better put this down first.")];
-        if (!quest.flags.has(YELLOW_JEWEL_FLAG)) return [say("It's a jewel, but why is it black?")];
+        if (snapshot.itemInHand) return [say("Maybe I'd better put this down first.", 2000, 2019)];
+        if (!quest.flags.has(YELLOW_JEWEL_FLAG)) return [say("It's a jewel, but why is it black?", 2002, 2234)];
         const pressed: RoomAction[] = [{ op: 'sfx', track: 0x45 },
           { op: 'frame', clip: 'yellow-jewel', index: 11, ...YELLOW_JEWEL_POS, ms: 100 },
           { op: 'close', clip: 'yellow-jewel' }];
         const healing = questRoom && traceForest(questRoom, 4, quest, snapshot);
-        return [...pressed, ...(healing && healing.handled ? healing.actions : [say('Gee, this could come in handy if I get hurt.')])];
+        return [...pressed, ...(healing && healing.handled ? healing.actions : [say('Gee, this could come in handy if I get hurt.', 2003, 1810)])];
       },
-      onScriptAction: action=>{applyForestState(quest,action);if(action.op==='mask')changeMask(action);if(active&&callbackOwner===token)config.onScriptAction?.(action);},
+      onScriptAction: action=>{applyForestState(quest,action);if(action.op==='mask')changeMask(action);if(active&&callbackOwner===token)config.onScriptAction?.(action.op === 'say' && !action.voiceBank ? { ...action, voiceBank: meta.name } : action);},
       onActorInteract: snapshot => {
         const { itemInHand, pos } = snapshot;
         const actions = itemInHand === 'letter' ? forest.letter[quest.flags.has(129) ? 'readable' : 'sealed']
           : id === 24 && !itemInHand ? forest.caveSelf : forest.self?.[originalItem(itemInHand)];
-        return actions?.map(action => action.op === 'say' ? { ...action, x: pos.x, y: pos.y - 56 } : action) ?? null;
+        return actions?.map(action => action.op === 'say' ? { ...action, voiceBank: 'CHAPTER1', x: pos.x, y: pos.y - 56 } : action) ?? null;
       },
       onInteract: questRoom?(point,snapshot)=>{
         if(snapshot.treeSpoken)quest.flags.add(53);
@@ -231,7 +231,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       const next = await load(portal.target, portal, currentId);
       if (!active) { next.game.stop(); return; }
       current.stop(); current = next.game; currentId = portal.target;
-      config.onLocationChange?.(next.meta.title, currentId);
+      config.onLocationChange?.(next.meta.title, currentId, next.meta.name);
       config.onNavigationError?.("");
       prepareNeighbours(next.portals);
     } catch (error) {
@@ -251,7 +251,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     else void navigate(portal);
   }
   const first = await load(currentId, undefined, undefined, !!restored); current = first.game;
-  config.onLocationChange?.(first.meta.title, currentId);
+  config.onLocationChange?.(first.meta.title, currentId, first.meta.name);
   prepareNeighbours(first.portals);
   return {
     setTarget: point => { if (!busy && !paused) current.setTarget(point); },

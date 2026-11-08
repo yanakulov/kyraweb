@@ -29,7 +29,7 @@ export type GameConfig = {
   portals?: RoomPortal[];
   onExit?: (portal: RoomPortal) => void;
   onLoadingChange?: (loading: boolean) => void;
-  onLocationChange?: (name: string, id?: number) => void;
+  onLocationChange?: (name: string, id?: number, voiceBank?: string) => void;
   onNavigationError?: (message: string) => void;
   onSubtitleChange?: (lines: import("../intro/types").IntroSubtitle[]) => void;
   onSequenceChange?: (active: boolean) => void;

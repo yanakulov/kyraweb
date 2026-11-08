@@ -197,6 +197,12 @@ export async function buildForest(root, out = "public/assets/forest") {
         palette: image.palette,
         transparentIndex: -1,
       };
+    if (name === 'SONG') {
+      // Keep the healed bird from the last SNGSPELL frame while its feather falls.
+      const { width, frames } = clips.sngspell;
+      const pixels = Uint8Array.from({ length: 13 * 9 }, (_, i) => frames.at(-1)[(14 + Math.floor(i / 13)) * width + 16 + i % 13]);
+      clips['songbird-rest'] = { width: 13, height: 9, frames: [pixels], palette: image.palette, transparentIndex: -1 };
+    }
     if (name === "HEALER") {
       const note = decodeCps(get("NOTEENG.CPS"), get("PALETTE.COL"));
       const pixels = new Uint8Array(194 * 128);

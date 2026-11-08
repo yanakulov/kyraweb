@@ -30,6 +30,9 @@ import { startWorldGame } from "./world";
 import { exitCursor, portalAtPoint } from "./navigation";
 import type { DropAnim, GameConfig, InventoryItemId, RoomRuntimeSnapshot, RoomSnapshot, SceneItem, SceneOverlayState, Vec2, WorldSave } from "../core/types";
 
+const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell']);
+const behindActors = (clip: string) => clip === 'face' || clip === 'face2' || clip === 'songbird-rest';
+
 export type RoomGame = Awaited<ReturnType<typeof startRoom>>;
 export async function startGame(canvas: HTMLCanvasElement, config: GameConfig): Promise<RoomGame> {
   return config.world ? startWorldGame(canvas, config) : startRoom(canvas, config);
@@ -286,7 +289,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         }
         for (const layer of permanentLayers.values()) foregroundContext.drawImage(layer.image, layer.x, layer.y);
         if (spriteDefMap) drawSceneAnimShapes(foregroundContext, sceneShapesImage, spriteDefMap, questShapes);
-        for (const [name, layer] of scriptLayers) if (name === 'face' || name === 'face2') foregroundContext.drawImage(layer.image, layer.x, layer.y);
+        for (const [name, layer] of scriptLayers) if (behindActors(name)) foregroundContext.drawImage(layer.image, layer.x, layer.y);
         foregroundContext.globalCompositeOperation = 'source-over';
         foregroundFrames.set(layer, fg);
       }
@@ -315,7 +318,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (backgroundName === "room" && spriteDefMap) drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, questShapes);
       // FACE movies contain an opaque rectangle of the room, not just the mouth.
       // Composite them behind Brandon while he approaches the speaking tree.
-      for (const [name, layer] of scriptLayers) if (name === "face" || name === "face2") ctx.drawImage(layer.image, layer.x, layer.y);
+      for (const [name, layer] of scriptLayers) if (behindActors(name)) ctx.drawImage(layer.image, layer.x, layer.y);
 
       const drawNpcs = (front: boolean) => { for (const npc of [...npcs.values()].map(n=>heldNpcPoses.get(n.character)??n).sort((a,b)=>a.y-b.y)) { if ((npc.y > state.pos.y) !== front || npc.shape === 88 || !npc.visible || (npc.character===2 ? ['needsaw1','advice'] : ['tag','tag-0']).some(name=>scriptLayers.has(name))) continue;
         const scale=actorScaleAt(npc.y,scene.actorScale);
@@ -380,7 +383,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       drawAmbient(true);
       drawNpcs(true);
       if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
-      for (const [name, layer] of scriptLayers) if (name !== "face" && name !== "face2") ctx.drawImage(layer.image, layer.x, layer.y);
+      for (const [name, layer] of scriptLayers) if (!behindActors(name)) ctx.drawImage(layer.image, layer.x, layer.y);
 
       if (scene.opening && backgroundName === "room" && packedBackground && atmosphere && !reducedMotion?.matches) drawKallakAtmosphere(ctx, clockMs);
       ctx.restore();
@@ -675,7 +678,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function soundEffect(track: number) { config.onScriptAction?.({ op: 'sfx', track }); }
     function applyScript(action: RoomAction) {
-      config.onScriptAction?.(action);
+      const openingBank = scene.opening && (backgroundName === 'trunk' || backgroundName === 'gem') ? backgroundName.toUpperCase() : undefined;
+      config.onScriptAction?.(action.op === 'say' && !action.voiceBank && openingBank ? { ...action, voiceBank: openingBank } : action);
       switch (action.op) {
         case 'choice':state.statusMessage='Click where you want to go.';state.statusMessageUntil=Infinity;break;
         case 'death':dead=true;actorVisible=false;break;
@@ -739,13 +743,15 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           if(['needsaw1','advice'].includes(action.clip))heldNpcPoses.delete(2);
           if(['tag','tag-0'].includes(action.clip))heldNpcPoses.delete(1);
           if(action.clip==='tag')scriptLayers.delete('tag-0');
+          if (action.clip === 'brandyw2') scriptLayers.delete('brandyw3');
+          if (action.clip === 'song1' && scriptLayers.delete('songbird-rest')) foregroundFrames.clear();
           const animation = scriptRenderers.get(action.clip);
           if (!animation) throw new Error(`Missing script animation ${action.clip}`);
           const pixels=animation.clip.frame(action.index);
-          if(action.permanent || action.clip === 'face' || action.clip === 'face2') foregroundFrames.clear();
+          if(action.permanent || behindActors(action.clip)) foregroundFrames.clear();
           if(action.permanent){scriptLayers.delete(action.clip);permanentLayers.set(action.clip,{image:buildIndexedCanvas(animation.clip.info,pixels),index:action.index,x:action.x,y:action.y});}
           else {scriptLayers.delete(action.clip);scriptLayers.set(action.clip, { image: animation.renderer.render(pixels), index:action.index, x: action.x, y: action.y });}
-          if (["brantree", "touch", "brynn1", "brynn2", "brynn3", "raindrop", "wow", "tag", "agile", "balance2"].includes(action.clip)) actorVisible = false;
+          if (actorMovies.has(action.clip)) actorVisible = false;
           break;
         }
         case "close":
@@ -753,8 +759,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           // Closing the movie releases its decoder, not its last screen pixels.
           // TAG-0 is the resting boy while Brandon walks to the next TAG movie.
           if(action.clip!=='tag-0')scriptLayers.delete(action.clip);
-          if(action.clip === 'face' || action.clip === 'face2') foregroundFrames.clear();
-          if (["brantree", "touch", "brynn1", "brynn2", "brynn3", "raindrop", "wow", "tag", "agile", "balance2"].includes(action.clip)) actorVisible = true;
+          if (behindActors(action.clip)) foregroundFrames.clear();
+          if (actorMovies.has(action.clip)) actorVisible = true;
           break;
         case "say": {
           speaker=action.speaker??0;
