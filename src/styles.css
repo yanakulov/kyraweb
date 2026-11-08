@@ -49,7 +49,7 @@ body {
   margin-inline: auto;
 }
 .app.is-modern { width: 100%; }
-.app.is-modern .game-frame { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; }
+.app:is(.is-modern, .is-cinematic) .game-frame { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; }
 
 .game-frame {
   position: relative;
@@ -81,6 +81,9 @@ body {
 .scene-plane { position: absolute; inset: 0; }
 /* Display the room art from (8, 8) to (312, 136). Keep input in original coordinates. */
 .is-modern .scene-plane { inset: -6.25% -2.631579% 0; }
+.is-cinematic .stage { width: 100%; height: 100%; aspect-ratio: auto; }
+.is-cinematic .scene-plane { inset: auto; }
+.is-cinematic .subtitle-line { text-shadow: 1px 1px 0 #151016; }
 
 .stage canvas {
   width: 100%;
@@ -90,8 +93,9 @@ body {
   /* A finger aims inside the scene; two fingers can still zoom the page. */
   touch-action: pinch-zoom;
 }
-.stage .radial-surface { position: absolute; transform: translate(-50%, -50%); image-rendering: auto; pointer-events: none; z-index: 3; }
-.stage .radial-surface[hidden] { display: none; }
+.stage .radial-surface { position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 3; }
+.stage .inventory-tooltip { position: absolute; image-rendering: auto; pointer-events: none; z-index: 4; }
+.stage :is(.radial-surface, .inventory-tooltip)[hidden] { display: none; }
 
 .book-continue { padding: 5px 14px; min-height: 32px; font: 16px/1.2 Georgia,serif; color: #d9bd82; border: 0; background: linear-gradient(90deg,transparent,#201007eb 20%,#201007eb 80%,transparent); text-shadow: 0 1px 2px #000; }
 .book-continue:hover { color: #fff1c6; }
@@ -156,6 +160,25 @@ button:disabled { cursor: default; }
 
 .app:fullscreen { --game-surround: #000; width: 100%; max-width: none; height: 100%; display: grid; place-items: center; background: #000; }
 .app:fullscreen .game-frame { width: min(100%, calc(100dvh * 1.6)); }
-.app.is-modern:fullscreen .game-frame { width: 100%; }
+.app:is(.is-modern, .is-cinematic):fullscreen .game-frame { width: 100%; }
+
+.rotation-dialog {
+  width: min(360px, calc(100vw - 32px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  margin: auto;
+  padding: 24px;
+  color: #e7dcba;
+  background: radial-gradient(ellipse at top, #272c37, #171824 75%);
+  border: 4px double #95764b;
+  box-shadow: 0 14px 60px #000b;
+  text-align: center;
+  font: 16px/1.4 Georgia, serif;
+}
+.rotation-dialog::backdrop { background: #100c15a6; backdrop-filter: blur(12px); }
+.rotation-dialog h1 { margin: 8px 0; color: #f0d295; font-size: 24px; font-weight: normal; }
+.rotation-dialog p { margin: 0 0 20px; }
+.rotation-dialog .rotation-note { margin: 0; color: #c5b49e; font-size: 14px; }
+.rotation-icon { width: 44px; height: 44px; color: #d8b772; }
+.rotation-dialog button:active { transform: translateY(1px); }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }

@@ -19,6 +19,7 @@ import { vocDuration } from "./opening.mjs";
 // These are the rooms used by the first forest's original quest scripts.
 const ROOMS = {
   GEMCUT: 0,
+  GEM: 1,
   HEALER: 2,
   SICKWIL: 4,
   ALTAR: 6,
@@ -123,7 +124,11 @@ export async function buildForest(root, out = "public/assets/forest") {
         case 0x52: actions.push({ op: 'frame', clip: 'note', index: 0, x: 63, y: 8, ms: 0 }); break;
         case 0x4a: actions.push({ op: 'confirm' }); break;
         case 0x53: actions.push({ op: 'close', clip: 'note' }); break;
-        case 0x0e: actions.push({ op: 'hand', item: 'letter' }); break;
+        case 0x0e: {
+          const replacement = { 39: 'appleEaten', 42: 'letter' }[a[0]];
+          if (!replacement) throw new Error(`Unsupported self interaction item ${a[0]}`);
+          actions.push({ op: 'hand', item: replacement }); break;
+        }
         default: throw new Error(`Unsupported self interaction syscall ${op}`);
       }
       return 0;
@@ -131,7 +136,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     return actions;
   }
   const letter = { sealed: selfActions(42), readable: selfActions(42, 0, true) };
-  const self = Object.fromEntries([-1, 0, 16, 19, 43, 44, 52].map(item => [item, selfActions(item)]));
+  const self = Object.fromEntries([-1, 0, 16, 19, 38, 39, 43, 44, 52].map(item => [item, selfActions(item)]));
   const caveSelf = selfActions(-1, 24);
   await mkdir(out, { recursive: true });
   await writeFile(join(out, 'note.kyr.gz'), encodeScenePack({ note: noteClip }));
@@ -173,6 +178,16 @@ export async function buildForest(root, out = "public/assets/forest") {
       },
       { 0: id },
     );
+    if (resources.has(`${name}.VRM`))
+      for (const [n, b] of readPak(get(`${name}.VRM`)))
+        if (n.endsWith(".VOC")) durations[Number.parseInt(n)] = vocDuration(b);
+    // GEM already has its original scenery and lift movies in the world pack.
+    if (name === 'GEM') {
+      const clipFrames = Object.fromEntries(['liftup', 'liftdown'].map(clip =>
+        [clip, decodeWsa(get(`${clip.toUpperCase()}.WSA`)).frames.length]));
+      data.rooms[name] = { ...base, title, program, durations, clipFrames, npcFrames: {} };
+      continue;
+    }
     if (name === "FORESTB") {
       restoreBackgroundColumns(image.pixels, 17);
       restoreBackgroundColumns(mask.pixels, 17, 136);
@@ -250,9 +265,6 @@ export async function buildForest(root, out = "public/assets/forest") {
         };
       }
     }
-    if (resources.has(`${name}.VRM`))
-      for (const [n, b] of readPak(get(`${name}.VRM`)))
-        if (n.endsWith(".VOC")) durations[Number.parseInt(n)] = vocDuration(b);
     const pack = encodeScenePack(clips);
     await writeFile(join(out, `${name.toLowerCase()}.kyr.gz`), pack);
     data.rooms[name] = {

@@ -5,6 +5,7 @@ export type ControlMode = 'modern' | 'classic';
 
 export type GameConfig = {
   inventoryCanvas?: HTMLCanvasElement;
+  inventoryTooltipCanvas?: HTMLCanvasElement;
   backdropCanvas?: HTMLCanvasElement;
   scene: SceneConfig;
   controlMode?: ControlMode;
@@ -63,7 +64,7 @@ export type WorldSave = {
   version: 1;
   currentRoom: number;
   rooms: Record<number, RoomSnapshot>;
-  quest: { flags: number[]; files: Record<number, string>; phasing: boolean; vase: number; merith: SavedNpc; herman: SavedNpc };
+  quest: { flags: number[]; files: Record<number, string>; phasing: boolean; vase: number; vaseInitialized?: boolean; merith: SavedNpc; herman: SavedNpc };
   settings: { atmosphere: boolean; walkSpeed: "slowest" | "slow" | "fast" | "fastest"; animStepInterval: number };
 };
 

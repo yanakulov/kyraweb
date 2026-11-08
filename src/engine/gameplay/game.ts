@@ -453,6 +453,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       const radialPointer = inventoryOpen && state.pointer ? toRadialPoint(state.pointer) : null;
       const heldOverRadial = radialCanvas && radialPointer &&
         (radialPointer.x - radial.x) ** 2 + (radialPointer.y - radial.y) ** 2 <= radial.radius ** 2;
+      const tooltip = config.inventoryTooltipCanvas;
+      let showTooltip = false;
       if (radialCanvas) radialCanvas.hidden = !showRadial;
       if (modern) {
         if (showRadial) {
@@ -489,7 +491,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
             const halfHeight = radial.radius * radialFootprint.y;
             drawInventoryTooltip(ctx, t(getItemStatusName(id)), {
               x: radial.x, top: radial.y - halfHeight, bottom: radial.y + halfHeight
-            }, ROOM_ART);
+            }, ROOM_ART, tooltip);
+            showTooltip = true;
           }
         } else if (state.statusMessage) {
           drawStatusLine(ctx, translateGameText(state.statusMessage), scene.uiMaskY - 13, ROOM_ART.x + ROOM_ART.w, ROOM_ART.x + 4);
@@ -514,9 +517,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           const slot = getInventorySlotPositions()[hovered];
           drawInventoryTooltip(ctx, t(getItemStatusName(id)), {
             x: slot.x + INVENTORY_ICON_SIZE / 2, top: slot.y, bottom: slot.y + INVENTORY_ICON_SIZE
-          }, { x: 0, y: 0, w: LOGICAL_WIDTH, h: LOGICAL_HEIGHT });
+          }, { x: 0, y: 0, w: LOGICAL_WIDTH, h: LOGICAL_HEIGHT }, tooltip);
+          showTooltip = true;
         }
       }
+      if (tooltip) tooltip.hidden = !showTooltip;
       if (!heldOverRadial && state.itemInHand && state.pointer && !exitCursor(availablePortals(), state.pointer))
         drawHeldItem(ctx, state.pointer, INVENTORY_ICON_SIZE);
 
@@ -912,7 +917,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
     }
 
-    function playScript(actions: RoomAction[], done?: () => void) {
+    function playScript(actions: RoomAction[], done?: () => void, startImmediately = true) {
       if (actions.some(action => action.op === 'exit') && talkToTree()) return;
       stopWalking();
       inventoryOpen = false;
@@ -923,7 +928,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       sequence = new RoomScript(actions, { apply: applyScript, walking: () => state.moving || ambientWait !== null,
         movementTempo: () => state.walkDelayTicks / 6,
         frames: name => scriptRenderers.get(name)?.clip.info.frames.length ?? 0 });
-      if (!paused) sequence.update(0);
+      if (!paused && startImmediately) sequence.update(0);
     }
 
     function skipOpening() {
@@ -976,7 +981,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       for(const action of config.setupActions??[])applyScript(action);
       for(const anim of sceneAnims)anim.visible=anim.play;
       if (openingScript && config.playOpening !== false) { playScript(openingScript.opening); openingSequence = sequence; }
-      else if (config.entryActions?.length) playScript(config.entryActions);
+      // Entry audio starts on the first frame after the destination is ready.
+      else if (config.entryActions?.length) playScript(config.entryActions, undefined, false);
     }
 
     config.signal?.throwIfAborted();

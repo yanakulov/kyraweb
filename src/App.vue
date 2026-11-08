@@ -1,5 +1,5 @@
 <template>
-  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()">
+  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()">
     <FantasyBook v-if="!bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :snapshot="openingSnapshot ?? undefined" :frame-focus="bookFocus" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="prepareOpening" @ready="openingReadingReady = true" @open="openBook">
       <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" :show-story="!prologueSeen" @continue="finishPrologue">
         <template #audio><MusicSettings v-if="musicState" :player="music" :state="musicState" /></template>
@@ -18,10 +18,11 @@
       <div class="stage" :class="{ 'cursor-controlled': customCursor }" :aria-busy="loading"
         @pointerenter="handleMove" @pointermove="handleMove" @pointerleave="leaveStage"
         @pointerdown="handlePointerDown" @pointerup="handlePointerUp" @pointercancel="cancelGesture" @contextmenu.prevent="handleContextMenu">
-        <div class="scene-plane">
+        <div class="scene-plane" :style="cinematicPlane">
         <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :scale-y="subtitleScaleY" :alpha="subtitleAlpha" :visible="subtitleVisible" />
         <canvas ref="canvasRef" width="320" height="200" :aria-label="t('Kyrandia game scene')" @click="handleClick"></canvas>
         <canvas ref="inventoryCanvas" class="radial-surface" aria-hidden="true" hidden></canvas>
+        <canvas ref="inventoryTooltip" class="inventory-tooltip" aria-hidden="true" hidden></canvas>
         <div v-if="customCursor && (pointerInStage || touchPointer) && (cursorExit || !heldItem)" class="game-cursor" :style="cursorStyle" aria-hidden="true">
           <img :src="`${baseUrl}assets/cursors/${cursorExit ?? 'pointer'}.svg`" alt="" />
         </div>
@@ -34,6 +35,19 @@
         <p v-if="navigationError" class="scene-notice" role="status">{{ t(navigationError) }}</p>
       </div>
     </div>
+    <dialog v-if="mobilePortrait" ref="rotationDialog" class="rotation-dialog" aria-labelledby="rotation-title" aria-describedby="rotation-help" @cancel.prevent>
+      <svg class="rotation-icon" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="5" width="15" height="26" rx="2" />
+        <rect x="17" y="32" width="26" height="13" rx="2" />
+        <path d="M26 8c8 1 14 8 14 16m-5-4 5 5 5-5" />
+      </svg>
+      <h1 id="rotation-title">{{ t('Turn your device') }}</h1>
+      <p id="rotation-help">{{ t('Kyrandia plays best in landscape and full screen.') }}</p>
+      <button v-if="fullscreenAvailable" type="button" class="pixel-button" @click="toggleFullscreen">
+        {{ t(isFullscreen ? 'Exit full screen' : 'Full screen') }}
+      </button>
+      <p v-else class="rotation-note">{{ t('Full screen is unavailable in this browser.') }}</p>
+    </dialog>
   </main>
 </template>
 
@@ -94,9 +108,9 @@ function prepareOpening() {
 function openBook() {
   openingFinished = true; bookBusy.value = false;
   if (openingSnapshot.value && game) {
-    bookOpened.value = true; openingSnapshot.value = null; game.setPaused(false); syncControls();
+    bookOpened.value = true; openingSnapshot.value = null; game.setPaused(mobilePortrait.value); syncControls();
   } else if (introFrameReady || gameError.value) {
-    bookOpened.value = true; intro?.setPaused(false);
+    bookOpened.value = true; intro?.setPaused(mobilePortrait.value);
   } else prepareOpening();
 }
 function closePanels() { if (readingHistory.value) { readingHistory.value = false; return; } if (!kallakMenu.value) resumeBook(); }
@@ -104,7 +118,7 @@ function showSettings() { showBookOptions(); }
 function activateOptions(event: MouseEvent) { if (event.detail === 0 || !touchPointer.value) showSettings(); }
 import { mapPointerToCanvas, startGame } from "./engine/gameplay/game";
 import { HUD_OPTIONS_RECT, LOGICAL_HEIGHT, LOGICAL_WIDTH, ROOM_ART, ROOM_VIEW_HEIGHT } from "./engine/core/constants";
-import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
+import { buildIntroSteps, introArtBounds, playIntro, type IntroPlayback } from "./engine/intro";
 import { gemCutScene } from "./engine/scenes/gemCut";
 import SubtitleOverlay from "./components/SubtitleOverlay.vue";
 import { exitCursor } from "./engine/gameplay/navigation";
@@ -162,8 +176,12 @@ const gameError = ref("");
 const loading = ref(false);
 const fullscreenAvailable = ref(false);
 const isFullscreen = ref(false);
+const portraitMedia = window.matchMedia('(orientation: portrait) and (pointer: coarse)');
+const mobilePortrait = ref(portraitMedia.matches);
+const rotationDialog = ref<HTMLDialogElement>();
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const inventoryCanvas = ref<HTMLCanvasElement | null>(null);
+const inventoryTooltip = ref<HTMLCanvasElement | null>(null);
 const sceneBackdrop = ref<HTMLCanvasElement | null>(null);
 let game: Awaited<ReturnType<typeof startGame>> | null = null;
 let gameLoadController: AbortController | null = null;
@@ -173,7 +191,7 @@ const showLayerInfo = ref(false);
 const maskOpacity = ref(0.35);
 const walkSpeed = ref<"slowest" | "slow" | "fast" | "fastest">("fast");
 const animStepInterval = ref(1);
-const introActive = ref(true);
+const introActive = ref(true), openingScene = ref(false);
 let intro: IntroPlayback | null = null;
 const overlayOpen = computed(() => !!bookSnapshot.value || (!bookOpened.value && openingReadingReady.value));
 let panelTrigger: HTMLElement | null = null;
@@ -187,7 +205,7 @@ watch(overlayOpen, async () => {
   }
 });
 function handlePanelKey(event: KeyboardEvent) {
-  if (firstRun.value || event.defaultPrevented) return;
+  if (firstRun.value || mobilePortrait.value || event.defaultPrevented) return;
   if (!overlayOpen.value) {
     if (!bookOpened.value || event.repeat) return;
     if (event.code === 'KeyI' && toggleInventory()) event.preventDefault();
@@ -209,6 +227,11 @@ const introSteps = buildIntroSteps();
 let introRunId = 0;
 let subtitleResizeObserver: ResizeObserver | null = null;
 const currentIntroStep = ref(introSteps[0]?.id ?? "");
+const cinematicPlane = computed(() => {
+  const art = introActive.value ? introArtBounds(currentIntroStep.value) : openingScene.value ? ROOM_ART : null;
+  return art ? { left: `${-art.x / art.w * 100}%`, top: `${-art.y / art.h * 100}%`,
+    width: `${LOGICAL_WIDTH / art.w * 100}%`, height: `${gameViewHeight.value / art.h * 100}%` } : undefined;
+});
 const subtitleLines = ref([] as import('./engine/intro/types').IntroSubtitle[]);
 const subtitleAlpha = ref(1);
 const subtitleVisible = computed(() => subtitleLines.value.length > 0);
@@ -235,7 +258,7 @@ const config = {
     else if (action.op === 'say' && action.voiceBank) music.speak(action.voiceBank, action.voiceId);
     else if (action.op === 'clearText' && action.stopVoice) music.stopSpeech();
   },
-  onLoadingChange: (value: boolean) => { if (value) { music.stopEffects(); music.stopSpeech(); } loading.value = value; queueMicrotask(syncControls); },
+  onLoadingChange: (value: boolean) => { if (value) music.stopSpeech(); loading.value = value; queueMicrotask(syncControls); },
   onNavigationError: (message: string) => { navigationError.value = message; },
   onSubtitleChange: (lines: import('./engine/intro/types').IntroSubtitle[]) => { subtitleLines.value = lines; },
   onSequenceChange: (active: boolean) => { if (!active) music.stopSpeech(); sequenceActive.value = active; queueMicrotask(syncControls); }
@@ -295,7 +318,7 @@ async function bookOptionsReady() {
 function resumeBook() { if (gameOver.value || bookBusy.value || !bookSnapshot.value || bookReturning.value) return; bookReturning.value = true; }
 function finishBookResume() {
   bookSnapshot.value = null; bookReady.value = false; bookReturning.value = false;
-  intro?.setPaused(false); game?.setPaused(false); syncControls();
+  intro?.setPaused(mobilePortrait.value); game?.setPaused(mobilePortrait.value); syncControls();
   const action = afterBookResume; afterBookResume = null; action?.();
 }
 function startJourney() {
@@ -326,6 +349,7 @@ async function restoreChapter(record: SaveRecord) {
   const oldFrame = captureFrame();
   try {
     const candidate = await startGame(canvasRef.value, { ...config, inventoryCanvas: inventoryCanvas.value ?? undefined,
+      inventoryTooltipCanvas: inventoryTooltip.value ?? undefined,
       backdropCanvas: sceneBackdrop.value ?? undefined, controlMode: controlMode.value, saveState: record.state, paused: true, signal: controller.signal,
       onDeath: () => { if (committed) config.onDeath(); },
       onCheckpoint: () => { if (committed) config.onCheckpoint(); },
@@ -341,7 +365,7 @@ async function restoreChapter(record: SaveRecord) {
     introRunId++;
     intro?.stop(); intro = null; game?.stop(); gameLoadController?.abort();
     gameLoadController = controller; game = candidate; committed = true;
-    introActive.value = false; kallakMenu.value = false; noteVisible.value = false;
+    introActive.value = openingScene.value = false; kallakMenu.value = false; noteVisible.value = false;
     music.stop(); music.restoreRoom(record.state.currentRoom);
     if (restoredVoiceBank) music.prepareVoice(restoredVoiceBank);
     gameError.value = ''; gameOver.value = false; navigationError.value = ''; loading.value = false;
@@ -407,6 +431,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     game = null;
   }
   introActive.value = true;
+  openingScene.value = false;
   gameOver.value = false;
   music.stop();
   music.prepareVoice('INTRO');
@@ -416,13 +441,14 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   subtitleLines.value = [];
   const runId = introRunId;
   const steps = introSteps.slice(startIndex);
+  currentIntroStep.value = steps[0]?.id ?? '';
   let introVoice: number | undefined;
   introFrameReady = false;
   intro = playIntro(canvasRef.value, steps, {
     onFirstFrame: () => {
       introFrameReady = true;
       if (bookOpened.value || openingFinished) bookOpened.value = true;
-      else intro?.setPaused(true);
+      intro?.setPaused(mobilePortrait.value || !bookOpened.value);
     },
     renderSubtitlesOnCanvas: false,
     atmosphere: () => true,
@@ -448,7 +474,9 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
         introVoice = voice;
         music.speak('INTRO', voice);
       }
-      subtitleLines.value = payload.lines;
+      subtitleLines.value = payload.stepId === 'kallak_writing'
+        ? payload.lines.map(line => ({ ...line, y: ROOM_ART.y + ROOM_ART.h - 32 }))
+        : payload.lines;
       subtitleAlpha.value = payload.alpha;
     }
   });
@@ -461,6 +489,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     return;
   }
   introActive.value = false;
+  openingScene.value = true;
   music.beginGame();
   subtitleLines.value = [];
   subtitleAlpha.value = 1;
@@ -468,7 +497,8 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   loading.value = true;
   gameLoadController = new AbortController();
   const startedGame = await startGame(canvasRef.value, { ...config, inventoryCanvas: inventoryCanvas.value ?? undefined,
-    backdropCanvas: sceneBackdrop.value ?? undefined, controlMode: controlMode.value,
+    inventoryTooltipCanvas: inventoryTooltip.value ?? undefined,
+    backdropCanvas: sceneBackdrop.value ?? undefined, controlMode: controlMode.value, paused: mobilePortrait.value,
     signal: gameLoadController.signal,
     onCheckpoint: () => { if (runId === introRunId) config.onCheckpoint(); },
     onLocationChange: (name, id, bank) => { if (runId === introRunId) config.onLocationChange(name, id, bank); },
@@ -477,13 +507,18 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     onLoadingChange: value => { if (runId === introRunId) config.onLoadingChange(value); },
     onNavigationError: message => { if (runId === introRunId) config.onNavigationError(message); },
     onSubtitleChange: lines => { if (runId === introRunId) config.onSubtitleChange(lines); },
-    onSequenceChange: active => { if (runId === introRunId) config.onSequenceChange(active); }
+    onSequenceChange: active => {
+      if (runId !== introRunId) return;
+      if (!active) openingScene.value = false;
+      config.onSequenceChange(active);
+    }
   });
   if (runId !== introRunId) {
     startedGame.stop();
     return;
   }
   game = startedGame;
+  game.setPaused(mobilePortrait.value);
   syncControls();
   loading.value = false;
   game.setDebug({
@@ -531,6 +566,12 @@ function replayIntro() {
 
 function updateFullscreen() {
   isFullscreen.value = document.fullscreenElement === appRef.value;
+  const dialog = rotationDialog.value;
+  if (dialog?.open) {
+    // Keep the prompt above the app when the app itself enters the top layer.
+    dialog.close();
+    dialog.showModal();
+  }
 }
 
 async function toggleFullscreen() {
@@ -614,6 +655,16 @@ function handlePointerUp(event: PointerEvent) {
 }
 function cancelGesture() { gesture = null; }
 
+function updateOrientation() {
+  mobilePortrait.value = portraitMedia.matches;
+  cancelGesture();
+  const paused = mobilePortrait.value || !bookOpened.value || !!bookSnapshot.value;
+  intro?.setPaused(paused);
+  game?.setPaused(paused);
+}
+
+watch(rotationDialog, dialog => dialog?.showModal(), { flush: 'post' });
+
 onMounted(() => {
   void music.restore();
   document.addEventListener('visibilitychange', musicVisibility);
@@ -621,6 +672,7 @@ onMounted(() => {
   document.addEventListener('keydown', handlePanelKey);
   fullscreenAvailable.value = document.fullscreenEnabled;
   document.addEventListener("fullscreenchange", updateFullscreen);
+  portraitMedia.addEventListener('change', updateOrientation);
   document.title = 'Fables & Fiends — The Legend of Kyrandia';
   subtitleResizeObserver = new ResizeObserver(updateSubtitleScale);
   if (canvasRef.value) subtitleResizeObserver.observe(canvasRef.value);
@@ -639,6 +691,7 @@ onBeforeUnmount(() => {
   game?.stop();
   window.removeEventListener("resize", updateSubtitleScale);
   document.removeEventListener("fullscreenchange", updateFullscreen);
+  portraitMedia.removeEventListener('change', updateOrientation);
 });
 
 watch([showMask, maskOpacity, showLayerInfo, walkSpeed, animStepInterval], () => {
@@ -659,5 +712,7 @@ watch(introActive, (active) => {
 
 
 function musicVisibility() { music.setHidden(document.hidden); }
-watch([bookOpened, bookSnapshot, loading, gameError], () => music.setPaused(!bookOpened.value || !!bookSnapshot.value || loading.value || !!gameError.value), { immediate: true, flush: 'sync' });
+watch([bookOpened, bookSnapshot, loading, gameError, mobilePortrait],
+  () => music.setPaused(!bookOpened.value || !!bookSnapshot.value || loading.value || !!gameError.value || mobilePortrait.value),
+  { immediate: true, flush: 'sync' });
 </script>

@@ -121,18 +121,42 @@ export function drawStatusLine(ctx: CanvasRenderingContext2D, text: string, y: n
 }
 
 export function drawInventoryTooltip(ctx: CanvasRenderingContext2D, text: string,
-  anchor: { x: number; top: number; bottom: number }, bounds: { x: number; y: number; w: number; h: number }) {
-  ctx.save();
-  ctx.font = statusFont;
-  const width = Math.min(bounds.w - 4, labelWidth(ctx, text) + 10), height = 14;
+  anchor: { x: number; top: number; bottom: number }, bounds: { x: number; y: number; w: number; h: number },
+  surface?: HTMLCanvasElement) {
+  const font = '6.5px Tahoma, "Segoe UI", sans-serif';
+  ctx.save(); ctx.font = font;
+  const width = Math.min(bounds.w - 4, Math.ceil(ctx.measureText(text).width) + 8), height = 11;
+  ctx.restore();
   const x = Math.round(Math.max(bounds.x + 2, Math.min(anchor.x - width / 2, bounds.x + bounds.w - width - 2)));
   const above = Math.floor(anchor.top - height - 2);
   const y = Math.max(bounds.y + 2, Math.min(bounds.y + bounds.h - height - 2,
     above >= bounds.y + 2 ? above : Math.ceil(anchor.bottom + 2)));
-  ctx.fillStyle = '#c09a62'; ctx.fillRect(x, y, width, height);
-  ctx.fillStyle = '#191820'; ctx.fillRect(x + 1, y + 1, width - 2, height - 2);
-  drawPixelLabel(ctx, text, x + 5, y + 2, width - 9);
-  ctx.restore();
+  const overlay = surface?.getContext('2d');
+  const target = overlay ?? ctx;
+  if (surface && overlay) {
+    const rect = ctx.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const sx = rect.width / ctx.canvas.width, sy = rect.height / ctx.canvas.height;
+    const pixelWidth = Math.max(1, Math.round(width * sx * dpr));
+    const pixelHeight = Math.max(1, Math.round(height * sy * dpr));
+    if (surface.width !== pixelWidth) surface.width = pixelWidth;
+    if (surface.height !== pixelHeight) surface.height = pixelHeight;
+    surface.style.left = `${Math.round((rect.left + x * sx) * dpr) / dpr - rect.left}px`;
+    surface.style.top = `${Math.round((rect.top + y * sy) * dpr) / dpr - rect.top}px`;
+    surface.style.width = `${pixelWidth / dpr}px`;
+    surface.style.height = `${pixelHeight / dpr}px`;
+    overlay.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
+  }
+  target.save();
+  if (!overlay) target.translate(x, y);
+  target.fillStyle = '#927c57'; target.fillRect(0, 0, width, height);
+  target.fillStyle = '#191820'; target.fillRect(1, 1, width - 2, height - 2);
+  target.font = font;
+  target.textBaseline = 'middle';
+  target.textAlign = 'center';
+  target.fillStyle = '#f1e4c5';
+  target.fillText(text, width / 2, height / 2, width - 6);
+  target.restore();
 }
 
 function getImageData(image: HTMLImageElement) {
