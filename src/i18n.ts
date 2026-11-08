@@ -55,6 +55,8 @@ export const russian: Record<string, string> = {
   "It didn't happen that way!": 'Всё было не так!',
   'Load game': 'Загрузить игру',
   'Settings': 'Настройки',
+  'Game': 'Игра',
+  'Sound': 'Звук',
   'Sound settings': 'Настройки звука',
   'Back to book': 'Назад к книге',
   'Music device': 'Музыкальное устройство',

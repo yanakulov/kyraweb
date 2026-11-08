@@ -224,7 +224,8 @@ function draw(now: number) {
   const focus = new T.Vector3(focusX, T.MathUtils.lerp(.1,.45,readingView), 0);
   const from = new T.Vector3(focusX + viewX * .28, (7.8 - viewY * .2) * fit, 5.7 * fit);
   if (readingView) {
-    const distance = Math.max(4.6, 3.05/(width/height))/(2*Math.tan(camera.fov*Math.PI/360));
+    const spreadHeight = width >= 1024 && height >= 640 ? 5.65 : 4.6;
+    const distance = Math.max(spreadHeight, 3.05/(width/height))/(2*Math.tan(camera.fov*Math.PI/360));
     const tilt = portrait ? .18 : .36;
     from.lerp(focus.clone().add(new T.Vector3(0, Math.cos(tilt)*distance, Math.sin(tilt)*distance)),readingView);
   }
@@ -329,7 +330,12 @@ onMounted(async () => {
     if (hasReadingPage) {
       model.scene.traverse(object => { if (/^(Inside_folio_bookplate|Original_Fables_and_Fiends_bookplate|Original_Book_One_bookplate)$/.test(object.name)) object.visible = false; });
       const lining = model.scene.getObjectByName('Front_board_suede_lining') as T.Mesh<T.BufferGeometry,T.MeshStandardMaterial> | undefined;
-      if (lining?.isMesh) { lining.material.dispose(); lining.material = page.material.clone(); }
+      if (lining?.isMesh) {
+        lining.material.dispose();
+        lining.material = page.material.clone();
+        lining.material.emissive.setHex(0xb79b69);
+        lining.material.emissiveIntensity = .23;
+      }
     }
     if (pageLayer.value) {
       uiRenderer = new CSS3DRenderer(); uiRenderer.domElement.className = 'book-projection';
@@ -385,8 +391,8 @@ onMounted(async () => {
       const bounds = host.value.getBoundingClientRect();
       ({ width, height } = bounds);
       const portrait = width / height < .85;
-      candlestick?.position.set(portrait ? 1.7 : 3.6, -.14, portrait ? -3.3 : -1.8);
-      candle?.position.set(portrait ? 1.7 : 3.6, 1.96, portrait ? -3.3 : -1.8);
+      candlestick?.position.set(portrait ? 1.7 : 2.94, -.14, portrait ? -3.3 : -2.32);
+      candle?.position.set(portrait ? 1.7 : 2.94, 1.96, portrait ? -3.3 : -2.32);
       const live = props.gameCanvas;
       const target = hasRoomFrame() && live?.height === ROOM_VIEW_HEIGHT
         ? live.closest('.stage')?.getBoundingClientRect() : live?.getBoundingClientRect();

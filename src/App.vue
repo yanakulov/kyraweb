@@ -283,6 +283,7 @@ function captureBookFrame() {
   copy.width = w; copy.height = h;
   copy.getContext('2d')!.drawImage(source, x, y, w, h, 0, 0, w, h);
   if (actor) bookFocus.value = { x: (actor.x - x) / w, y: 1 - (actor.y - y - 20) / h };
+  else if (kallakMenu.value) bookFocus.value = { x: .72, y: .61 };
   return copy;
 }
 let autosaveFrame = 0;

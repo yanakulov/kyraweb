@@ -362,6 +362,73 @@ for obj in candle_objects:
     obj.parent=candle_root
     obj.matrix_parent_inverse=candle_root.matrix_world.inverted()
 
+# Kallak's desk has two small groups of objects. The quill stays beyond the
+# back edge of the moving cover, and the letter stays to its right.
+ink_z = -2.60
+assert ink_z + .37 < -2.05
+ink_blue = material("Midnight blue ink glass", (.031,.10,.12), .24, .25)
+ink_dark = material("Wet black ink", (.008,.013,.018), .11, .16)
+lathe("Octagonal inkwell", (-2.55,-.157,ink_z),
+      [(0,.29),(.04,.34),(.17,.35),(.28,.30),(.35,.21),(.42,.16),(.45,.17)],
+      ink_blue, 8)
+lathe("Inkwell brass collar", (-2.55,.254,ink_z),
+      [(0,.166),(.023,.184),(.05,.181),(.062,.155)], brass, 10)
+lathe("Ink in the well", (-2.55,.307,ink_z), [(0,.148),(.008,.148)], ink_dark, 10)
+
+shaft = material("Quill shaft", (.53,.36,.16), 0, .61)
+feather = material("Pheasant feather", (.48,.29,.14), 0, .84)
+feather_tip = material("Pheasant feather shadows", (.30,.143,.066), 0, .87)
+quill_start = Vector((-2.55,.28,ink_z))
+quill_end = Vector((-3.86,.90,-2.78))
+quill = [tuple(quill_start.lerp(quill_end, t) + Vector((0,.12*math.sin(t*math.pi),0)))
+         for t in np.linspace(0, 1, 15)]
+quill_spine = tube("Pheasant quill", quill, .014, shaft)
+quill_spine.data.bevel_resolution = 1
+vane = [0,.062,.105,.147,.171,.162,.126,.08,0]
+for side, mat in [(-1, feather_tip), (1, feather)]:
+    verts = []
+    for i, (centre, width) in enumerate(zip(quill[6:], vane)):
+        dx, dy, dz = centre
+        spread = width * (1 if side > 0 else .72) * (1 if i not in (4,7) else .75)
+        verts.extend([(dx,dy,dz), (dx+.55*spread,dy+.42*side*spread,dz-1.25*side*spread)])
+    mesh("Quill vane", verts, [(i,i+1,i+3,i+2) for i in range(0,len(verts)-2,2)], mat)
+
+letter_x, letter_z, letter_angle = 2.63, 1.36, -.18
+letter_width = 1.25
+assert letter_x - .72 > -1.55 + 3.2
+def letter_point(x, y, z):
+    c, s = math.cos(letter_angle), math.sin(letter_angle)
+    return (letter_x+x*c-z*s, y, letter_z+x*s+z*c)
+
+envelope = material("Folded letter paper", (.47,.31,.15), 0, .87, paper_image)
+crease = material("Folded letter crease", (.40,.23,.10), 0, .86)
+body = box("Sealed letter", letter_point(0,-.131,0), (letter_width,.052,.83), envelope, .023)
+body.rotation_euler.z = -letter_angle
+body.modifiers["Soft handmade edges"].segments = 2
+mesh("Letter flap", [letter_point(x,y,z) for x,y,z in
+     [(-.60,-.101,-.39),(.60,-.101,-.39),(0,-.085,.07)]], [(2,1,0)], envelope)
+fold = tube("Letter fold", [letter_point(x,-.095,z) for x,z in [(-.58,-.36),(0,.07),(.58,-.36)]],
+            .009, crease)
+fold.data.bevel_resolution = 1
+seal = material("Oxblood sealing wax", (.32,.023,.025), 0, .46)
+seal_dark = material("Wax seal engraving", (.14,.008,.009), 0, .59)
+lathe("Wax seal", letter_point(0,-.101,.065),
+      [(0,.112),(.01,.148),(.026,.137),(.041,.124),(.049,.105)], seal, 14)
+mesh("Seal diamond", [letter_point(x,-.050,z+.065) for x,z in
+     [(0,-.076),(.051,0),(0,.076),(-.051,0)]], [(3,2,1,0)], seal_dark)
+
+def desk_gem(name, x, z, radius, colour):
+    gem = material(name, colour, .28, .20)
+    rings = [(-.157,.56),(-.12,1),(-.024,.61)]
+    verts = [(x+r*radius*math.cos(a*math.tau/6),y,
+              z+r*radius*math.sin(a*math.tau/6)) for y,r in rings for a in range(6)]
+    faces = [(i+6*j,(i+1)%6+6*j,(i+1)%6+6*(j+1),i+6*(j+1))
+             for i in range(6) for j in range(2)]
+    mesh(name, verts, faces + [(17,16,15,14,13,12)], gem)
+
+desk_gem("Malachite", 2.12, 2.02, .17, (.035,.29,.12))
+desk_gem("Garnet", 2.49, 2.13, .125, (.48,.027,.039))
+
 # Pack the source-derived maps into the GLB; no runtime modeling is needed.
 for obj in list(bpy.context.scene.objects):
     if obj.type == "CURVE":
