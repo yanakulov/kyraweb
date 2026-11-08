@@ -4,6 +4,7 @@ export type Vec2 = { x: number; y: number };
 export type ControlMode = 'modern' | 'classic';
 
 export type GameConfig = {
+  inventoryCanvas?: HTMLCanvasElement;
   scene: SceneConfig;
   controlMode?: ControlMode;
   onOptions?: () => void;

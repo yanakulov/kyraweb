@@ -20,7 +20,8 @@
       <label class="rom-import" :class="{ 'is-busy': state.busy }">{{ t('Add SoundFont bank (.sf2)') }}<input type="file" accept=".sf2" :disabled="state.busy" @change="importFont" /></label>
       <p class="music-note">{{ t('Each imported bank becomes a separate choice. Files stay in this browser; local banks are loaded only when selected.') }}</p>
     </template>
-    <div class="music-buttons"><button type="button" :disabled="!state.available || state.busy" @click="player.preview()">{{ t(state.previewing ? 'Stop test' : 'Test music') }}</button><button v-if="state.renderer === 'mt32' && state.available && state.source !== 'local'" type="button" :disabled="state.busy" @click="player.forgetRoms()">{{ t('Remove ROMs') }}</button></div>
+    <div class="music-buttons"><button type="button" :disabled="!state.available || state.busy" @click="player.preview(basic)">{{ t(state.previewing ? 'Stop test' : basic ? 'Test audio mix' : 'Test music') }}</button><button v-if="state.renderer === 'mt32' && state.available && state.source !== 'local'" type="button" :disabled="state.busy" @click="player.forgetRoms()">{{ t('Remove ROMs') }}</button></div>
+    <p v-if="basic" class="music-note mix-note">{{ t('Listen to music, effects and speech together while adjusting their levels.') }}</p>
     <p v-if="state.soundFontProgress !== undefined" class="music-note" role="status">{{ t('Loading SoundFont…') }} {{ state.soundFontProgress }}%</p>
     <p v-else-if="state.message" class="music-note" role="status">{{ t(state.message) }}</p>
     <p v-if="!basic" class="music-note music-credit"><a :href="withBase('assets/audio/README.md')" target="_blank" rel="noopener">AdPlug / Nuked OPL3 / Munt / TinySoundFont</a> · <a :href="withBase(state.renderer === 'adlib' ? 'assets/audio/adlib-source.tar.gz' : 'assets/audio/mt32-source.tar.gz')">{{ t('Emulator source') }}</a></p>
@@ -51,5 +52,16 @@ onBeforeUnmount(() => props.player.stopPreview());
 .is-basic { display: grid; grid-template-columns: minmax(96px, 1fr) minmax(0, 2fr); gap: 2px 16px; margin: 0; padding: 0; border: 0; }
 .is-basic > :not(.sfx-switch, .music-volume) { grid-column: 1 / -1; }
 .is-basic .music-volume { margin-top: 4px; }
-.is-basic .music-buttons button { border: 1px solid #77502170; background: #7f5a2316; }
+.is-basic .music-buttons button { border: 1px solid #946039; color: #60301e; background: #e5c08455; box-shadow: inset 0 0 0 2px #f5dfae75; font-variant: small-caps; }
+.is-basic .sfx-switch input { appearance: none; flex: 0 0 17px; width: 17px; height: 17px; margin: 0 2px; border: 1px solid #886035;
+  background: #e8cb94; box-shadow: inset 0 0 0 2px #edd9ab; display: grid; place-items: center; cursor: pointer; }
+.is-basic .sfx-switch input:checked { background: #603026; box-shadow: inset 0 0 0 2px #a86848; }
+.is-basic .sfx-switch input:checked::after { content: ''; width: 5px; height: 5px; background: #f1d79d; transform: rotate(45deg); }
+.is-basic .music-volume input { appearance: none; margin: 0; background: transparent; accent-color: #773f2e; cursor: pointer; }
+.is-basic .music-volume input::-webkit-slider-runnable-track { height: 6px; border: 1px solid #a47b47; background: #d1a869; box-shadow: inset 0 1px 2px #74523555; }
+.is-basic .music-volume input::-webkit-slider-thumb { appearance: none; width: 13px; height: 13px; margin-top: -5px; transform: rotate(45deg); border: 2px solid #c29257; background: #70342b; }
+.is-basic .music-volume input::-moz-range-track { height: 4px; border: 1px solid #a47b47; background: #d1a869; }
+.is-basic .music-volume input::-moz-range-thumb { width: 9px; height: 9px; border-radius: 0; transform: rotate(45deg); border: 2px solid #c29257; background: #70342b; }
+.is-basic :deep(.book-select-trigger) { background: #e9cc9455; box-shadow: inset 0 0 0 2px #f4dea775; border-color: #916641; }
+.mix-note { text-align: center; }
 </style>

@@ -1,23 +1,21 @@
 import { INVENTORY_ICON_SIZE, ITEMS_SHEET_COLS } from "../core/constants";
 import { getDrawLayer } from "../scene/masks";
 import type { InventoryItem, InventoryItemId, InventorySlot, MaskData, SceneItem, Vec2 } from "../core/types";
+// Entries follow the DOS CD item order (ScummVM's k1ItemNamesDOSEnglish table).
+import itemNames from '../../locales/item-names.json';
 
 const INVENTORY_ITEM_DEFS: Record<InventoryItemId, InventoryItem> = {
   // Tile indices are 0-based, 20 columns per row in items.png.
   letter: { id: "letter", name: "Letter", tileIndex: 42 },
-  ruby: { id: "ruby", name: "Ruby", tileIndex: 0 },
+  // Old saves call the garnet "ruby"; its original number and artwork are 0.
+  ruby: { id: "ruby", name: "Garnet", tileIndex: 0 },
   saw: { id: "saw", name: "Saw", tileIndex: 44 },
   rose: { id: "rose", name: "Lavender rose", tileIndex: 16 },
   silverRose: { id: "silverRose", name: "Silver rose", tileIndex: 19 },
   marble: { id: "marble", name: "Marble", tileIndex: 43 },
   teardrop: { id: "teardrop", name: "Teardrop", tileIndex: 52 },
-  apple: { id: "apple", name: "Apple", tileIndex: 19 },
-  appleEaten: { id: "appleEaten", name: "Apple (eaten)", tileIndex: 20 },
-  'item-25': { id: 'item-25', name: 'Pinecone', tileIndex: 25 },
-  'item-26': { id: 'item-26', name: 'Acorn', tileIndex: 26 },
-  'item-27': { id: 'item-27', name: 'Walnut', tileIndex: 27 },
-  'item-46': { id: 'item-46', name: 'Feather', tileIndex: 46 },
-  'item-80': { id: 'item-80', name: 'Magic scroll', tileIndex: 80 },
+  apple: { id: "apple", name: "Apple", tileIndex: 38 },
+  appleEaten: { id: "appleEaten", name: "Apple Core", tileIndex: 39 },
 };
 
 const INVENTORY_SLOTS: InventorySlot[] = [
@@ -35,7 +33,10 @@ const INVENTORY_SLOTS: InventorySlot[] = [
 
 export function buildInventoryItems(): Map<InventoryItemId, InventoryItem> {
   const items = new Map<InventoryItemId, InventoryItem>(Object.values(INVENTORY_ITEM_DEFS).map(item => [item.id, { ...item }]));
-  for (let tileIndex=0;tileIndex<107;tileIndex++) { const id=`item-${tileIndex}` as InventoryItemId; if (!items.has(id)) items.set(id,{id,name:'Item',tileIndex}); }
+  for (const [tileIndex, [name]] of itemNames.entries()) {
+    const id = `item-${tileIndex}` as InventoryItemId;
+    items.set(id, { id, name, tileIndex });
+  }
   return items;
 }
 
@@ -60,16 +61,14 @@ export function drawInventory(
   ctx: CanvasRenderingContext2D,
   itemsSheet: HTMLImageElement,
   inventoryItems: Map<InventoryItemId, InventoryItem>,
-  slots: (InventoryItemId | null)[],
-  positions = INVENTORY_SLOTS,
-  inset = 0
+  slots: (InventoryItemId | null)[]
 ) {
-  for (let i = 0; i < slots.length && i < positions.length; i++) {
+  for (let i = 0; i < slots.length && i < INVENTORY_SLOTS.length; i++) {
     const id = slots[i];
     if (!id) continue;
     const item = inventoryItems.get(id);
     if (!item) continue;
-    const slot = positions[i];
+    const slot = INVENTORY_SLOTS[i];
     const rect = getTileRect(item.tileIndex);
     ctx.drawImage(
       itemsSheet,
@@ -77,8 +76,8 @@ export function drawInventory(
       rect.y,
       rect.w,
       rect.h,
-      slot.x + inset,
-      slot.y + inset,
+      slot.x,
+      slot.y,
       INVENTORY_ICON_SIZE,
       INVENTORY_ICON_SIZE
     );
@@ -146,6 +145,5 @@ export function getInventorySlotPositions() {
 
 export function getItemStatusName(id: InventoryItemId) {
   const item = INVENTORY_ITEM_DEFS[id];
-  if (!item) return id;
-  return item.name ?? id;
+  return item?.name ?? itemNames[Number(id.slice(5))]?.[0] ?? 'Unknown item';
 }
