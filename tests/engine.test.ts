@@ -944,7 +944,7 @@ test('pausing freezes movement, ambient animation, script waits and input withou
 
 test('world saves restore visited props, quest files, NPCs and inventory without replay; failed loading preserves the old game', async () => {
   const h = introHarness(), original = { Image: globalThis.Image, fetch: globalThis.fetch, document: globalThis.document };
-  let now = 0, blockedPath = '', location = -1, sequence = false;
+  let now = 0, blockedPath = '', location = -1, sequence = false, loading = false;
   const requests: { url: string; signal?: AbortSignal | null }[] = [];
   class FakeImage {
     onload = () => {}; width = 320; height = 200;
@@ -968,9 +968,14 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     assert.fail(message);
   }
   const score: number[] = [];
+  const effects: { track: number; loading: boolean }[] = [];
   let restartScore = false;
   const config = { scene: gemCutScene, world: '/assets/world/world.json', playOpening: false,
-    onScriptAction: (action: RoomAction) => { if (action.op === 'music') { score.push(action.command); restartScore = action.restart; } },
+    onScriptAction: (action: RoomAction) => {
+      if (action.op === 'music') { score.push(action.command); restartScore = action.restart; }
+      if (action.op === 'sfx') effects.push({ track: action.track, loading });
+    },
+    onLoadingChange: (value: boolean) => { loading = value; },
     onLocationChange: (_: string, id?: number) => { location = id!; }, onSequenceChange: (value: boolean) => { sequence = value; } };
   const games: Awaited<ReturnType<typeof startGame>>[] = [];
   try {
@@ -1068,6 +1073,14 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     await until(() => location === 5 && !!loaded.getSaveState(), 'the trunk did not become ready');
     assert.equal(score.at(-1), 2);
     assert.equal(restartScore, false, 'ordinary forest transitions request the shared score without restarting it');
+    const lift = loaded.getPortals().find(portal => portal.id === 'lift')!;
+    loaded.runSequence([{ op: 'actor', ...lift.point, facing: 5, visible: true }]); tick();
+    effects.length = 0;
+    loaded.handleClick({ x: 255, y: 80 });
+    await until(() => location === 1 && !!loaded.getSaveState(), 'the lift did not take Brandon up to the platform');
+    assert.deepEqual(effects.filter(({ track }) => [72, 62, 63, 64].includes(track)),
+      [72, 62, 63, 64].map(track => ({ track, loading: false })));
+    assert.equal(score.at(-1), 2, 'ascending keeps the platform score');
 
     async function leaveBridge(target: number, command: number) {
       loaded.runSequence([{ op: 'exit', target: 7, entry: { x: 224, y: 110 } }]);

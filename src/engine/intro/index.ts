@@ -1,3 +1,3 @@
 export { buildIntroSteps } from "./steps";
-export { playIntro } from "./player";
+export { introArtBounds, playIntro } from "./player";
 export type { IntroPlayback, IntroStep } from "./types";

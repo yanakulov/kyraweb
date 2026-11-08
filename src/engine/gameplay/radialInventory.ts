@@ -3,7 +3,7 @@ import type { Vec2 } from '../core/types';
 import { getInventorySlotPositions, inside } from './inventory';
 
 export const RADIAL_SLOT_SIZE = 13;
-export const RADIAL_RENDER_SCALE = 4;
+export const RADIAL_RENDER_SCALE = 2;
 const orbit = 24, outer = 32, amuletScale = .4;
 const halfSlot = Math.floor(RADIAL_SLOT_SIZE / 2);
 
@@ -34,16 +34,16 @@ function disk(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, co
 
 function bevel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, lit: boolean) {
   ctx.beginPath();
-  ctx.roundRect(x + .35, y + .35, w - .7, h - .7, 1.6);
+  ctx.roundRect(x + .35, y + .35, w - .7, h - .7, .85);
   ctx.fillStyle = lit ? '#263d3c' : '#12121e';
   ctx.fill();
-  ctx.strokeStyle = lit ? '#e9c992' : '#8b795a';
-  ctx.lineWidth = .6;
+  ctx.strokeStyle = lit ? '#e2bf85' : '#8b795a';
+  ctx.lineWidth = .5;
   ctx.stroke();
   ctx.beginPath();
-  ctx.roundRect(x + 1.1, y + 1.1, w - 2.2, h - 2.2, 1);
-  ctx.strokeStyle = lit ? '#71968b' : '#423b50';
-  ctx.lineWidth = .45;
+  ctx.rect(x + 1, y + 1, w - 2, h - 2);
+  ctx.strokeStyle = lit ? '#648279' : '#352f43';
+  ctx.lineWidth = .5;
   ctx.stroke();
 }
 
@@ -60,6 +60,13 @@ function radialPlate() {
   disk(ctx, center, center, outer - 1.15, '#282437');
   disk(ctx, center, center, outer - 2.3, '#453d54');
   disk(ctx, center, center, outer - 3, '#2a2538');
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = '#88729230';
+  for (let y = 3; y < 2 * outer; y++)
+    for (let x = 3; x < 2 * outer; x++)
+      if (((x * 43 ^ y * 61 ^ x * y) & 31) < 5) ctx.fillRect(x, y, 1, .5);
+  ctx.restore();
   disk(ctx, center, center, orbit - 1.1, '#807057');
   ctx.globalCompositeOperation = 'destination-out';
   disk(ctx, center, center, orbit - 1.7, '#fff');
@@ -92,7 +99,7 @@ export function drawRadialInventory(ctx: CanvasRenderingContext2D, layout: Retur
   const lit = !!pointer && inside(pointer, layout.options);
   bevel(ctx, x, y, w, h, lit);
   ctx.fillStyle = lit ? '#fff0bf' : '#ddc18a';
-  ctx.font = 'bold 5.1px Georgia, serif';
+  ctx.font = '600 4.6px Tahoma, "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(menu.toUpperCase(), x + w / 2, y + h / 2 + .15, w - 2);

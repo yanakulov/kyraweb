@@ -75,6 +75,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   const { rooms } = await response.json() as { rooms: WorldRoom[] };
   const forest=await loadForestData(withBase('assets/forest/forest.json.gz'),config.signal);
   const quest=restored ? { ...restored.quest, flags: new Set(restored.quest.flags) } : createForestState();
+  if (restored && !restored.quest.vaseInitialized && quest.vase === -1) quest.vase = createForestState().vase;
   // Saves from before Timbermist have not initialized the four unpicked acorns.
   if (restored && !restored.rooms[31]) for (const flag of [72, 73, 74, 75]) quest.flags.add(flag);
   let active = true, busy = false, paused = config.paused ?? false, currentId = restored?.currentRoom ?? 0, current: RoomGame;
@@ -89,7 +90,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     const script = forest.rooms[quest.files[id] ?? original?.name ?? ''];
     const questRoom = script && original && script.id !== id ? { ...script, id, exits: original.exits } : script;
     return { meta: questRoom ?? original, questRoom,
-      src: withBase(questRoom ? `assets/forest/${questRoom.name.toLowerCase()}.kyr.gz` : `assets/world/${id}.kyr.gz`) };
+      src: withBase(questRoom && id !== 1 ? `assets/forest/${questRoom.name.toLowerCase()}.kyr.gz` : `assets/world/${id}.kyr.gz`) };
   }
   function prepare(src: string) {
     let pending = packs.get(src);
@@ -149,7 +150,10 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     }
     let entryActions: RoomAction[] | undefined;
     if (!restoring && previous === 1 && id === 5) entryActions = [...lift("dropdown", 232, 8, 6), { op: "actor", x: 280, y: 116, facing: 3, visible: true }];
-    if (!restoring && previous === 5 && id === 1) entryActions = [...lift("liftup", 192, 56, 5), { op: "actor", x: 208, y: 110, facing: 5, visible: true }];
+    if (!restoring && previous === 5 && id === 1) {
+      planned.flags.add(52);
+      setupActions.push({ op: 'visible', visible: false });
+    }
     if(questRoom && (id!==0 || from) && !restoring){
       const announce=traceForest(questRoom,2,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions;
       for(const action of announce)applyForestState(planned,action);
@@ -273,7 +277,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       if (!room) return null;
       return structuredClone({ version: 1, currentRoom: currentId,
         rooms: { ...Object.fromEntries(saved), [currentId]: room },
-        quest: { ...quest, flags: [...quest.flags] },
+        quest: { ...quest, flags: [...quest.flags], vaseInitialized: true },
         settings: { atmosphere: settings.atmosphere, walkSpeed: settings.walkSpeed, animStepInterval: settings.interval } });
     },
     setPaused: value => { paused = value; current.setPaused(value); },

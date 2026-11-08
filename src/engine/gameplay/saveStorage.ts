@@ -110,7 +110,8 @@ export function validateWorldSave(value: unknown): WorldSave {
     runtime(room.runtime, `rooms.${key}.runtime`);
   }
   if (!Object.prototype.hasOwnProperty.call(rooms, String(data.currentRoom))) invalid('current room snapshot');
-  const quest = object(data.quest, 'quest', 'flags files phasing vase merith herman');
+  const quest = object(data.quest, 'quest', 'flags files phasing vase vaseInitialized merith herman');
+  if (quest.vaseInitialized !== undefined) boolean(quest.vaseInitialized, 'quest.vaseInitialized');
   list(quest.flags, 'quest.flags', 512, (value, path) => number(value, path, 0, 511));
   const files = object(quest.files, 'quest.files');
   for (const [key, value] of Object.entries(files)) {

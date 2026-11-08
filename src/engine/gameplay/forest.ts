@@ -49,7 +49,7 @@ export function createForestState(): ForestState {
     flags: new Set([0, 1, 2, 3, 4, 55, 57, 72, 73, 74, 75, 172, 243, 253]),
     files: {},
     phasing: false,
-    vase: -1,
+    vase: 38, // _STARTUP.EMC puts an apple in the marble vase.
     merith: { x: -16, y: 126, facing: 3, shape: 41, room: -1 },
     herman: { x: 224, y: 94, facing: 5, shape: 88, room: 7 },
   };

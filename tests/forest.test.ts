@@ -86,7 +86,7 @@ function quest() {
     }
     const pack = parseScenePack(
       gunzipSync(
-        readFileSync(`public/assets/forest/${name.toLowerCase()}.kyr.gz`),
+        readFileSync(name === 'GEM' ? 'public/assets/world/1.kyr.gz' : `public/assets/forest/${name.toLowerCase()}.kyr.gz`),
       ),
     );
     for (const a of result.actions)
@@ -227,6 +227,14 @@ test("the broken bridge waits for the actual click before committing to the fata
 
 test("the original vase can store and return a quest item without duplication", () => {
   const q = quest();
+  q.run("GEMCUT", 1, 40, 100);
+  assert.equal(q.snapshot.itemInHand, "apple");
+  assert.equal(q.state.vase, -1);
+  assert.ok(q.all.some(a => a.op === 'say' && a.voiceId === 43));
+  assert.ok(data.self[38].some(a => a.op === 'hand' && a.item === 'appleEaten'));
+  q.snapshot.itemInHand = null;
+  q.run("GEMCUT", 1, 40, 100);
+  assert.equal(q.snapshot.itemInHand, null, "the vase starts with only one apple");
   q.snapshot.itemInHand = "letter";
   q.run("GEMCUT", 1, 40, 100);
   assert.equal(q.snapshot.itemInHand, null);
@@ -234,6 +242,18 @@ test("the original vase can store and return a quest item without duplication", 
   q.run("GEMCUT", 1, 40, 100);
   assert.equal(q.snapshot.itemInHand, "letter");
   assert.equal(q.state.vase, -1);
+});
+
+test('the treehouse platform runs its original hotspots and lift sound cues', () => {
+  const q = quest();
+  const lamp = q.run('GEM', 1, 244, 41);
+  assert.equal(lamp.handled, true);
+  assert.deepEqual(lamp.actions.flatMap(a => a.op === 'say' ? [a.voiceId] : []), [5, 6]);
+  q.state.flags.add(52);
+  const arrival = q.run('GEM', 2).actions;
+  assert.deepEqual(arrival.flatMap(a => a.op === 'sfx' ? [a.track] : a.op === 'movie' ? [a.clip] : []),
+    [72, 'liftup', 62, 63, 64]);
+  assert.equal(q.state.flags.has(52), false);
 });
 
 test("ordinary forest hotspot and held-item combinations do not invoke unimplemented operations", () => {
@@ -266,6 +286,7 @@ test("every packed forest frame and palette matches the imported source fixture"
   );
   let count = 0;
   for (const name of Object.keys(data.rooms)) {
+    if (name === 'GEM') continue; // Covered by the existing world pack audit.
     const pack = parseScenePack(
       gunzipSync(
         readFileSync(`public/assets/forest/${name.toLowerCase()}.kyr.gz`),

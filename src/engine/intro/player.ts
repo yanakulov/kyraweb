@@ -1,4 +1,4 @@
-import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from "../core/constants";
+import { LOGICAL_HEIGHT, LOGICAL_WIDTH, ROOM_ART } from "../core/constants";
 import { loadIntroResources, type IntroResources } from "./resources";
 import { drawKallakAtmosphere } from "../rendering/kallakAtmosphere";
 import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
@@ -7,6 +7,13 @@ import type { IntroPlayback, IntroStep, IntroSubtitle } from "./types";
 import { drawStudioLogo } from './studioLogo';
 import { locale } from '../../i18n';
 import { IntroEffects } from './effects';
+
+const fullFrameSteps = new Set(["westwood", "akulaflow", "kyrandia", "kyrandia_scroll", "story_text", "shore_anim", "shore_destruct"]);
+const wideArtworkSteps = new Set(["kyrandia_scroll", "shore_anim", "shore_destruct"]);
+export function introArtBounds(step: string) {
+  if (wideArtworkSteps.has(step)) return { x: 0, y: 8, w: LOGICAL_WIDTH, h: 168 };
+  return fullFrameSteps.has(step) ? { x: 0, y: 0, w: LOGICAL_WIDTH, h: LOGICAL_HEIGHT } : ROOM_ART;
+}
 
 export function frameAtTime(times: number[], elapsedMs: number) {
   let low = 0, high = times.length;
@@ -41,16 +48,6 @@ export function playIntro(
 
   const renderSubtitlesOnCanvas = options?.renderSubtitlesOnCanvas ?? false;
   const effectClock = new IntroEffects();
-
-  const NO_UI_OVERLAY = new Set([
-    "westwood",
-    "akulaflow",
-    "kyrandia",
-    "kyrandia_scroll",
-    "story_text",
-    "shore_anim",
-    "shore_destruct"
-  ]);
 
   const controller = new AbortController();
   const cache = new Map<number, { promise: Promise<void>; value: IntroResources | null }>();
@@ -435,7 +432,7 @@ export function playIntro(
         ctx.restore();
 
         // Mask the UI area like the original intro (black bar at the bottom).
-        if (!NO_UI_OVERLAY.has(step.id)) {
+        if (!fullFrameSteps.has(step.id)) {
           ctx.fillStyle = "#000000";
           ctx.fillRect(0, 136, LOGICAL_WIDTH, LOGICAL_HEIGHT - 136);
         }
