@@ -50,7 +50,7 @@ export class MusicPlayer {
     this.recordedEffects.setVolume(this.state.sfxVolume);
     this.recordedEffects.prepare();
   }
-  private wantsAudio() { return this.state.enabled || this.state.sfxEnabled && this.usesNativeEffects(); }
+  private wantsAudio() { return this.state.previewing || this.state.enabled || this.state.sfxEnabled && this.usesNativeEffects(); }
   constructor(private changed: (state: MusicState) => void) {}
   private publish(message?: string) { if (this.disposed) return; if (message !== undefined) this.state.message = message; this.changed({ ...this.state, romNames: [...this.state.romNames] }); }
   async restore() {
@@ -356,10 +356,17 @@ export class MusicPlayer {
   fade() { this.faded = true; this.request++; if (!this.state.previewing) this.device?.node.port.postMessage({ type: 'fade' }); }
   stop() { this.faded = true; this.command = -1; this.request++; this.stopEffects(); this.stopSpeech(); this.device?.node.port.postMessage({ type: 'stop' }); }
   preview() {
-    this.state.previewing = !this.state.previewing;
+    if (this.state.previewing) { this.stopPreview(); return; }
+    this.state.previewing = true;
     this.applyCue(); this.syncPause(); this.syncVolumes(); this.publish(); this.unlock();
   }
-  stopPreview() { if (this.state.previewing) { this.state.previewing = false; this.applyCue(); this.syncPause(); this.syncVolumes(); this.publish(); } }
+  stopPreview() {
+    if (!this.state.previewing) return;
+    this.state.previewing = false;
+    this.applyCue(); this.syncPause(); this.syncVolumes();
+    if (!this.wantsAudio()) { this.epoch++; this.destroy(); }
+    this.publish();
+  }
   private applyCue() {
     const request = ++this.request, device = this.device;
     if (!device) return;

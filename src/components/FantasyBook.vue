@@ -81,8 +81,15 @@ function prepareImage(texture: T.Texture) {
   textures.add(texture); return texture;
 }
 function drawHandoff(texture: T.Texture) {
-  const context = handoff.value?.getContext('2d');
-  if (context) { context.imageSmoothingEnabled = false; context.drawImage(texture.image as CanvasImageSource, 0, 0, 320, 200); }
+  const canvas = handoff.value;
+  if (!canvas) return;
+  const height = props.gameCanvas?.height ?? 200;
+  if (canvas.height !== height) canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (context) {
+    context.imageSmoothingEnabled = false;
+    context.drawImage(texture.image as CanvasImageSource, 0, 0, 320, height, 0, 0, 320, height);
+  }
 }
 watch(() => props.snapshot, snapshot => {
   if (disposed || fallback.value || !pageImage || !portal || (!snapshot && !introImage)) return;
@@ -210,7 +217,7 @@ function draw(now: number) {
     } else cursorLight.intensity = 0;
   }
   if (letterbox.value) letterbox.value.style.opacity = String(Math.max(0, (t.zoom - .72) / .28));
-  // At the handoff use the same 320×200 pixels and CSS bounds as the live canvas.
+  // At the handoff use the same visible pixels and CSS bounds as the live canvas.
   if (handoff.value) handoff.value.style.opacity = t.zoom === 1 ? '1' : '0';
   const flicker = candleMotion(flameTime);
   if (flamePivot) {

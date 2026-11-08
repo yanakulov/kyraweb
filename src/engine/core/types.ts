@@ -1,9 +1,12 @@
 import type { Frame } from "../characters/brandonFrames";
 
 export type Vec2 = { x: number; y: number };
+export type ControlMode = 'modern' | 'classic';
 
 export type GameConfig = {
   scene: SceneConfig;
+  controlMode?: ControlMode;
+  onOptions?: () => void;
   world?: string;
   transitionImage?: HTMLCanvasElement;
   signal?: AbortSignal;
