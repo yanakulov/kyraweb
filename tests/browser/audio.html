@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>MT-32 browser regression</title>
 <button id="run">Run AudioWorklet check</button><pre id="result">Waiting for a real user gesture.</pre>
-<button id="local">Test automatic local MT-32</button><button id="stop">Stop music</button><pre id="local-result">Checking local ROM availability.</pre>
+<button id="local">Test local MT-32</button><button id="stop">Stop music</button><pre id="local-result">Checking local ROM availability.</pre>
 <button id="sfx">Test SFX with music disabled</button><pre id="sfx-result">Waiting for SFX test.</pre>
 <button id="sf2">Test SoundFont renderer</button><pre id="sf2-result">Waiting for SoundFont test.</pre>
 <button id="switch-sfx">Test tree SFX across device switches</button><pre id="switch-result">Waiting for device switch test.</pre>
@@ -21,7 +21,7 @@ button.onclick = async () => {
 const localResult = document.querySelector('#local-result');
 let monitoring = false;
 const localPlayer = new MusicPlayer(state => {
-  if (!monitoring) localResult.textContent = state.message || (state.available ? 'Local ROM pair available.' : 'No local ROM pair.');
+  if (!monitoring) localResult.textContent = state.message || (state.romNames.length ? 'Local ROM pair available.' : 'No local ROM pair.');
 });
 void localPlayer.restore();
 document.querySelector('#voices').onclick = async () => {
@@ -60,6 +60,7 @@ document.querySelector('#voices').onclick = async () => {
 document.querySelector('#stop').onclick = () => { localPlayer.setPaused(true); localPlayer.stop(); };
 document.querySelector('#local').onclick = async () => {
   const began = performance.now();
+  await localPlayer.selectRenderer('mt32');
   localPlayer.setEnabled(true); localPlayer.setPaused(false); localPlayer.play({ file: 'INTRO', track: 2 }, true);
   monitoring = true;
   let analyser, device;
@@ -108,10 +109,11 @@ document.querySelector('#sf2').onclick = async () => {
   } catch (error) { result.textContent = 'FAIL: ' + error.message; }
   finally { localPlayer.setPaused(true); await localPlayer.selectRenderer(original); localPlayer.setEnabled(wasEnabled); }
 };
-document.querySelector('#sfx').onclick = () => {
+document.querySelector('#sfx').onclick = async () => {
   const result = document.querySelector('#sfx-result'), began = performance.now();
   result.textContent = 'Running original SFX test…';
   const wasEnabled = localPlayer.state.enabled, wasSfx = localPlayer.state.sfxEnabled, cue = { ...localPlayer.cue };
+  await localPlayer.selectRenderer('mt32');
   localPlayer.setEnabled(false); localPlayer.setSfxEnabled(true); localPlayer.setPaused(false);
   localPlayer.play({ file: 'KYRA1A', track: 0 }, true);
   let analyser, device, fired = false;
@@ -139,10 +141,10 @@ document.querySelector('#sfx').onclick = () => {
 document.querySelector('#switch-sfx').onclick = async event => {
   const button = event.currentTarget, result = document.querySelector('#switch-result');
   const bank = localPlayer.state.banks.find(bank => bank.id.startsWith('local:'));
-  if (!bank || !localPlayer.state.available || localPlayer.state.renderer !== 'mt32') {
+  if (!bank || !localPlayer.state.romNames.length) {
     result.textContent = 'SKIP: needs a local Roland ROM pair and SF2 bank.'; return;
   }
-  button.disabled = true; localPlayer.unlock();
+  button.disabled = true;
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   const until = async (predicate, label) => {
     const began = performance.now();
@@ -166,6 +168,8 @@ document.querySelector('#switch-sfx').onclick = async event => {
   }
   try {
     result.textContent = 'Checking original intro effect 25 with music off.';
+    await localPlayer.selectRenderer('mt32');
+    localPlayer.unlock();
     localPlayer.intro('tree_anim_1'); localPlayer.setEnabled(false); localPlayer.setPaused(false);
     await until(() => localPlayer.state.ready, 'MT-32 did not start');
     await explosion('live MT-32', localPlayer.device);

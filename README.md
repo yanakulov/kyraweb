@@ -27,10 +27,11 @@ On desktop, point and click to move or interact. On a touchscreen, swipe to guid
 
 After opening the book, choose **Sound settings** to adjust music, effects, and voices independently before the intro. In-game, the same controls are under **Settings**. Voice recordings load by scene and follow the subtitle skip control.
 
+- **AdLib (OPL2)** is enabled by default. It synthesizes the original DOS score in real time from Westwood's AdLib banks and requires no ROM or SoundFont. [Music setup](docs/music.md)
 - **Roland MT‑32 / CM‑32L** uses Munt to synthesize the original DOS CD XMIDI music and effects in real time. Import your own matching Control and PCM ROM pair. The browser stores it locally. For localhost development or preview, you can also use the private `.local/mt32/` directory. [MT‑32 setup](docs/music.md)
 - **GeneralUser GS** downloads on selection, with progress shown in Settings. You can also import an `.sf2` bank. This mode uses approximate General MIDI instrument mapping for the score. [SoundFont setup](docs/soundfonts.ru.md)
 
-Effects have a separate volume and work with music off. SoundFont mode and browsers without Roland ROMs use a compact recording of the original effects rendered with CM‑32L.
+The starting mix is 50% music, 25% effects, and 60% voices. Effects work with music off. AdLib and SoundFont modes use a compact recording of the original effects rendered with CM‑32L.
 
 ## Run locally
 

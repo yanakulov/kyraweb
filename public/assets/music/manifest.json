@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source": "Kyrandia 1 DOS CD XMI.PAK",
+  "source": "Kyrandia 1 DOS CD XMI.PAK and ADL.PAK",
   "files": {
     "INTRO": {
       "src": "intro.xmi.gz",
@@ -51,6 +51,58 @@
       "src": "kyramisc.xmi.gz",
       "bytes": 37068,
       "sha256": "be90c7dd1b4d27e0d68262d965e417d303965ab55135f81bfc9424ec0e11210f"
+    }
+  },
+  "adlib": {
+    "INTRO": {
+      "src": "intro.adl.gz",
+      "bytes": 8405,
+      "sha256": "91e5373df2fde39df65de9de8ade49915bc6f20a125adc05409130458022ee02"
+    },
+    "KYRA1A": {
+      "src": "kyra1a.adl.gz",
+      "bytes": 30429,
+      "sha256": "b70641ba6a9d5ee2b34552b1b7b21f3c57e1f5824de60fa072df6dcfcc8b0b01"
+    },
+    "KYRA1B": {
+      "src": "kyra1b.adl.gz",
+      "bytes": 26634,
+      "sha256": "10883af114b2809053c8c8177f7dd0e4dc7bfbef64df17aa3d61efeee9d0e605"
+    },
+    "KYRA2A": {
+      "src": "kyra2a.adl.gz",
+      "bytes": 30206,
+      "sha256": "27089663796ae002d5bf8109619552c4554dab00cbd3db73b266def00d4a404f"
+    },
+    "KYRA3A": {
+      "src": "kyra3a.adl.gz",
+      "bytes": 24474,
+      "sha256": "1eb7fb9e2855d51c8d2a713631478fc363acf13d35844fd34bfb76c3690857e3"
+    },
+    "KYRA4A": {
+      "src": "kyra4a.adl.gz",
+      "bytes": 29869,
+      "sha256": "9013064e550784e1c5c6b6c2ffe107f7ddb97cfff722639a782c74c1e1ef8034"
+    },
+    "KYRA4B": {
+      "src": "kyra4b.adl.gz",
+      "bytes": 30222,
+      "sha256": "cfa5845bbacc5624834767856fd12c6fe173cb96dd8dae42e51f793dcd547a43"
+    },
+    "KYRA5A": {
+      "src": "kyra5a.adl.gz",
+      "bytes": 21529,
+      "sha256": "9847a776b619c9cfc843ab9933bc516a1a59bf5d3333edaa21de12e83d991d8b"
+    },
+    "KYRA5B": {
+      "src": "kyra5b.adl.gz",
+      "bytes": 14723,
+      "sha256": "661990019901bb1d0f9bb8c8b5f7ddc33b2d12a47c2f24f3b28c8e46310ca1ee"
+    },
+    "KYRAMISC": {
+      "src": "kyramisc.adl.gz",
+      "bytes": 24604,
+      "sha256": "5db9271f3fa7c369418688d0f517e60e3eb215b48aea58779093a67352103419"
     }
   }
 }

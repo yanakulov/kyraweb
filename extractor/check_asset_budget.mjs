@@ -10,13 +10,14 @@ async function size(dir) {
   }
   return { bytes, files };
 }
-// Intro, forest and Timbermist quests, book renderer, original XMIDI and Munt/AudioWorklet.
+// Intro, forest and Timbermist quests, book renderer, original XMIDI/ADL and audio emulators.
 // Expand with measured content additions; this is not a full-game size target.
 // The complete LGPL source archive is distributed, but never automatically fetched.
 // The optional GeneralUser GS bank has its own limit and loads only when selected.
-const budget = 7_500_000, runtimeBudget = 6_600_000;
+const budget = 7_600_000, runtimeBudget = 6_650_000;
 const result = await size('dist');
-const source = (await stat('dist/assets/audio/mt32-source.tar.gz')).size;
+const source = (await stat('dist/assets/audio/mt32-source.tar.gz')).size
+  + (await stat('dist/assets/audio/adlib-source.tar.gz')).size;
 const soundfont = (await stat('dist/assets/audio/soundfonts/GeneralUser-GS.sf2')).size;
 const effects = (await stat('dist/assets/audio/effects.mp3')).size;
 const voices = (await size('dist/assets/voices')).bytes;
