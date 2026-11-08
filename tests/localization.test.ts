@@ -7,6 +7,7 @@ import opening from '../public/assets/packs/opening.json';
 import npc from '../public/assets/text/npc_text.json';
 import world from '../public/assets/world/world.json';
 import { locale, russian, setLocale, t, translateGameText } from '../src/i18n';
+import { buildInventoryItems, getItemStatusName } from '../src/engine/gameplay/inventory';
 
 test('Russian covers the complete imported intro, home, forest and item dialogue corpus', () => {
   const forest = JSON.parse(gunzipSync(readFileSync('public/assets/forest/forest.json.gz')).toString()) as { rooms: Record<string, { program: { strings: string[] } }> };
@@ -25,6 +26,10 @@ test('Russian covers the complete imported intro, home, forest and item dialogue
     setLocale('ru');
     assert.equal(translateGameText("Hmm?  Blank, except it has Brynn's name on it!"), 'Хм? Пусто, только имя Брин!');
     assert.equal(t('Took Letter'), 'Взято: Письмо');
+    assert.equal(t(`Took ${getItemStatusName('item-7')}`), 'Взято: Перидот');
+    assert.equal(t(`Took ${getItemStatusName('ruby')}`), 'Взято: Гранат');
+    assert.equal(t(`Took ${getItemStatusName('item-6')}`), 'Взято: Рубин');
+    assert.equal(buildInventoryItems().get('apple')?.tileIndex, 38);
     assert.equal(t('Chapter 3'), 'Глава 3');
     assert.equal(t('“Before the bridge” saved.'), '«Before the bridge» сохранено.');
     setLocale('en');

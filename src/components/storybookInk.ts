@@ -25,16 +25,20 @@ function pageLevels(texture: Texture, fullFrame: boolean) {
 /** Ink is part of the parchment's lit surface, not a picture floating above it. */
 export function inscribePage(material: MeshStandardMaterial, landscape: Texture, ink: { value: number }, colour: { value: number }, fullFrame = false) {
   const storyImage = { value: landscape, wholeFrame: { value: fullFrame }, levels: { value: pageLevels(landscape,fullFrame) },
+    portrait: { value: false }, portraitCenter: { value: new Vector2(.5, .5) }, portraitSpan: { value: new Vector2(1, 1) },
     update(texture: Texture, fullFrame: boolean) { this.value=texture; this.wholeFrame.value=fullFrame; this.levels.value=pageLevels(texture,fullFrame); }
   };
   material.onBeforeCompile = shader => {
-    Object.assign(shader.uniforms, { storyImage, ink, colour, wholeFrame: storyImage.wholeFrame, inkLevels: storyImage.levels });
-    shader.vertexShader = 'varying vec2 storyUV;\n' + shader.vertexShader;
+    Object.assign(shader.uniforms, { storyImage, ink, colour, wholeFrame: storyImage.wholeFrame, inkLevels: storyImage.levels,
+      portrait: storyImage.portrait, portraitCenter: storyImage.portraitCenter, portraitSpan: storyImage.portraitSpan });
+    shader.vertexShader = 'varying vec2 storyUV; varying vec2 portraitUV;\n' + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
       vec4 pageWorld = modelMatrix * vec4(transformed, 1.0);
-      storyUV = vec2(pageWorld.x / 2.6 + .5, .5 - (pageWorld.z + .15) / 1.625);`);
+      storyUV = vec2(pageWorld.x / 2.6 + .5, .5 - (pageWorld.z + .15) / 1.625);
+      portraitUV = vec2((pageWorld.x - .025) / 2.76 + .5, .5 - pageWorld.z / 3.74);`);
     shader.fragmentShader = `
       uniform sampler2D storyImage; uniform float ink; uniform float colour; uniform bool wholeFrame; uniform vec2 inkLevels; varying vec2 storyUV;
+      uniform bool portrait; uniform vec2 portraitCenter; uniform vec2 portraitSpan; varying vec2 portraitUV;
       float inkNoise(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float valueAt(vec2 p) { return dot(pow(max(texture2D(storyImage, p).rgb,vec3(0.0)),vec3(.4545)), vec3(.2126, .7152, .0722)); }
     ` + shader.fragmentShader;
@@ -45,6 +49,11 @@ export function inscribePage(material: MeshStandardMaterial, landscape: Texture,
       vec2 artUV = vec2(storyUV.x, (storyUV.y-.5)/pictureHeight+.5);
       vec2 uv = clamp(artUV, 0.0, 1.0), texel = vec2(1.0/320.0, 1.0/200.0);
       uv.y = uv.y*pictureHeight + .32*crop;
+      if (portrait) {
+        artUV = portraitUV;
+        uv = portraitCenter + (clamp(artUV, 0.0, 1.0) - .5) * portraitSpan;
+        texel = vec2(1.0/304.0, 1.0/128.0);
+      }
       vec3 pigment = texture2D(storyImage, uv).rgb;
       float a=valueAt(uv-texel), b=valueAt(uv-vec2(0.0,texel.y)), c=valueAt(uv+vec2(texel.x,-texel.y));
       float d=valueAt(uv-vec2(texel.x,0.0)), e=valueAt(uv), f=valueAt(uv+vec2(texel.x,0.0));
@@ -52,23 +61,25 @@ export function inscribePage(material: MeshStandardMaterial, landscape: Texture,
       float grey=(a+c+g+i+2.0*(b+d+f+h)+4.0*e)/16.0;
       float contour = smoothstep(.045, .24, length(vec2(c+2.0*f+i-a-2.0*d-g,g+2.0*h+i-a-2.0*b-c))*.25);
       // Broad ink washes retain faces, clothes and architecture; hatching only textures the shadows.
-      float tone = clamp((grey-inkLevels.x)/(inkLevels.y-inkLevels.x),0.0,1.0);
+      float detail = portrait ? mix(e, grey, .26) : grey;
+      float tone = clamp((detail-inkLevels.x)/(inkLevels.y-inkLevels.x),0.0,1.0);
       float wash = (1.0-tone)*.84;
       float hatch = (1.0-smoothstep(.04,.15,abs(fract((artUV.x+artUV.y*.7)*80.0)-.5))) * (1.0-smoothstep(.2,.5,grey))*.045;
       // Irregular margins let the paper show through; the original letterbox isn't ink.
-      float edge = min(min(artUV.x, 1.0-artUV.x), min(artUV.y-(wholeFrame ? .01 : .12), (wholeFrame ? .99 : .96)-artUV.y));
+      float edge = min(min(artUV.x, 1.0-artUV.x), min(artUV.y-((wholeFrame || portrait) ? .01 : .12), ((wholeFrame || portrait) ? .99 : .96)-artUV.y));
+      if (portrait) edge = min(edge, min(min(uv.x,1.0-uv.x),min(uv.y,1.0-uv.y)) * 3.0);
       float feather = smoothstep(.005, .045, edge + (inkNoise(floor(artUV*160.0))-.5)*.012);
       float arrival = artUV.x*.48 + (1.0-artUV.y)*.34 + inkNoise(floor(artUV*vec2(90.0,60.0)))*.12;
       float drawn = smoothstep(arrival, arrival+.06, ink);
       float stroke = clamp(wash+contour*.16+hatch,0.0,.94)*drawn*feather;
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.033,.016,.007), stroke);
-      diffuseColor.rgb = mix(diffuseColor.rgb, pigment * mix(vec3(1.0), diffuseColor.rgb*1.8, .12), colour*feather);
+      diffuseColor.rgb = mix(diffuseColor.rgb, pigment * mix(vec3(1.0), diffuseColor.rgb*1.8, .12), max(colour, portrait ? .18 : 0.0)*feather);
       float drawingTip = exp(-pow((ink-arrival-.03)*60.0,2.0))*contour*feather*(1.0-colour)*step(.01,ink);
     `);
     shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       totalEmissiveRadiance += vec3(1.7,.72,.17) * drawingTip;`);
   };
-  material.customProgramCacheKey = () => 'storybook-ink-v2';
+  material.customProgramCacheKey = () => 'storybook-ink-v3';
   return storyImage;
 }
 

@@ -39,8 +39,10 @@ import { CSS3DObject, CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRe
 import { bookTransition, candleMotion, optionsTransition, pageCameraFraming } from './bookTransition';
 import { inscribePage, storybookFilm } from './storybookInk';
 import { t } from '../i18n';
+import { LOGICAL_WIDTH, ROOM_ART, ROOM_VIEW_HEIGHT } from '../engine/core/constants';
+import type { Vec2 } from '../engine/core/types';
 
-const props = withDefaults(defineProps<{ mode?: 'opening' | 'options'; gameCanvas?: HTMLCanvasElement; snapshot?: HTMLCanvasElement; returning?: boolean; prologue?: boolean }>(), { mode: 'opening', returning: false, prologue: false });
+const props = withDefaults(defineProps<{ mode?: 'opening' | 'options'; gameCanvas?: HTMLCanvasElement; snapshot?: HTMLCanvasElement; frameFocus?: Vec2; returning?: boolean; prologue?: boolean }>(), { mode: 'opening', returning: false, prologue: false });
 const emit = defineEmits<{ begin: []; open: []; ready: []; resume: [] }>();
 const isOptions = props.mode === 'options';
 const hasReadingPage = isOptions || props.prologue;
@@ -67,6 +69,9 @@ let portal: T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>;
 let observer: ResizeObserver | undefined, environment: T.WebGLRenderTarget | undefined;
 let pointerX = 0, pointerY = 0, viewX = 0, viewY = 0, width = 1, height = 1;
 let endView = { distance: 1, offsetX: 0, offsetY: 0 };
+let endAspect = 1.6;
+let updateViewport = () => {};
+const hasRoomFrame = () => props.snapshot?.width === ROOM_ART.w;
 let pointerInside = false;
 const pointer = new T.Vector2(), pointerRay = new T.Raycaster();
 const pagePlane = new T.Plane(new T.Vector3(0,1,0), -.54), pointerPoint = new T.Vector3();
@@ -83,18 +88,28 @@ function prepareImage(texture: T.Texture) {
 function drawHandoff(texture: T.Texture) {
   const canvas = handoff.value;
   if (!canvas) return;
-  const height = props.gameCanvas?.height ?? 200;
-  if (canvas.height !== height) canvas.height = height;
+  const source = texture.image as HTMLCanvasElement | HTMLImageElement;
+  canvas.width = source.width;
+  canvas.height = source.height;
   const context = canvas.getContext('2d');
   if (context) {
     context.imageSmoothingEnabled = false;
-    context.drawImage(texture.image as CanvasImageSource, 0, 0, 320, height, 0, 0, 320, height);
+    context.drawImage(source, 0, 0);
   }
+}
+function framePage() {
+  if (!pageImage) return;
+  pageImage.portrait.value = hasRoomFrame();
+  const focus = props.frameFocus ?? { x: .5, y: .5 };
+  pageImage.portraitCenter.value.set(T.MathUtils.clamp(focus.x, .035, .965), T.MathUtils.clamp(focus.y, .37, .63));
+  pageImage.portraitSpan.value.set(.24, .78);
 }
 watch(() => props.snapshot, snapshot => {
   if (disposed || fallback.value || !pageImage || !portal || (!snapshot && !introImage)) return;
   const previous = pageImage.value, next = snapshot ? prepareImage(new T.CanvasTexture(snapshot)) : introImage!;
-  pageImage.update(next,!!snapshot); portal.material.map = next;
+  pageImage.update(next,!!snapshot && !hasRoomFrame()); portal.material.map = next;
+  framePage();
+  updateViewport();
   drawHandoff(next);
   if (previous !== introImage) { textures.delete(previous); previous.dispose(); }
   schedule();
@@ -188,6 +203,15 @@ function draw(now: number) {
   ink.value = t.ink; colour.value = t.colour;
   portal.visible = t.zoom > .65;
   portal.material.opacity = T.MathUtils.smoothstep(t.zoom, .65, 1);
+  if (hasRoomFrame() && pageImage) {
+    const crop = 1 - t.zoom;
+    const centre = pageImage.portraitCenter.value, span = pageImage.portraitSpan.value;
+    const map = portal.material.map!;
+    map.repeat.set(1 - (1 - span.x) * crop, 1 - (1 - span.y) * crop);
+    map.offset.set((centre.x - .5) * crop + (1 - map.repeat.x) / 2, (centre.y - .5) * crop + (1 - map.repeat.y) / 2);
+    portal.scale.set(T.MathUtils.lerp(2.76, 1.625 * endAspect, t.zoom) / 2.6, T.MathUtils.lerp(3.74, 1.625, t.zoom) / 1.625, 1);
+    portal.position.z = pageCentre.z * t.zoom;
+  }
   const effects = 1 - T.MathUtils.smoothstep(t.zoom, .55, .95);
   if (ao) { ao.enabled = effects > 0; ao.blendIntensity = .65 * effects; }
   if (bloom) { bloom.enabled = effects > 0; bloom.strength = .12 * effects; }
@@ -322,7 +346,8 @@ onMounted(async () => {
       }
     }
     page.material = page.material.clone();
-    pageImage = inscribePage(page.material, landscape, ink, colour, !!props.snapshot);
+    pageImage = inscribePage(page.material, landscape, ink, colour, !!props.snapshot && !hasRoomFrame());
+    framePage();
     // Only the final approach becomes a full, unlit game frame. Until then ink is on paper.
     portal = new T.Mesh(new T.PlaneGeometry(2.6, 1.625), new T.MeshBasicMaterial({ map: landscape, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
     portal.rotation.x = -Math.PI / 2; portal.position.copy(pageCentre); portal.visible = false; scene.add(portal);
@@ -355,18 +380,26 @@ onMounted(async () => {
     bloom = new UnrealBloomPass(new T.Vector2(1,1), .12, .25, 2.8); composer.addPass(bloom);
     film = new ShaderPass(storybookFilm); composer.addPass(film); composer.addPass(new OutputPass());
     const candlestick = model.scene.getObjectByName('CandleRoot');
-    const resize = () => {
+    const resize = updateViewport = () => {
       if (!host.value || !renderer) return;
       const bounds = host.value.getBoundingClientRect();
       ({ width, height } = bounds);
       const portrait = width / height < .85;
       candlestick?.position.set(portrait ? 1.7 : 3.6, -.14, portrait ? -3.3 : -1.8);
       candle?.position.set(portrait ? 1.7 : 3.6, 1.96, portrait ? -3.3 : -1.8);
-      const target = props.gameCanvas?.getBoundingClientRect();
+      const live = props.gameCanvas;
+      const target = hasRoomFrame() && live?.height === ROOM_VIEW_HEIGHT
+        ? live.closest('.stage')?.getBoundingClientRect() : live?.getBoundingClientRect();
       const fallbackWidth = Math.min(width - 8, 1280, (height - 8)*1.6);
       const gameRect = target?.width && target.height
         ? { left: target.left-bounds.left, top: target.top-bounds.top, width: target.width, height: target.height }
         : { left: (width-fallbackWidth)/2, top: (height-fallbackWidth/1.6)/2, width: fallbackWidth, height: fallbackWidth/1.6 };
+      if (hasRoomFrame() && live?.height !== ROOM_VIEW_HEIGHT && live) {
+        const sx = gameRect.width / LOGICAL_WIDTH, sy = gameRect.height / live.height;
+        gameRect.left += ROOM_ART.x * sx; gameRect.top += ROOM_ART.y * sy;
+        gameRect.width = ROOM_ART.w * sx; gameRect.height = ROOM_ART.h * sy;
+      }
+      endAspect = gameRect.width / gameRect.height;
       endView = pageCameraFraming({ width, height }, gameRect, camera.fov);
       for (const element of [letterbox.value, handoff.value]) if (element) Object.assign(element.style, {
         left: `${gameRect.left}px`, top: `${gameRect.top}px`, width: `${gameRect.width}px`, height: `${gameRect.height}px`,

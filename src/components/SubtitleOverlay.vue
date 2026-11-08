@@ -20,6 +20,7 @@ const props = withDefaults(
   defineProps<{
     lines: IntroSubtitle[];
     scale: number;
+    scaleY?: number;
     alpha: number;
     visible: boolean;
   }>(),
@@ -34,7 +35,7 @@ const props = withDefaults(
 const layerStyle = computed(() => ({
   opacity: props.alpha,
   pointerEvents: "none" as const,
-  transform: `scale(${props.scale})`,
+  transform: `scale(${props.scale}, ${props.scaleY ?? props.scale})`,
   transformOrigin: "top left"
 }));
 

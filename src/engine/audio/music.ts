@@ -43,6 +43,8 @@ export class MusicPlayer {
   private effectEpoch = 0;
   private recordedEffects = new RecordedEffects();
   private voices = new Voices();
+  private previewMix = false;
+  private previewTimer?: ReturnType<typeof setTimeout>;
   private voiceBank = 'INTRO';
   private usesNativeEffects() { return this.state.renderer === 'mt32' && !!this.roms; }
   private prepareRecordedEffects() {
@@ -103,7 +105,8 @@ export class MusicPlayer {
     this.failed = false;
     this.state.enabled = value; remember('kyrandia.music', value ? '1' : '0');
     if (value) { this.publish(this.hasResources() ? '' : this.state.renderer === 'mt32' ? 'Import your own MT-32 or CM-32L Control and PCM ROMs.' : 'Import an SF2 SoundFont bank.'); this.applyCue(); this.unlock(); }
-    else { this.state.previewing = false; this.applyCue(); if (!this.wantsAudio()) { this.epoch++; this.destroy(); } this.publish(''); }
+    else if (this.state.previewing && !this.previewMix) this.stopPreview();
+    else { this.applyCue(); if (!this.wantsAudio()) { this.epoch++; this.destroy(); } this.publish(''); }
     this.syncVolumes();
   }
   setVolume(value: number) {
@@ -125,14 +128,14 @@ export class MusicPlayer {
     this.recordedEffects.setVolume(this.state.sfxVolume);
     this.syncVolumes(); this.publish();
   }
-  private syncVolumes() { this.device?.node.port.postMessage({ type: 'volumes', music: this.state.enabled || this.state.previewing ? this.state.volume : 0, effects: this.state.sfxEnabled ? this.state.sfxVolume : 0 }); }
-  effect(track: number) {
-    if (!this.state.sfxEnabled || this.state.previewing || !Number.isInteger(track) || track < 0 || track > 119) return;
-    const device = this.device, epoch = this.effectEpoch, file = this.cue.file;
+  private syncVolumes() { this.device?.node.port.postMessage({ type: 'volumes', music: this.state.enabled || this.state.previewing && !this.previewMix ? this.state.volume : 0, effects: this.state.sfxEnabled ? this.state.sfxVolume : 0 }); }
+  effect(track: number, preview = false) {
+    if (!this.state.sfxEnabled || this.state.previewing !== preview || !Number.isInteger(track) || track < 0 || track > 119) return;
+    const device = this.device, epoch = this.effectEpoch, file = preview ? 'INTRO' : this.cue.file;
     if (!this.usesNativeEffects()) { this.recordedEffects.play(file, track); return; }
     if (!device) return; // Never replay stale interactions after ROM initialization.
     void this.load(file).then(tracks => {
-      if (this.device !== device || epoch !== this.effectEpoch || file !== this.cue.file || !this.state.sfxEnabled) return;
+      if (this.device !== device || epoch !== this.effectEpoch || (!preview && file !== this.cue.file) || !this.state.sfxEnabled) return;
       if (tracks[track]?.some(event => event.status >> 4 === 9 && event.data[1])) device.node.port.postMessage({ type: 'effect', track: tracks[track] });
     }).catch(error => { if (epoch === this.effectEpoch) this.publish(this.error(error)); });
   }
@@ -160,6 +163,7 @@ export class MusicPlayer {
   }
   async importRoms(files: File[]) {
     if (this.state.busy || this.disposed) return;
+    this.stopPreview();
     // Construct/resume in the file-input gesture, not after asynchronous disk reads.
     let context: AudioContext;
     try { context = this.context(); } catch (error) { this.publish(this.error(error)); return; }
@@ -182,6 +186,7 @@ export class MusicPlayer {
   }
   async forgetRoms() {
     if (this.state.busy) return;
+    this.stopPreview();
     this.epoch++;
     if (this.state.renderer === 'mt32') {
       this.destroy(); this.state.renderer = 'adlib'; this.failed = false;
@@ -196,6 +201,7 @@ export class MusicPlayer {
     if (this.state.busy || this.disposed || renderer === this.state.renderer) return;
     const bank = renderer.startsWith('sf2:') ? this.banks.get(renderer.slice(4)) : undefined;
     if (renderer !== 'mt32' && renderer !== 'adlib' && !bank) return;
+    this.stopPreview();
     if (renderer === 'mt32' && !this.roms) { this.stopEffects(); this.destroy(); this.state.renderer = renderer; this.updateBanks(); this.prepareRecordedEffects(); remember('kyrandia.renderer', renderer); this.publish('Import your own MT-32 or CM-32L Control and PCM ROMs.'); return; }
     await this.changeRenderer(renderer, bank);
   }
@@ -355,14 +361,30 @@ export class MusicPlayer {
   }
   fade() { this.faded = true; this.request++; if (!this.state.previewing) this.device?.node.port.postMessage({ type: 'fade' }); }
   stop() { this.faded = true; this.command = -1; this.request++; this.stopEffects(); this.stopSpeech(); this.device?.node.port.postMessage({ type: 'stop' }); }
-  preview() {
+  preview(mix = false) {
     if (this.state.previewing) { this.stopPreview(); return; }
+    this.stopEffects(); this.stopSpeech();
     this.state.previewing = true;
+    this.previewMix = mix;
     this.applyCue(); this.syncPause(); this.syncVolumes(); this.publish(); this.unlock();
+    if (mix) {
+      const sample = () => {
+        if (!this.previewMix || this.disposed) return;
+        if (!this.hidden && (this.device || !this.usesNativeEffects())) {
+          if (this.state.voiceEnabled) this.speak('INTRO', 0);
+          this.effect(25, true);
+        }
+        this.previewTimer = setTimeout(sample, this.device || !this.usesNativeEffects() ? 3800 : 350);
+      };
+      this.previewTimer = setTimeout(sample, 800);
+    }
   }
   stopPreview() {
     if (!this.state.previewing) return;
     this.state.previewing = false;
+    if (this.previewMix) { this.stopEffects(); this.stopSpeech(); }
+    this.previewMix = false;
+    clearTimeout(this.previewTimer);
     this.applyCue(); this.syncPause(); this.syncVolumes();
     if (!this.wantsAudio()) { this.epoch++; this.destroy(); }
     this.publish();
@@ -390,8 +412,9 @@ export class MusicPlayer {
     if (this.device) void (value ? this.device.context.suspend() : this.device.context.resume()).catch(() => this.publish('Click Enable music to allow browser audio.'));
   }
   private syncPause() {
-    this.recordedEffects.setPaused(this.hidden || this.paused || this.state.previewing);
-    this.voices.setPaused(this.hidden || this.paused || this.state.previewing);
+    const pauseSamples = this.hidden || !this.previewMix && (this.paused || this.state.previewing);
+    this.recordedEffects.setPaused(pauseSamples);
+    this.voices.setPaused(pauseSamples);
     this.device?.node.port.postMessage({ type: 'pause', value: this.hidden || this.paused && !this.state.previewing });
   }
   private closeContext(context: AudioContext) { this.contexts.delete(context); void context.close().catch(() => {}); }
@@ -399,5 +422,5 @@ export class MusicPlayer {
   private destroy() { this.request++; this.effectEpoch++; if (this.device) this.close(this.device); this.device = undefined; this.state.ready = false; }
   private error(error: unknown) { return error instanceof Error ? error.message : 'Music could not start.'; }
   private fail(message: string) { this.failed = true; this.destroy(); this.publish(message); }
-  dispose() { this.disposed = true; this.epoch++; this.destroy(); this.recordedEffects.dispose(); this.voices.dispose(); for (const context of this.contexts) this.closeContext(context); }
+  dispose() { this.disposed = true; clearTimeout(this.previewTimer); this.epoch++; this.destroy(); this.recordedEffects.dispose(); this.voices.dispose(); for (const context of this.contexts) this.closeContext(context); }
 }

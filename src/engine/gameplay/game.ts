@@ -29,7 +29,7 @@ import { IndexedClip, loadScenePack } from "../resources/scenePack";
 import { RoomScript, type OpeningScript, type RoomAction } from "./roomScript";
 import { brandonTalkHead, actorScaleAt } from "../characters/brandonFrames";
 import { startWorldGame } from "./world";
-import { exitCursor, portalAtPoint } from "./navigation";
+import { exitCursor, portalAtPoint, roomViewPortals } from "./navigation";
 import type { ControlMode, DropAnim, GameConfig, InventoryItemId, RoomRuntimeSnapshot, RoomSnapshot, SceneItem, SceneOverlayState, Vec2, WorldSave } from "../core/types";
 
 const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell']);
@@ -198,9 +198,40 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let running = true;
     let paused = config.paused ?? false;
     let modern = config.controlMode === 'modern';
+    const classicPortals = config.portals ?? [];
+    const modernPortals = roomViewPortals(classicPortals);
     let inventoryOpen = false;
     let amuletMovieActive = false;
     let radial = radialLayout(scene.uiMaskY);
+    let radialOpenedAt = 0;
+    const radialCanvas = config.inventoryCanvas;
+    let radialFootprint = { x: 1, y: 1 };
+
+    function openRadialAt(anchor: Vec2 | null) {
+      let scale = 1;
+      if (radialCanvas) {
+        const rect = canvas.getBoundingClientRect();
+        const sx = rect.width / LOGICAL_WIDTH, sy = rect.height / canvas.height;
+        if (sx > 0 && sy > 0) {
+          scale = Math.min(sx, sy);
+          radialFootprint = { x: scale / sx, y: scale / sy };
+        }
+      }
+      radial = radialLayout(scene.uiMaskY, anchor, radialFootprint);
+      radialOpenedAt = clockMs;
+      if (radialCanvas) {
+        const size = radial.radius * 2 + 1;
+        radialCanvas.width = radialCanvas.height = size;
+        radialCanvas.style.width = radialCanvas.style.height = `${size * scale}px`;
+        radialCanvas.style.left = `${radial.x * 100 / LOGICAL_WIDTH}%`;
+        radialCanvas.style.top = `${radial.y * 100 / canvas.height}%`;
+      }
+    }
+
+    function toRadialPoint(point: Vec2) {
+      return { x: radial.x + (point.x - radial.x) / radialFootprint.x,
+        y: radial.y + (point.y - radial.y) / radialFootprint.y };
+    }
     let atmosphere = true;
     const reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
 
@@ -305,6 +336,14 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       ctx.drawImage(fg, 0, 0); ctx.restore();
     }
 
+    function drawHeldItem(target: CanvasRenderingContext2D, pointer: Vec2, size: number) {
+      const item = state.itemInHand && inventoryItems.get(state.itemInHand);
+      if (!item) return;
+      const tile = getTileRect(item.tileIndex);
+      target.drawImage(itemsSheet, tile.x, tile.y, tile.w, tile.h,
+        Math.round(pointer.x - size / 2), Math.round(pointer.y - size / 2), size, size);
+    }
+
     function render() {
       ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
       const outside = scriptRenderers.get(backgroundName);
@@ -398,20 +437,39 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
       const amulet = scriptLayers.get('amulet');
       const yellow = scriptRenderers.get('yellow-jewel'), yellowAnim = scriptLayers.get('yellow-jewel');
+      const showRadial = modern && (inventoryOpen || !!sequence && (amuletMovieActive || !!yellowAnim));
+      const radialPointer = inventoryOpen && state.pointer ? toRadialPoint(state.pointer) : null;
+      const heldOverRadial = radialCanvas && radialPointer &&
+        (radialPointer.x - radial.x) ** 2 + (radialPointer.y - radial.y) ** 2 <= radial.radius ** 2;
+      if (radialCanvas) radialCanvas.hidden = !showRadial;
       if (modern) {
-        if (inventoryOpen || sequence && (amuletMovieActive || yellowAnim)) {
-          const hover = state.pointer && inventoryOpen ? findInventorySlot(state.pointer, radial.slots, RADIAL_SLOT_SIZE) : -1;
-          drawRadialInventory(ctx, radial, hover, inventoryOpen ? state.pointer : null, t('Menu'), !hasAmulet && !amulet);
-          drawInventory(ctx, itemsSheet, inventoryItems, state.inventorySlots, radial.slots, 1);
+        if (showRadial) {
+          const uiContext = radialCanvas?.getContext('2d') ?? ctx;
+          uiContext.save();
+          uiContext.imageSmoothingEnabled = false;
+          if (radialCanvas) {
+            uiContext.clearRect(0, 0, radialCanvas.width, radialCanvas.height);
+            uiContext.translate(radial.radius - radial.x, radial.radius - radial.y);
+          }
+          const age = reducedMotion?.matches ? Infinity : clockMs - radialOpenedAt;
+          drawRadialInventory(uiContext, radial, radialPointer, t('Menu'), !hasAmulet && !amulet, age, (slot, x, y) => {
+            const id = state.inventorySlots[slot];
+            const item = id && inventoryItems.get(id);
+            if (!item) return;
+            const tile = getTileRect(item.tileIndex);
+            uiContext.drawImage(itemsSheet, tile.x, tile.y, tile.w, tile.h, x, y, RADIAL_SLOT_SIZE - 2, RADIAL_SLOT_SIZE - 2);
+          });
           const movie = scriptRenderers.get('amulet-radial');
           if (movie && (hasAmulet || amulet)) {
             const index = amulet?.index ?? movie.clip.info.frames.length - 1;
-            ctx.drawImage(movie.renderer.render(movie.clip.frame(index)), radial.amulet.x, radial.amulet.y, radial.amulet.w, radial.amulet.h);
+            uiContext.drawImage(movie.renderer.render(movie.clip.frame(index)), radial.amulet.x, radial.amulet.y, radial.amulet.w, radial.amulet.h);
           }
           if (yellowAnim || hasYellowJewel && yellow) {
             const jewel = yellowAnim?.image ?? yellow!.renderer.render(yellow!.clip.frame(10));
-            ctx.drawImage(jewel, radial.jewel.x, radial.jewel.y, radial.jewel.w, radial.jewel.h);
+            uiContext.drawImage(jewel, radial.jewel.x, radial.jewel.y, radial.jewel.w, radial.jewel.h);
           }
+          if (heldOverRadial && radialPointer) drawHeldItem(uiContext, radialPointer, RADIAL_SLOT_SIZE - 2);
+          uiContext.restore();
         } else if (state.statusMessage) {
           drawStatusLine(ctx, translateGameText(state.statusMessage), scene.uiMaskY - 13, LOGICAL_WIDTH);
         }
@@ -430,23 +488,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         else if (hasYellowJewel && yellow) ctx.drawImage(yellow.renderer.render(yellow.clip.frame(10)), YELLOW_JEWEL_POS.x, YELLOW_JEWEL_POS.y);
         drawInventory(ctx, itemsSheet, inventoryItems, state.inventorySlots);
       }
-      if (state.itemInHand && state.pointer && !exitCursor(availablePortals(), state.pointer)) {
-        const item = inventoryItems.get(state.itemInHand);
-        if (item) {
-          const rect = getTileRect(item.tileIndex);
-          ctx.drawImage(
-            itemsSheet,
-            rect.x,
-            rect.y,
-            rect.w,
-            rect.h,
-            Math.round(state.pointer.x - INVENTORY_ICON_SIZE / 2),
-            Math.round(state.pointer.y - INVENTORY_ICON_SIZE / 2),
-            INVENTORY_ICON_SIZE,
-            INVENTORY_ICON_SIZE
-          );
-        }
-      }
+      if (!heldOverRadial && state.itemInHand && state.pointer && !exitCursor(availablePortals(), state.pointer))
+        drawHeldItem(ctx, state.pointer, INVENTORY_ICON_SIZE);
 
       if (debug.showMask && maskCanvas) {
         ctx.save();
@@ -545,14 +588,14 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function availablePortals() {
-      return running && !paused && !sequence && !dead && !inventoryOpen && backgroundName === "room" ? config.portals ?? [] : [];
+      return running && !paused && !sequence && !dead && !inventoryOpen && backgroundName === "room" ? modern ? modernPortals : classicPortals : [];
     }
 
     function setInventoryOpen(value: boolean) {
       if (value === inventoryOpen || value && (!modern || paused || !running || dead || sequence || transition?.active || state.drops.length)) return false;
       inventoryOpen = value;
       if (value) {
-        radial = radialLayout(scene.uiMaskY, state.pointer);
+        openRadialAt(state.pointer);
         stopWalking(); pendingPortal = null;
       }
       render();
@@ -577,19 +620,20 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (sequence) { sequence.skipLine(); return true; }
       if (dead) return true;
       if (state.drops.length) return true;
-      if (inventoryOpen && inside(point, radial.options)) {
+      const radialPoint = inventoryOpen ? toRadialPoint(point) : point;
+      if (inventoryOpen && inside(radialPoint, radial.options)) {
         setInventoryOpen(false); config.onOptions?.(); return true;
       }
-      if ((!modern || inventoryOpen) && hasAmulet && config.onAmuletInteract && inside(point, modern ? radial.jewelHit : YELLOW_JEWEL_HITBOX)) {
+      if ((!modern || inventoryOpen) && hasAmulet && config.onAmuletInteract && inside(radialPoint, modern ? radial.jewelHit : YELLOW_JEWEL_HITBOX)) {
         setInventoryOpen(false);
         stopWalking();
         playScript(config.onAmuletInteract(getSnapshot()));
         return true;
       }
       if (inventoryOpen) {
-        const slot = findInventorySlot(point, radial.slots, RADIAL_SLOT_SIZE);
+        const slot = findInventorySlot(radialPoint, radial.slots, RADIAL_SLOT_SIZE);
         if (slot >= 0) selectSlot(slot);
-        else if ((point.x - radial.x) ** 2 + (point.y - radial.y) ** 2 > radial.radius ** 2) setInventoryOpen(false);
+        else if ((radialPoint.x - radial.x) ** 2 + (radialPoint.y - radial.y) ** 2 > radial.radius ** 2) setInventoryOpen(false);
         return true;
       }
       const portal = portalAtPoint(availablePortals(), point);
@@ -788,7 +832,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         case "frame": {
           if (action.clip === 'note') config.onNoteChange?.(true);
           if (action.clip === 'amulet' && sequence && !amuletMovieActive) {
-            radial = radialLayout(scene.uiMaskY, state.pointer ?? state.pos);
+            openRadialAt(state.pointer ?? state.pos);
             amuletMovieActive = true;
           }
           if(['needsaw1','advice'].includes(action.clip))heldNpcPoses.delete(2);

@@ -59,9 +59,33 @@ export function drawLayerDebug(
   ctx.restore();
 }
 
-export function drawStatusLine(ctx: CanvasRenderingContext2D, text: string, y: number, _width: number) {
+const statusFont = '8px "Kyrandia", "Segoe UI", sans-serif';
+let statusBitmap: { text: string; image: HTMLCanvasElement } | undefined;
+export function drawStatusLine(ctx: CanvasRenderingContext2D, text: string, y: number, width: number) {
+  if (typeof document !== 'undefined' && document.fonts?.check(statusFont, text)) {
+    if (statusBitmap?.text !== text) {
+      const image = document.createElement('canvas');
+      image.width = width - 18;
+      image.height = 11;
+      const pixels = image.getContext('2d')!;
+      pixels.font = statusFont;
+      pixels.textBaseline = 'top';
+      pixels.fillStyle = '#fff';
+      pixels.fillText(text, 0, 0, image.width);
+      const glyphs = pixels.getImageData(0, 0, image.width, image.height);
+      for (let i = 3; i < glyphs.data.length; i += 4) glyphs.data[i] = glyphs.data[i] >= 112 ? 255 : 0;
+      pixels.putImageData(glyphs, 0, 0);
+      statusBitmap = { text, image };
+    }
+    ctx.save();
+    ctx.shadowColor = '#1a1010';
+    ctx.shadowOffsetX = ctx.shadowOffsetY = 1;
+    ctx.drawImage(statusBitmap.image, 8, y);
+    ctx.restore();
+    return;
+  }
   ctx.save();
-  ctx.font = "8px \"Kyrandia\", \"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif";
+  ctx.font = statusFont;
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   const x = 8;

@@ -1,13 +1,13 @@
 <template>
   <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()">
-    <FantasyBook v-if="!bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :snapshot="openingSnapshot ?? undefined" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="prepareOpening" @ready="openingReadingReady = true" @open="openBook">
+    <FantasyBook v-if="!bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :snapshot="openingSnapshot ?? undefined" :frame-focus="bookFocus" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="prepareOpening" @ready="openingReadingReady = true" @open="openBook">
       <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" :show-story="!prologueSeen" @continue="finishPrologue">
         <template #audio><MusicSettings v-if="musicState" :player="music" :state="musicState" /></template>
       </BookPrologue>
       <template #invitation><button v-if="latestSave" class="book-continue" type="button" :disabled="bookBusy" @click.stop="continueJourney">{{ t('Continue journey') }}</button><p v-if="bookBusy || bookMessage" class="book-status" role="status">{{ t(bookBusy ? 'Opening your saved chapter…' : bookMessage) }}</p></template>
     </FantasyBook>
     <FirstRunLetter v-if="firstRun && musicState" :player="music" :state="musicState" :mode="controlMode" @finish="finishSetup" />
-    <FantasyBook v-if="bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
+    <FantasyBook v-if="bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :frame-focus="bookFocus" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
       <BookPrologue v-if="readingHistory" :ready="bookReady" returning @continue="readingHistory = false" />
       <BookMenu v-else :gameplay="!introActive" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookMessage" :slots="bookSlots" :initial-view="bookInitialView"
         v-model:walk-speed="walkSpeed" :control-mode="controlMode" @update:control-mode="setControlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen" :music-player="music" :music-state="musicState"
@@ -17,15 +17,18 @@
       <div class="stage" :class="{ 'cursor-controlled': customCursor }" :aria-busy="loading"
         @pointerenter="handleMove" @pointermove="handleMove" @pointerleave="leaveStage"
         @pointerdown="handlePointerDown" @pointerup="handlePointerUp" @pointercancel="cancelGesture" @contextmenu.prevent="handleContextMenu">
-        <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :alpha="subtitleAlpha" :visible="subtitleVisible" />
+        <div class="scene-plane">
+        <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :scale-y="subtitleScaleY" :alpha="subtitleAlpha" :visible="subtitleVisible" />
         <canvas ref="canvasRef" width="320" height="200" :aria-label="t('Kyrandia game scene')" @click="handleClick"></canvas>
-        <div v-if="customCursor && (pointerInStage || touchPointer) && (cursorExit || !heldItem)" class="game-cursor" :style="{ left: `${(cursor.x - cursorShape.x) / 3.2}%`, top: `${(cursor.y - cursorShape.y) * 100 / gameViewHeight}%`, width: `${cursorShape.w / 3.2}%`, height: `${cursorShape.h * 100 / gameViewHeight}%` }" aria-hidden="true">
+        <canvas ref="inventoryCanvas" class="radial-surface" aria-hidden="true" hidden></canvas>
+        <div v-if="customCursor && (pointerInStage || touchPointer) && (cursorExit || !heldItem)" class="game-cursor" :style="cursorStyle" aria-hidden="true">
           <img :src="`${baseUrl}assets/cursors/${cursorExit ?? 'pointer'}.svg`" alt="" />
         </div>
-        <div v-if="noteVisible && locale === 'ru'" class="translated-letter" :style="{ transform: `scale(${subtitleScale})` }"><p>{{ t('Dear Brynn:') }}</p><p>{{ t('Malcolm has broken free. Soon he will come for me. Please help Brandon. Direct him toward the Amulet. Use the lavender rose to key the spells.') }}</p><p>{{ t("Darm and Zanthia should be able to help. Be careful, he'll try to get all of us.") }}</p><p>— {{ t('Kallak') }}</p></div>
+        <div v-if="noteVisible && locale === 'ru'" class="translated-letter" :style="{ transform: `scale(${subtitleScale}, ${subtitleScaleY})` }"><p>{{ t('Dear Brynn:') }}</p><p>{{ t('Malcolm has broken free. Soon he will come for me. Please help Brandon. Direct him toward the Amulet. Use the lavender rose to key the spells.') }}</p><p>{{ t("Darm and Zanthia should be able to help. Be careful, he'll try to get all of us.") }}</p><p>— {{ t('Kallak') }}</p></div>
+        <button v-if="controlMode === 'classic' && !introActive && !gameError && !sequenceActive && !loading" class="hud-options" :style="optionsStyle" type="button" :aria-label="t('Options')" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
+        </div>
         <button v-if="awaitingContinue" class="pixel-button continue-button" type="button" @click="game?.handleClick({ x: 160, y: 100 })">{{ t('Continue') }}</button>
         <div v-if="gameError" class="game-error" role="alert"><p>{{ t(gameError) }}</p><button class="pixel-button" type="button" @click="boot">{{ t('Try again') }}</button><button v-if="latestSave" class="pixel-button" type="button" @click="showBookOptions('load')">{{ t('Load game') }}</button></div>
-        <button v-if="controlMode === 'classic' && !introActive && !gameError && !sequenceActive && !loading" class="hud-options" :style="optionsStyle" type="button" :aria-label="t('Options')" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
         <p class="sr-only" role="status">{{ gameHint }}</p>
         <p v-if="navigationError" class="scene-notice" role="status">{{ t(navigationError) }}</p>
       </div>
@@ -53,6 +56,7 @@ const openingPrologue = ref(true), openingReadingReady = ref(false), readingHist
 function finishPrologue() { try { localStorage.setItem('kyrandia.prologueSeen', '1'); } catch { /* Reading remains available without storage. */ } openingPrologue.value = false; }
 const openingBook = ref<{ openBook: () => void } | null>(null);
 const openingSnapshot = shallowRef<HTMLCanvasElement | null>(null), bookSnapshot = shallowRef<HTMLCanvasElement | null>(null);
+const bookFocus = shallowRef<Vec2>();
 const controlPreference = 'kyrandia.controlMode';
 function savedControlMode(): ControlMode | null {
   try { const value = localStorage.getItem(controlPreference); return value === 'classic' || value === 'modern' ? value : null; }
@@ -67,7 +71,7 @@ function setControlMode(mode: ControlMode) {
   try { localStorage.setItem(controlPreference, mode); } catch { /* Use the selection for this visit. */ }
   game?.setControlMode(mode);
   syncControls();
-  if (bookSnapshot.value) bookSnapshot.value = captureFrame();
+  if (bookSnapshot.value) bookSnapshot.value = captureBookFrame();
 }
 async function finishSetup(mode: ControlMode) {
   setControlMode(mode);
@@ -98,7 +102,7 @@ function closePanels() { if (readingHistory.value) { readingHistory.value = fals
 function showSettings() { showBookOptions(); }
 function activateOptions(event: MouseEvent) { if (event.detail === 0 || !touchPointer.value) showSettings(); }
 import { mapPointerToCanvas, startGame } from "./engine/gameplay/game";
-import { HUD_OPTIONS_RECT, LOGICAL_HEIGHT, LOGICAL_WIDTH, ROOM_VIEW_HEIGHT } from "./engine/core/constants";
+import { HUD_OPTIONS_RECT, LOGICAL_HEIGHT, LOGICAL_WIDTH, ROOM_ART, ROOM_VIEW_HEIGHT } from "./engine/core/constants";
 import { buildIntroSteps, playIntro, type IntroPlayback } from "./engine/intro";
 import { gemCutScene } from "./engine/scenes/gemCut";
 import SubtitleOverlay from "./components/SubtitleOverlay.vue";
@@ -115,12 +119,24 @@ const cursorShape = computed(() => ({
   east: {x:7,y:5,w:16,h:11}, south: {x:5,y:7,w:16,h:9}, west: {x:1,y:5,w:16,h:11},
   blocked: {x:4,y:4,w:16,h:10}
 })[cursorExit.value ?? 'pointer']);
+const sceneBounds = computed(() => gameViewHeight.value === ROOM_VIEW_HEIGHT
+  ? ROOM_ART : { x: 0, y: 0, w: LOGICAL_WIDTH, h: gameViewHeight.value });
+function clampCursor(point: Vec2, width = 1, height = 1) {
+  const { x, y, w, h } = sceneBounds.value;
+  return { x: Math.max(x, Math.min(x + w - width, point.x)), y: Math.max(y, Math.min(y + h - height, point.y)) };
+}
+const cursorStyle = computed(() => {
+  const shape = cursorShape.value;
+  const pos = clampCursor({ x: cursor.value.x - shape.x, y: cursor.value.y - shape.y }, shape.w, shape.h);
+  return { left: `${pos.x / 3.2}%`, top: `${pos.y * 100 / gameViewHeight.value}%`,
+    width: `${shape.w / 3.2}%`, height: `${shape.h * 100 / gameViewHeight.value}%` };
+});
 const heldItem = ref<InventoryItemId | null>(null);
 const touchPointer = ref(typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
 let gesture: { id: number; x: number; y: number; travel: number; started: number } | null = null;
 function syncControls() {
   gameViewHeight.value = canvasRef.value?.height ?? LOGICAL_HEIGHT;
-  cursor.value = { ...cursor.value, y: Math.max(0, Math.min(gameViewHeight.value - 1, cursor.value.y)) };
+  cursor.value = clampCursor(cursor.value);
   portals.value = game?.getPortals() ?? [];
   const snapshot = game?.getSnapshot();
   heldItem.value = snapshot?.itemInHand ?? null;
@@ -146,6 +162,7 @@ const loading = ref(false);
 const fullscreenAvailable = ref(false);
 const isFullscreen = ref(false);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
+const inventoryCanvas = ref<HTMLCanvasElement | null>(null);
 let game: Awaited<ReturnType<typeof startGame>> | null = null;
 let gameLoadController: AbortController | null = null;
 let restoreController: AbortController | null = null;
@@ -198,6 +215,7 @@ const awaitingContinue = ref(false);
 const locationName = ref("");
 const navigationError = ref("");
 const subtitleScale = ref(1);
+const subtitleScaleY = ref(1);
 
 
 const config = {
@@ -230,6 +248,18 @@ function captureFrame() {
   if (canvasRef.value) copy.getContext('2d')!.drawImage(canvasRef.value, 0, 0);
   return copy;
 }
+function captureBookFrame() {
+  const source = canvasRef.value;
+  const actor = game?.getSnapshot().pos;
+  bookFocus.value = undefined;
+  if (!source || (!game && !kallakMenu.value)) return captureFrame();
+  const { x, y, w, h } = ROOM_ART;
+  const copy = document.createElement('canvas');
+  copy.width = w; copy.height = h;
+  copy.getContext('2d')!.drawImage(source, x, y, w, h, 0, 0, w, h);
+  if (actor) bookFocus.value = { x: (actor.x - x) / w, y: 1 - (actor.y - y - 20) / h };
+  return copy;
+}
 let autosaveFrame = 0;
 function scheduleAutosave() {
   if (autosaveFrame || !game || gameOver.value || !bookOpened.value) return;
@@ -254,7 +284,7 @@ function showBookOptions(view: 'main' | 'load' = 'main') {
   if (!introActive.value && !canSave.value && !gameOver.value && !gameError.value && !bookMessage.value) bookMessage.value = 'Resume to finish the current action before saving.';
   bookInitialView.value = view; bookReady.value = false; bookReturning.value = false;
   readingHistory.value = false;
-  bookSnapshot.value = captureFrame();
+  bookSnapshot.value = captureBookFrame();
 }
 async function bookOptionsReady() {
   bookReady.value = true; await nextTick();
@@ -293,7 +323,7 @@ async function restoreChapter(record: SaveRecord) {
   let committed = false, restoredLocation = record.location, restoredVoiceBank: string | undefined;
   const oldFrame = captureFrame();
   try {
-    const candidate = await startGame(canvasRef.value, { ...config, controlMode: controlMode.value, saveState: record.state, paused: true, signal: controller.signal,
+    const candidate = await startGame(canvasRef.value, { ...config, inventoryCanvas: inventoryCanvas.value ?? undefined, controlMode: controlMode.value, saveState: record.state, paused: true, signal: controller.signal,
       onDeath: () => { if (committed) config.onDeath(); },
       onCheckpoint: () => { if (committed) config.onCheckpoint(); },
       onContinueChange: value => { if (committed) config.onContinueChange(value); },
@@ -331,7 +361,7 @@ async function loadChapter(index: number) {
   bookBusy.value = true; bookMessage.value = 'Opening your saved chapter…';
   try {
     await restoreChapter(record);
-    bookSnapshot.value = captureFrame();
+    bookSnapshot.value = captureBookFrame();
     await nextTick(); bookBusy.value = false; bookMessage.value = ''; resumeBook();
   } catch (error) { bookMessage.value = error instanceof Error ? error.message : 'This chapter could not be opened.'; }
   finally { bookBusy.value = false; }
@@ -341,7 +371,7 @@ async function continueJourney() {
   bookBusy.value = true; bookMessage.value = '';
   try {
     await restoreChapter(latestSave.value.save);
-    openingPrologue.value = false; openingSnapshot.value = captureFrame(); await nextTick();
+    openingPrologue.value = false; openingSnapshot.value = captureBookFrame(); await nextTick();
     openingBook.value?.openBook();
   } catch (error) { bookBusy.value = false; bookMessage.value = error instanceof Error ? error.message : 'This chapter could not be opened.'; }
 }
@@ -356,7 +386,10 @@ function updateSubtitleScale() {
   if (!canvasRef.value) return;
   const rect = canvasRef.value.getBoundingClientRect();
   if (rect.width > 0) {
-    subtitleScale.value = rect.width / LOGICAL_WIDTH;
+    const sx = rect.width / LOGICAL_WIDTH, sy = rect.height / canvasRef.value.height;
+    if ((sx !== subtitleScale.value || sy !== subtitleScaleY.value) && game?.setInventoryOpen(false)) syncControls();
+    subtitleScale.value = sx;
+    subtitleScaleY.value = sy;
   }
 }
 
@@ -431,7 +464,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   if (!canvasRef.value) return;
   loading.value = true;
   gameLoadController = new AbortController();
-  const startedGame = await startGame(canvasRef.value, { ...config, controlMode: controlMode.value,
+  const startedGame = await startGame(canvasRef.value, { ...config, inventoryCanvas: inventoryCanvas.value ?? undefined, controlMode: controlMode.value,
     signal: gameLoadController.signal,
     onCheckpoint: () => { if (runId === introRunId) config.onCheckpoint(); },
     onLocationChange: (name, id, bank) => { if (runId === introRunId) config.onLocationChange(name, id, bank); },
@@ -514,7 +547,7 @@ function handleClick(event: MouseEvent) {
     return;
   }
   if (!canvasRef.value || !game) return;
-  const point = mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY);
+  const point = clampCursor(mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY));
   interact(point);
 }
 
@@ -526,7 +559,7 @@ function toggleInventory() {
 }
 function handleContextMenu(event: MouseEvent) {
   if (touchPointer.value || !canvasRef.value) return;
-  cursor.value = mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY);
+  cursor.value = clampCursor(mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY));
   game?.setPointer(cursor.value);
   toggleInventory();
 }
@@ -548,12 +581,12 @@ function handleMove(event: PointerEvent) {
     gesture.travel += Math.hypot(dx, dy);
     gesture.x = event.clientX; gesture.y = event.clientY;
     const rect = canvasRef.value.getBoundingClientRect();
-    cursor.value = { x: Math.max(0, Math.min(LOGICAL_WIDTH - 1, cursor.value.x + dx * LOGICAL_WIDTH / rect.width)),
-      y: Math.max(0, Math.min(gameViewHeight.value - 1, cursor.value.y + dy * gameViewHeight.value / rect.height)) };
+    cursor.value = clampCursor({ x: cursor.value.x + dx * LOGICAL_WIDTH / rect.width,
+      y: cursor.value.y + dy * gameViewHeight.value / rect.height });
   } else {
     touchPointer.value = false;
     pointerInStage.value = true;
-    cursor.value = mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY);
+    cursor.value = clampCursor(mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY));
   }
   game?.setPointer(cursor.value);
 }

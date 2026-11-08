@@ -1,4 +1,17 @@
 import type { RoomPortal, Vec2 } from "../core/types";
+import { LOGICAL_WIDTH, ROOM_ART } from '../core/constants';
+
+export function roomViewPortals(portals: RoomPortal[]) {
+  const { x, y, w, h } = ROOM_ART;
+  const depth = 11;
+  return portals.map(portal => {
+    const r = portal.rect;
+    if (portal.id !== portal.side) return portal;
+    if (r.w === LOGICAL_WIDTH) return { ...portal, rect: { x, y: portal.side === 'north' ? y : y + h - depth, w, h: depth } };
+    if (r.h === 159) return { ...portal, rect: { x: portal.side === 'west' ? x : x + w - depth, y, w: depth, h } };
+    return portal;
+  });
+}
 
 export function portalAtPoint(portals: RoomPortal[], point: Vec2 | null) {
   return point ? portals.find(({ rect: r }) => point.x >= r.x && point.x < r.x + r.w && point.y >= r.y && point.y < r.y + r.h) : undefined;

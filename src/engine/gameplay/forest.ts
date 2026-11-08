@@ -58,6 +58,8 @@ const items: Record<number, InventoryItemId> = {
   0: "ruby",
   16: "rose",
   19: "silverRose",
+  38: "apple",
+  39: "appleEaten",
   42: "letter",
   43: "marble",
   44: "saw",

@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue';
 import gameRussian from './locales/ru-game.json';
+import itemNames from './locales/item-names.json';
 
 export type Language = 'en' | 'ru';
 const preferenceKey = 'kyrandia.language';
@@ -16,6 +17,7 @@ export function setLocale(value: string) { if (value === 'en' || value === 'ru')
 
 export const russian: Record<string, string> = {
   ...gameRussian,
+  ...Object.fromEntries(itemNames),
   'CD voices (English)': 'Озвучка CD (английская)',
   'Voice volume': 'Громкость озвучки',
   'Open the book': 'Открыть книгу',
@@ -84,6 +86,8 @@ export const russian: Record<string, string> = {
   'Replace ROM pair': 'Заменить пару ROM',
   'Remove ROMs': 'Удалить ROM',
   'Test music': 'Проверить музыку',
+  'Test audio mix': 'Проверить весь звук',
+  'Listen to music, effects and speech together while adjusting their levels.': 'Послушайте музыку, эффекты и речь вместе и подберите громкость каждого.',
   'Stop test': 'Остановить проверку',
   'Emulator source': 'Исходный код эмулятора',
   'Original XMIDI music, synthesized by Munt. No Roland ROMs are included.': 'Оригинальная музыка XMIDI с синтезом Munt. ROM-файлы Roland не входят в сборку.',

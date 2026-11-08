@@ -48,7 +48,8 @@ body {
   width: min(100%, 1280px, calc((100svh - 8px) * 1.6));
   margin-inline: auto;
 }
-.app.is-modern { width: min(100%, calc((100svh - 8px) * 40 / 17)); }
+.app.is-modern { width: 100%; }
+.app.is-modern .game-frame { position: fixed; inset: 0; }
 
 .game-frame {
   position: relative;
@@ -65,7 +66,10 @@ body {
   container-type: inline-size;
   isolation: isolate;
 }
-.is-modern .stage { aspect-ratio: 40 / 17; }
+.is-modern .stage { height: 100%; aspect-ratio: auto; }
+.scene-plane { position: absolute; inset: 0; }
+/* Display the room art from (8, 8) to (312, 136). Keep input in original coordinates. */
+.is-modern .scene-plane { inset: -6.25% -2.631579% 0; }
 
 .stage canvas {
   width: 100%;
@@ -75,6 +79,8 @@ body {
   /* A finger aims inside the scene; two fingers can still zoom the page. */
   touch-action: pinch-zoom;
 }
+.stage .radial-surface { position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 3; }
+.stage .radial-surface[hidden] { display: none; }
 
 .book-continue { padding: 5px 14px; min-height: 32px; font: 16px/1.2 Georgia,serif; color: #d9bd82; border: 0; background: linear-gradient(90deg,transparent,#201007eb 20%,#201007eb 80%,transparent); text-shadow: 0 1px 2px #000; }
 .book-continue:hover { color: #fff1c6; }
@@ -139,6 +145,6 @@ button:disabled { cursor: default; }
 
 .app:fullscreen { --game-surround: #000; width: 100%; max-width: none; height: 100%; display: grid; place-items: center; background: #000; }
 .app:fullscreen .game-frame { width: min(100%, calc(100dvh * 1.6)); }
-.app.is-modern:fullscreen .game-frame { width: min(100%, calc(100dvh * 40 / 17)); }
+.app.is-modern:fullscreen .game-frame { width: 100%; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }

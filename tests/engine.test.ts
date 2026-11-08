@@ -707,10 +707,10 @@ test("modern inventory uses engine hitboxes, holds the same slots and never clic
       portals: [{ id: 'east', side: 'east', target: 1, point: { x: 168, y: 120 }, rect: { x: 300, y: 8, w: 20, h: 128 } }] });
     assert.equal(h.canvas.height, 136);
     const anchor = { x: 85, y: 70 };
-    const layout = radialLayout(136, anchor), slot = { x: layout.slots[0].x + 9, y: layout.slots[0].y + 9 };
+    const layout = radialLayout(136, anchor), slot = { x: layout.slots[0].x + 4, y: layout.slots[0].y + 4 };
     assert.deepEqual([layout.x, layout.y], [anchor.x, anchor.y]);
     const edge = radialLayout(136, { x: 1, y: 135 });
-    assert.equal(edge.x - edge.radius, 0);
+    assert.equal(edge.x - edge.radius, 8);
     assert.equal(edge.y + edge.radius, 135);
     game.setPointer(anchor);
     game.handleClick({ x: 80, y: 75 });
