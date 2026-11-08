@@ -5,7 +5,11 @@
       <fieldset :key="view" :disabled="busy" class="folio-leaf">
         <nav v-if="view === 'main'" class="folio-choices" :aria-label="t('Book options')">
           <p v-if="mainMenu" class="folio-frontispiece">{{ t('The Legend of Kyrandia') }}</p>
-          <button v-if="mainMenu" class="journey-choice" type="button" @click="$emit('startJourney')"><span>{{ t('Start Journey') }}</span></button>
+          <template v-if="gameOver">
+            <button v-if="canLoadAutosave" class="journey-choice" type="button" @click="$emit('load', AUTOSAVE_SLOT)"><span>{{ t('Continue from autosave') }}</span></button>
+            <button type="button" @click="$emit('mainMenu')"><span>{{ t('Start a new journey') }}</span></button>
+          </template>
+          <button v-else-if="mainMenu" class="journey-choice" type="button" @click="$emit('startJourney')"><span>{{ t('Start Journey') }}</span></button>
           <template v-else><button type="button" @click="$emit('resume')"><span>{{ t('Resume') }}</span></button><button type="button" @click="go('save')" :disabled="!canSave"><span>{{ t('Save game') }}</span></button></template>
           <button type="button" @click="go('load')" :disabled="!slots.some(slot => slot.savedAt || slot.error)"><span>{{ t('Load game') }}</span></button>
           <button type="button" @click="go('settings')"><span>{{ t('Settings') }}</span></button>
@@ -16,8 +20,8 @@
           <p class="folio-note">{{ t(view === 'save' ? 'Keep your place in the story.' : 'Return to a saved chapter.') }}</p>
           <label v-if="view === 'save'" class="folio-field">{{ t('Chapter name') }}<input v-model="saveName" maxlength="48" :placeholder="t('My adventure')" /></label>
           <ol class="folio-saves">
-            <li v-for="slot in slots" :key="slot.index">
-              <div class="folio-save-details"><img v-if="slot.thumbnail" :src="slot.thumbnail" alt="" /><div><strong>{{ slot.name ? t(slot.name) : t(`Chapter ${slot.index + 1}`) }}</strong><small>{{ t(slot.error || (slot.savedAt ? slot.location || '' : 'Empty page')) }}</small><small v-if="slot.savedAt">{{ formatDate(slot.savedAt) }}</small></div></div>
+            <li v-for="slot in shownSlots" :key="slot.index">
+              <div class="folio-save-details"><img v-if="slot.thumbnail" :src="slot.thumbnail" alt="" /><div><strong>{{ t(slot.name || (slot.index === AUTOSAVE_SLOT ? 'Autosave' : `Chapter ${slot.index + 1}`)) }}</strong><small>{{ t(slot.error || (slot.savedAt ? slot.location || '' : 'Empty page')) }}</small><small v-if="slot.savedAt">{{ formatDate(slot.savedAt) }}</small></div></div>
               <template v-if="overwrite === slot.index"><p>{{ t('Replace this saved chapter?') }}</p><div class="folio-inline"><button type="button" @click="save(slot.index)">{{ t('Replace') }}</button><button type="button" @click="cancelOverwrite">{{ t('Keep it') }}</button></div></template>
               <button v-else-if="view === 'save'" type="button" :disabled="!canSave" @click="slot.savedAt || slot.error ? askOverwrite(slot.index) : save(slot.index)">{{ t('Save here') }}</button>
               <button v-else type="button" :disabled="!slot.savedAt || !!slot.error" @click="$emit('load', slot.index)">{{ t('Load chapter') }}</button>
@@ -50,11 +54,12 @@ import { computed, nextTick, ref } from 'vue';
 import BookSelect from './BookSelect.vue';
 import MusicSettings from './MusicSettings.vue';
 import type { MusicPlayer, MusicState } from '../engine/audio/music';
+import { AUTOSAVE_SLOT } from '../engine/gameplay/saveStorage';
 import { locale, setLocale, t } from '../i18n';
 type WalkSpeed = 'slowest' | 'slow' | 'fast' | 'fastest';
 type View = 'main' | 'save' | 'load' | 'settings' | 'help';
 const props = withDefaults(defineProps<{
-  gameplay: boolean; canSave: boolean; busy: boolean; message: string; mainMenu?: boolean;
+  gameplay: boolean; canSave: boolean; busy: boolean; message: string; mainMenu?: boolean; gameOver?: boolean;
   slots: { index: number; name?: string; location?: string; savedAt?: string; thumbnail?: string; error?: string | null }[];
   walkSpeed: WalkSpeed; fullscreenAvailable: boolean; isFullscreen: boolean;
   initialView?: 'main' | 'load';
@@ -70,7 +75,9 @@ const speeds = computed(() => ['slowest', 'slow', 'fast', 'fastest'].map((value,
 const view = ref<View>(props.initialView), heading = ref<HTMLHeadingElement | null>(null);
 const menu = ref<HTMLElement | null>(null);
 const saveName = ref(''), overwrite = ref<number | null>(null), confirmAction = ref<'menu' | 'intro' | null>(null);
-const title = computed(() => t(({ main: props.mainMenu ? 'Book One' : 'Options', save: 'Save your story', load: 'Saved chapters', settings: 'Settings', help: 'How to play' })[view.value]));
+const canLoadAutosave = computed(() => props.slots.some(slot => slot.index === AUTOSAVE_SLOT && slot.savedAt));
+const shownSlots = computed(() => props.slots.filter(slot => slot.index !== AUTOSAVE_SLOT || view.value === 'load' && (slot.savedAt || slot.error)));
+const title = computed(() => t(({ main: props.gameOver ? "It didn't happen that way!" : props.mainMenu ? 'Book One' : 'Options', save: 'Save your story', load: 'Saved chapters', settings: 'Settings', help: 'How to play' })[view.value]));
 async function go(next: View) { view.value = next; overwrite.value = null; confirmAction.value = null; await nextTick(); heading.value?.focus(); }
 async function askOverwrite(index: number) { overwrite.value = index; await nextTick(); menu.value?.querySelector<HTMLButtonElement>('.folio-inline button')?.focus(); }
 async function cancelOverwrite() { overwrite.value = null; await nextTick(); heading.value?.focus(); }

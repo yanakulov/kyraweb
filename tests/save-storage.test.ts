@@ -2,7 +2,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { WorldSave } from '../src/engine/core/types';
-import { readSaveSlots, writeSaveSlot, validateWorldSave } from '../src/engine/gameplay/saveStorage';
+import { AUTOSAVE_SLOT, readAutosave, readSaveSlots, writeAutosave, writeSaveSlot, validateWorldSave } from '../src/engine/gameplay/saveStorage';
 
 const png = `data:image/png;base64,${readFileSync('public/assets/intro/logo_bg.png').toString('base64')}`;
 function state(): WorldSave {
@@ -57,6 +57,22 @@ test('a damaged or unsupported slot remains intact while other slots can load an
     assert.equal(entries.get('kyrandia.save.2'), raw);
     assert.equal(entries.get('kyrandia.save.1'), firstBytes);
   }
+});
+
+test('autosave replaces only its own checkpoint and keeps the last valid record on failure', t => {
+  const { entries } = memoryStorage(t);
+  const manual = writeSaveSlot(0, payload());
+  assert.equal(readAutosave().save, null);
+  writeAutosave(payload());
+  const next = payload();
+  next.state.rooms[7].pos.x = 248;
+  const saved = writeAutosave(next);
+  assert.deepEqual(readAutosave(), { index: AUTOSAVE_SLOT, save: saved, error: null });
+  assert.deepEqual(readSaveSlots()[0].save, manual);
+  const previous = entries.get('kyrandia.autosave');
+  next.state.rooms[7].pos.x = NaN;
+  assert.throws(() => writeAutosave(next), /Invalid save/);
+  assert.equal(entries.get('kyrandia.autosave'), previous);
 });
 
 test('state validation rejects malformed nested runtime, quest and inventory before writing', t => {

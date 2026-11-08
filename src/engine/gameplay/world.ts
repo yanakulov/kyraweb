@@ -183,6 +183,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
         return result.handled?result.actions:null;
       }:undefined,
       onDeath:()=>{if(active&&callbackOwner===token)config.onDeath?.();},
+      onCheckpoint: () => { if (active && callbackOwner === token) config.onCheckpoint?.(); },
       onContinueChange:value=>{if(active&&callbackOwner===token)config.onContinueChange?.(value);},
       onNoteChange:value=>{if(active&&callbackOwner===token)config.onNoteChange?.(value);},
       onExit: portal => void exit(portal),

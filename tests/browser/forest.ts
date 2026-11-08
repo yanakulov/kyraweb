@@ -16,6 +16,7 @@ let callbacks: FrameRequestCallback[] = [],
   loading = false,
   confirm = false,
   dead = false,
+  onRope = false,
   error = "";
 window.requestAnimationFrame = (callback) => {
   callbacks.push(callback);
@@ -41,6 +42,7 @@ const game = await startGame(canvas, {
   onDeath: () => {
     dead = true;
   },
+  onScriptAction: action => { if (action.op === 'frame' && action.clip === 'balance2') onRope = true; },
   onLocationChange: (name, room) => {
     id = room!;
     document.querySelector("#location")!.textContent = `${id}: ${name}`;
@@ -231,6 +233,8 @@ document.querySelector("#fall")!.addEventListener("click", async () => {
   lockScenario();
   try {
     await route(1, 5, 10, 8, 12, 13, 9, 7);
+    const context = canvas.getContext('2d')!;
+    const hudBefore = context.getImageData(0, 150, 320, 50).data;
     // x=10 belongs to both the broken-bridge script and the blocked west edge.
     game.handleClick({ x: 10, y: 100 });
     advance(60000);
@@ -243,8 +247,18 @@ document.querySelector("#fall")!.addEventListener("click", async () => {
     game.handleClick({ x: 10, y: 100 });
     advance(60000);
     game.handleClick({ x: 10, y: 100 });
+    await until(() => onRope, 'rope animation');
+    const pack = await loadScenePack('/kyraweb/assets/forest/broken.kyr.gz');
+    const background = new IndexedClip(pack, pack.clips.room);
+    const pixels = background.frame(0), palette = background.info.palette;
+    const bank = context.getImageData(232, 66, 32, 45).data;
+    if (!bank.some((value, i) => i % 4 < 3 &&
+      value !== palette[pixels[(66 + Math.floor(i / 128)) * 320 + 232 + Math.floor(i / 4) % 32] * 3 + i % 4]))
+      throw Error('Herman vanished while Brandon was on the rope');
     await settle();
     if (!dead) throw Error("Fatal crossing did not complete");
+    if (!context.getImageData(0, 150, 320, 50).data.every((value, i) => value === hudBefore[i]))
+      throw Error('The bridge sprite atlas replaced the HUD after death');
     capture("Original bridge fall");
     const pos = JSON.stringify(game.getSnapshot().pos);
     game.setTarget({ x: 300, y: 100 });

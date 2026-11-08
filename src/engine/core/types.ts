@@ -19,6 +19,7 @@ export type GameConfig = {
   onActorInteract?: (snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[] | null;
   onScriptAction?: (action: import("../gameplay/roomScript").RoomAction) => void;
   onDeath?:()=>void;
+  onCheckpoint?: () => void;
   onContinueChange?: (waiting: boolean) => void;
   onNoteChange?: (visible: boolean) => void;
   npcFrames?: Record<number, { xOffset: number; yOffset: number }>;
