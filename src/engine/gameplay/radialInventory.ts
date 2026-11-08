@@ -1,5 +1,6 @@
 import { LOGICAL_WIDTH, ROOM_ART, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from '../core/constants';
 import type { Vec2 } from '../core/types';
+import { paintLabel } from '../core/ui';
 import { getInventorySlotPositions, inside } from './inventory';
 
 export const RADIAL_SLOT_SIZE = 13;
@@ -99,10 +100,10 @@ export function drawRadialInventory(ctx: CanvasRenderingContext2D, layout: Retur
   const lit = !!pointer && inside(pointer, layout.options);
   bevel(ctx, x, y, w, h, lit);
   ctx.fillStyle = lit ? '#fff0bf' : '#ddc18a';
-  ctx.font = '600 4.6px Tahoma, "Segoe UI", sans-serif';
+  ctx.font = '4.6px "Kyrandia", monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(menu.toUpperCase(), x + w / 2, y + h / 2 + .15, w - 2);
+  paintLabel(ctx, menu.toUpperCase(), x + w / 2, y + h / 2 + .15, w - 2, .5);
   if (sealed) {
     ctx.save();
     ctx.translate(layout.x + .5, layout.y - .5);
