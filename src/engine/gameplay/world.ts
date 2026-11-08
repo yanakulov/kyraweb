@@ -2,7 +2,8 @@ import { startRoom, type RoomGame } from "./game";
 import { withBase } from "../core/assets";
 import { IndexedClip, loadScenePack, type ScenePack } from "../resources/scenePack";
 import { isWalkable } from "../scene/masks";
-import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneMeta, Vec2, WorldSave } from "../core/types";
+import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneItem, SceneMeta, Vec2, WorldSave } from "../core/types";
+import { isWorldRoomId, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 import type { RoomAction } from "./roomScript";
 import { createForestState, traceForest, applyForestState, loadForestData, originalItem } from './forest';
 import { validateWorldSave } from './saveStorage';
@@ -48,8 +49,14 @@ export function roomPortals(room: WorldRoom, mask: MaskData, track = room.cursor
   // EMC describes the visible entrance separately from the strip Brandon has to cross.
   const tracked = track && portals.find(portal => portal.side === track.side);
   if (tracked) portals.unshift({ ...tracked, rect: track.rect });
-  return portals.filter(p => p.target !== null && p.target >= 0 && (p.target < 17 || p.target === 24));
+  return portals.filter(p => isWorldRoomId(p.target));
 }
+
+// Fixed floor items from the CD's _STARTUP.EMC. Visited rooms use their saved items.
+const timbermistSeeds: Record<number, SceneItem> = {
+  17: { id: 'item-25', x: 115, y: 115 },
+  30: { id: 'item-27', x: 128, y: 128 },
+};
 
 const lift = (clip: string, x: number, y: number, ticks: number): RoomAction[] => [
   { op: "visible", visible: false }, { op: "movie", clip, x, y, ticks }, { op: "close", clip }
@@ -68,6 +75,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   const { rooms } = await response.json() as { rooms: WorldRoom[] };
   const forest=await loadForestData(withBase('assets/forest/forest.json.gz'),config.signal);
   const quest=restored ? { ...restored.quest, flags: new Set(restored.quest.flags) } : createForestState();
+  // Saves from before Timbermist have not initialized the four unpicked acorns.
+  if (restored && !restored.rooms[31]) for (const flag of [72, 73, 74, 75]) quest.flags.add(flag);
   let active = true, busy = false, paused = config.paused ?? false, currentId = restored?.currentRoom ?? 0, current: RoomGame;
   let tokenCounter = 0, callbackOwner = 0;
   const saved = new Map<number, RoomSnapshot>(restored ? Object.entries(restored.rooms).map(([id, room]) => [Number(id), room]) : []);
@@ -77,7 +86,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   controller.signal.addEventListener('abort', () => packs.clear(), { once: true });
   function roomSource(id: number) {
     const original = rooms.find(r => r.id === id);
-    const questRoom = forest.rooms[quest.files[id] ?? (id === 24 ? 'CAVEB' : original?.name ?? '')];
+    const script = forest.rooms[quest.files[id] ?? original?.name ?? ''];
+    const questRoom = script && original && script.id !== id ? { ...script, id, exits: original.exits } : script;
     return { meta: questRoom ?? original, questRoom,
       src: withBase(questRoom ? `assets/forest/${questRoom.name.toLowerCase()}.kyr.gz` : `assets/world/${id}.kyr.gz`) };
   }
@@ -112,7 +122,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     const opposite = from ? SIDES[(SIDES.indexOf(from.side) + 2) % 4] : "south";
     let arrival = nearestFloor(mask, from?.entry ?? meta.entrances[opposite]);
     const state = saved.get(id), shared = current?.getSnapshot();
-    const resume = state ?? { pos: arrival, inventorySlots: [], itemInHand: null, sceneItems: [], overlays: [], treeSpoken: false };
+    const seed = timbermistSeeds[id];
+    const resume = state ?? { pos: arrival, inventorySlots: [], itemInHand: null, sceneItems: seed ? [{ ...seed }] : [], overlays: [], treeSpoken: false };
     // Keep room props local, and carry the same inventory and held item through every exit.
     const continued = shared ? { ...resume, inventorySlots: shared.inventorySlots, itemInHand: shared.itemInHand } : state;
     if (restoring && !state?.runtime) throw new Error("This saved room is incomplete. Choose another saved game.");
@@ -150,7 +161,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       const departing = roomSource(previous).questRoom;
       const leaving = departing && shared && traceForest(departing, 5, quest, { ...shared, facing: EXIT_FACING[from.side] });
       const score = leaving && leaving.actions.filter(action => action.op === 'music' && action.command !== 1).at(-1);
-      setupActions.push(score || { op: 'music', command: 2, restart: false });
+      setupActions.push(score || { op: 'music', command: id >= 17 ? 11 : 2, restart: false });
     }
     const token = ++tokenCounter, oldOwner = callbackOwner;
     callbackOwner = token;
@@ -170,6 +181,18 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       resume: continued ? { ...continued, runtime: restoring ? continued.runtime : undefined } : undefined,
       entry: from || restoring ? { ...arrival, facing } : undefined,
       playOpening: !restoring && !from && config.playOpening !== false, entryActions, setupActions, amulet:quest.flags.has(45), npcFrames:questRoom?.npcFrames, portals,
+      yellowJewel: quest.flags.has(YELLOW_JEWEL_FLAG),
+      onAmuletInteract: snapshot => {
+        const say = (text: string): RoomAction => ({ op: 'say', text, voiceId: 0, ms: 2000,
+          x: snapshot.pos.x, y: snapshot.pos.y - 56, speaker: 0, color: 15, blocking: true });
+        if (snapshot.itemInHand) return [say("Maybe I'd better put this down first.")];
+        if (!quest.flags.has(YELLOW_JEWEL_FLAG)) return [say("It's a jewel, but why is it black?")];
+        const pressed: RoomAction[] = [{ op: 'sfx', track: 0x45 },
+          { op: 'frame', clip: 'yellow-jewel', index: 11, ...YELLOW_JEWEL_POS, ms: 100 },
+          { op: 'close', clip: 'yellow-jewel' }];
+        const healing = questRoom && traceForest(questRoom, 4, quest, snapshot);
+        return [...pressed, ...(healing && healing.handled ? healing.actions : [say('Gee, this could come in handy if I get hurt.')])];
+      },
       onScriptAction: action=>{applyForestState(quest,action);if(action.op==='mask')changeMask(action);if(active&&callbackOwner===token)config.onScriptAction?.(action);},
       onActorInteract: snapshot => {
         const { itemInHand, pos } = snapshot;

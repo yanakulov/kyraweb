@@ -64,6 +64,7 @@ export type RoomAction =
   | { op: "vase"; item: number }
   | { op: "exit"; target: number; entry?: { x: number; y: number } }
   | { op: "death" }
+  | { op: "shake"; ms: number }
   | { op: "palette"; start: number; colors: number[]; ms: number }
   | { op: "ambientRun" | "ambientWait"; index: number }
   | { op: "clearText" | "waitVoice" }
@@ -194,7 +195,7 @@ export class RoomScript {
       else if (action.op === "wait") this.wait = this.skipTalkAnimation && !action.movement ? 0 : action.ms * (action.movement ? (this.host.movementTempo?.() ?? 1) : 1);
       else {
         this.host.apply(action);
-        if (action.op === "frame" || action.op === "palette")
+        if (action.op === "frame" || action.op === "palette" || action.op === "shake")
           this.wait = action.op === 'frame' && this.skipTalkAnimation ? 0 : action.ms;
         if (action.op === 'clearText') { this.lineActive = false; this.skipTalkAnimation = false; }
         if (action.op === "say") {

@@ -1,6 +1,6 @@
-# First forest region
+# Forest regions
 
-The first forest region supports the original CD quest chain through the repaired bridge: Brynn’s note and enchanted rose, healing the willow, Merith’s chase and marble, the altar and amulet, and Herman’s saw and bridge repair. Room 24, CAVEB, is the landing beyond the bridge; its later-world west exit remains unavailable. Chapter saves and [MT-32 music/SFX](music.md) were added later; later regions and speech remain outside this slice.
+The playable CD quest chain extends from Brandon’s home to Darm’s magic scroll. The repaired bridge opens the road west from CAVEB into the Timbermist Woods. The new region includes Darm’s hut, the songbird’s nest, the Grove of Oaks, Nolby’s tree, and Deadwood Glade. The birthstone quest and Serpent’s Grotto follow the scroll.
 
 | ID | Original resource | Location |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ The first forest region supports the original CD quest chain through the repaire
 | 14 | ZROCK | Southern cliff |
 | 15 | NWCLIFB | Tall cliff |
 | 16 | FGOWEST | Dark forest |
-| 24 | CAVEB | Beyond the repaired bridge |
+| 17–24, 26–34, 36 | Timbermist Woods | CAVEB and the paths, huts, clearings, and landmarks beyond it |
 
 Click the scene edges, doorways or lift to leave. An exit changes the desktop cursor's direction. Brandon walks to a reachable approach before the scene changes. The first attempt to leave home plays the original tree conversation, including when carrying an item. Returning home preserves its completion state.
 
@@ -33,13 +33,13 @@ npm run assets:world -- "C:\path\to\Legend of Kyrandia\DAT"
 
 `extractor/world.mjs` imports CPS backgrounds, MSC walk/priority masks and DAT animation/entrance metadata. It reads N/E/S/W connectivity from the DOS room table and traces EMC initialization for scene titles, initial scene shapes, special doorway rectangles, mask changes and actor scale. Unknown quest operations are outside this navigation importer. FORESTA uses original compression type 3 (RLE); the other backgrounds use LCW. Scene-local palette entries 228–247 remain intact. Initial WSA stills for Brynn's entrance and Herman are composited from original frames.
 
-Every room has a gzip indexed pack with its background and mask. Lift rooms also include DROPUP/DROPDOWN or LIFTUP/LIFTDOWN, using the original positions, frame order and 5/6-tick waits. `world.json` stores room metadata and source/output hashes. No raw PAK, APK, CPS, MSC, DAT, EMC or speech archives are published.
+Every room has a gzip indexed pack with its background and mask. Timbermist uses the script packs and shares artwork between original rooms with the same backdrop while retaining separate room state and exits. Lift rooms also include DROPUP/DROPDOWN or LIFTUP/LIFTDOWN, using the original positions, frame order and 5/6-tick waits. `world.json` stores room metadata and source hashes. No raw PAK, APK, CPS, MSC, DAT, EMC or speech archives are published.
 
 The original west connection to room 24 opens only after the quest scripts select BRIDGE. Giving Herman the saw alone is insufficient; obtaining the amulet and his progress at the work site determine when repair completes. Brandon's depth scale at the bridge follows the original integer 192→256 interpolation between y=56 and y=92.
 
 ## State and loading
 
-Only the current room is rendered. While loading an exit, input waits and the next room's pack is decoded once; the previous renderer is released after a successful transition. Room snapshots keep loose items and overlay changes; inventory and the held item are shared across the region. These are in-memory snapshots, not save files. Reloading or choosing Menu starts a new game.
+Only the current room is rendered. While loading an exit, input waits and the next room’s pack is decoded once. Room snapshots keep loose items and overlay changes. Inventory and the held item are shared across the region. Manual saves and the autosave also store these snapshots and quest flags. Older bridge saves can enter Timbermist and start its quests.
 
 Failed transitions keep the current room and inventory and allow another click to retry. Stopping a world or restarting the intro aborts pending fetches; an old load cannot reset the new game's canvas. Per-run callback ownership prevents an old room's cleanup from clearing the next room's subtitles or sequence state.
 
@@ -47,15 +47,15 @@ Failed transitions keep the current room and inventory and allow another click t
 
 Node tests check approach routes across all room exits, RLE decoding and depth scale. `tests/browser/world.html` drives the actual renderer through all 17 rooms and back, including both lift directions. It checks held items, inventory, picked overlays, dropped items, tree completion, the closed bridge, a deliberately failed transition/retry and cancellation during loading. Its gallery captures the original scenes for visual inspection.
 
-The complete build is about 2.6 MB. The 2,700,000-byte CI cap is a regression budget for this slice, not a full-game size target.
+The CI budget for runtime files is 6.6 MB, excluding the optional SoundFont, fallback SFX recording, and audio engine source archive.
 
 ## Quest scripts
 
 Run `npm run assets:world -- "C:\path\to\DAT"` followed by `npm run assets:forest -- "C:\path\to\DAT"` to rebuild the original data. The forest importer retains EMC code and strings, WSA frames, DAT sprites and VOC-derived durations. Runtime conditions read the current inventory and flags; playback applies changes at the corresponding action, so inspecting a script cannot prematurely consume an item.
 
-Brynn displays the original NOTEENG bitmap and waits for Continue. The home vase can store and return an item. Clicking the gap in the broken bridge plays Herman’s warning and waits for another scene click: retreat avoids the crossing; insisting plays the original fatal animation and offers a new game. No save or resurrection mechanic is invented.
+Brynn displays the original NOTEENG bitmap and waits for Continue. The home vase can store and return an item. Insisting on crossing the broken bridge plays the original fatal animation, then the book offers to restore the last autosave. In Timbermist, planting the three seeds awakens the yellow jewel. Clicking the jewel at the bird’s nest runs the original healing script, including the feather drop. Darm’s script accepts that feather and writes the magic scroll.
 
-`tests/browser/forest.html` traverses the full quest with actual input, captures key scenes, and crosses the repaired bridge in both directions. A separate button tests the warning, retreat and fatal crossing on a fresh game. Node tests cover both quest orders, the original frame/palette hashes, all 14,144 sampled hotspot/item combinations, DAT operand lengths/loops, and confirmation cancellation.
+`tests/browser/forest.html` traverses the quests with actual input, crosses the bridge in both directions, restores a bridge save from before Timbermist, and plays through the scroll. A separate button tests the warning, retreat and fatal crossing. Node tests cover both quest orders, frame and palette hashes, sampled hotspot and item combinations, DAT loops, and confirmation cancellation.
 
 ## Pointer and touch controls
 

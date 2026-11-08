@@ -1,11 +1,11 @@
 import { startGame } from "../../src/engine/gameplay/game";
 import { gemCutScene } from "../../src/engine/scenes/gemCut";
-import { roomPortals, type WorldRoom } from "../../src/engine/gameplay/world";
+import { validateWorldSave } from '../../src/engine/gameplay/saveStorage';
+import type { GameConfig } from '../../src/engine/core/types';
 import {
   IndexedClip,
   loadScenePack,
 } from "../../src/engine/resources/scenePack";
-import { loadForestData } from "../../src/engine/gameplay/forest";
 
 const canvas = document.querySelector("canvas")!,
   results = document.querySelector("#results")!;
@@ -35,7 +35,7 @@ window.fetch = async (input, init) => {
     throw Error("Fetch failed " + String(input) + ": " + e);
   }
 };
-const game = await startGame(canvas, {
+const config: GameConfig = {
   scene: gemCutScene,
   world: "/kyraweb/assets/world/world.json",
   playOpening: false,
@@ -56,13 +56,9 @@ const game = await startGame(canvas, {
     document.querySelector("#line")!.textContent = text;
     if (text) lines.push(text);
   },
-});
-const { rooms } = (await fetch("/kyraweb/assets/world/world.json").then((r) =>
-  r.json(),
-)) as { rooms: WorldRoom[] };
+};
+let game = await startGame(canvas, config);
 game.setWalkSpeed('fastest');
-const forest = await loadForestData("/kyraweb/assets/forest/forest.json.gz");
-let repaired = false;
 function advance(ms: number) {
   for (let t = 0; t < ms; t += 50) {
     now += 50;
@@ -106,22 +102,7 @@ async function click(x: number, y: number) {
   await settle();
 }
 async function travel(target: number) {
-  const original = rooms.find((r) => r.id === id);
-  const meta =
-    id === 24
-      ? forest.rooms.CAVEB
-      : id === 7 && repaired
-        ? forest.rooms.BRIDGE
-        : original!;
-  const pack = await loadScenePack(
-      `/kyraweb/assets/${id === 24 || (id === 7 && repaired) ? "forest/" + meta.name.toLowerCase() : "world/" + id}.kyr.gz`,
-    ),
-    clip = new IndexedClip(pack, pack.clips.mask);
-  const portal = roomPortals(meta, {
-    width: clip.info.width,
-    height: clip.info.height,
-    pixels: Array.from(clip.frame(0)),
-  }).find((p) => p.target === target);
+  const portal = game.getPortals().find((p) => p.target === target);
   if (!portal) throw Error(`Missing exit ${id}->${target}`);
   game.handleClick({
     x: portal.rect.x + portal.rect.w / 2,
@@ -210,7 +191,6 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     await click(120, 52);
     held(null);
     capture("Original amulet appears");
-    repaired = true;
     await route(11, 12, 13, 9, 7);
     capture("Repaired bridge");
     await route(24, 7);
@@ -219,8 +199,57 @@ document.querySelector("#run")!.addEventListener("click", async () => {
       throw Error("Merith dialogue missing");
     if (!lines.some((t) => t.includes("That must be the amulet")))
       throw Error("Amulet dialogue missing");
-    results.textContent +=
-      "ALL PASSED — original note, rose, willow, Merith chase, marble, saw, amulet, bridge and return trip";
+
+    const bridgeSave = validateWorldSave(game.getSaveState());
+    bridgeSave.quest.flags = bridgeSave.quest.flags.filter(flag => flag < 72 || flag > 75);
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: bridgeSave });
+    await route(24, 26, 27);
+    await click(130, 76);
+    if (!lines.includes("I'll need a quill.")) throw Error('Darm did not ask for a quill');
+    capture('Darm and Brandywine');
+    await route(26, 33, 30);
+    await click(128, 125);
+    held('item-27');
+    await click(120, 165);
+    await route(32, 34, 17);
+    await click(115, 112);
+    held('item-25');
+    await click(140, 165);
+    await route(22, 31);
+    await click(157, 62);
+    held('item-26');
+    await route(29, 33, 34, 21, 23, 17, 34, 32, 28, 20, 19, 36);
+    await click(204, 111);
+    held(null);
+    await click(120, 165);
+    held('item-27');
+    await click(204, 111);
+    held(null);
+    await click(140, 165);
+    held('item-25');
+    await click(204, 111);
+    held(null);
+    const groveSave = validateWorldSave(game.getSaveState());
+    if (!groveSave.quest.flags.includes(86)) throw Error('The yellow jewel did not awaken');
+    capture('The yellow jewel awakens at Deadwood Glade');
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: groveSave });
+    await route(18, 32, 30);
+    await click(263, 165);
+    if (!lines.some(line => line.includes('heal his wing'))) throw Error('The yellow jewel did not heal the songbird');
+    capture('Healed songbird');
+    await click(183, 125);
+    held('item-46');
+    await route(33, 26, 27);
+    await click(130, 76);
+    held(null);
+    await click(153, 78);
+    held('item-80');
+    const scrollSave = validateWorldSave(game.getSaveState());
+    if (!scrollSave.quest.flags.includes(94)) throw Error('Darm’s scroll did not survive as save data');
+    capture('Darm’s magic scroll');
+    results.textContent += 'ALL PASSED — first forest, bridge, Timbermist, yellow jewel, songbird, magic scroll and save restoration';
     document.title = "PASS — forest quests";
   } catch (e) {
     results.textContent += `FAIL ${e}`;

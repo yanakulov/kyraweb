@@ -1,6 +1,6 @@
 import { sceneShuffle } from './sceneShuffle';
 import { locale, translateGameText } from '../../i18n';
-import { DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS } from "../core/constants";
+import { DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, TICK_MS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from "../core/constants";
 import { loadImage, loadMask, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
 import {
@@ -112,6 +112,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const heldNpcPoses = new Map<number,Extract<RoomAction,{op:'npc'}>>();
     let speaker = 0;
     let hasAmulet=config.amulet??false;
+    let hasYellowJewel = config.yellowJewel ?? false;
+    let shakeUntil = 0;
+    const reduceMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
     let dead=false;
     const roomPalette=packedBackground?.clip.info.palette.slice();
     let paletteFade:{from:number[];to:number[];ms:number;age:number;step:number}|null=null;
@@ -134,9 +137,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         clip: new IndexedClip(packedBackground.clip.pack, info), renderer: new IndexedRenderer(info, false)
       });
     }
-    if(config.amulet&&!scriptRenderers.has('amulet-rest')){
-      const pack=await loadScenePack(withBase('assets/forest/amulet.kyr.gz'),config.signal),info=pack.clips['amulet-rest'];
-      scriptRenderers.set('amulet-rest',{clip:new IndexedClip(pack,info),renderer:new IndexedRenderer(info,false)});
+    if(config.amulet){
+      const pack=await loadScenePack(withBase('assets/forest/amulet.kyr.gz'),config.signal);
+      for (const [name, info] of Object.entries(pack.clips)) {
+        if (!scriptRenderers.has(name)) scriptRenderers.set(name,{clip:new IndexedClip(pack,info),renderer:new IndexedRenderer(info,false)});
+      }
     }
     if (config.onActorInteract && !scriptRenderers.has('note')) {
       const pack = await loadScenePack(withBase('assets/forest/note.kyr.gz'), config.signal), info = pack.clips.note;
@@ -396,6 +401,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if(hasAmulet&&rest)ctx.drawImage(rest.renderer.render(rest.clip.frame(0)),224,152);
       const amulet=scriptLayers.get('amulet');
       if(amulet)ctx.drawImage(amulet.image,amulet.x,amulet.y);
+      const yellow = scriptRenderers.get('yellow-jewel'), yellowAnim = scriptLayers.get('yellow-jewel');
+      if (yellowAnim) ctx.drawImage(yellowAnim.image, yellowAnim.x, yellowAnim.y);
+      else if (hasYellowJewel && yellow) ctx.drawImage(yellow.renderer.render(yellow.clip.frame(10)), YELLOW_JEWEL_POS.x, YELLOW_JEWEL_POS.y);
       drawInventory(ctx, itemsSheet, inventoryItems, state.inventorySlots);
       if (state.itemInHand && state.pointer && !exitCursor(availablePortals(), state.pointer)) {
         const item = inventoryItems.get(state.itemInHand);
@@ -438,6 +446,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         ctx.stroke();
       }
 
+      if (clockMs < shakeUntil && !reduceMotion?.matches) {
+        ctx.drawImage(canvas, 0, 4, LOGICAL_WIDTH, LOGICAL_HEIGHT - 4, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT - 4);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, LOGICAL_HEIGHT - 4, LOGICAL_WIDTH, 4);
+      }
     }
 
     function loop(now: number) {
@@ -520,6 +533,12 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (sequence) { sequence.skipLine(); return true; }
       if (dead) return true;
       if (state.drops.length) return true;
+      const jewel = YELLOW_JEWEL_HITBOX;
+      if (hasAmulet && config.onAmuletInteract && point.x >= jewel.x && point.x < jewel.x + jewel.w && point.y >= jewel.y && point.y < jewel.y + jewel.h) {
+        stopWalking();
+        playScript(config.onAmuletInteract(getSnapshot()));
+        return true;
+      }
       const portal = portalAtPoint(availablePortals(), point);
       // Every exit hit area must run the original first conversation, including
       // the corners/door rectangle and a click while carrying an item.
@@ -660,9 +679,13 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       switch (action.op) {
         case 'choice':state.statusMessage='Click where you want to go.';state.statusMessageUntil=Infinity;break;
         case 'death':dead=true;actorVisible=false;break;
+        case 'shake': shakeUntil = clockMs + action.ms; break;
         case 'exit':config.onExit?.({id:'script',target:action.target,side:'north',entry:action.entry,rect:{x:0,y:0,w:0,h:0},point:state.pos});break;
         case 'palette':if(roomPalette){const to=roomPalette.slice();to.splice(action.start*3,action.colors.length,...action.colors);paletteFade={from:roomPalette.slice(),to,ms:action.ms,age:0,step:-1};updatePalette(0);}break;
-        case 'flag':if(action.flag===45)hasAmulet=action.value;break;
+        case 'flag':
+          if (action.flag === 45) hasAmulet = action.value;
+          if (action.flag === YELLOW_JEWEL_FLAG) hasYellowJewel = action.value;
+          break;
         case 'ambientWait':if(sceneAnims[action.index]?.play)ambientWait=action.index;break;
         case 'confirm':config.onContinueChange?.(true);break;
         case 'walkDelay':state.walkDelayTicks=Math.max(1,action.ticks);break;

@@ -1,4 +1,5 @@
 import type { WorldSave } from '../core/types';
+import { isWorldRoomId } from '../core/constants';
 
 export type SaveRecord = {
   version: 1; name: string; location: string; savedAt: string; thumbnail: string; state: WorldSave;
@@ -29,7 +30,7 @@ function list(value: unknown, path: string, max: number, check: (value: unknown,
   for (let i = 0; i < value.length; i++) check(value[i], `${path}[${i}]`);
 }
 function roomId(value: unknown, path: string, absent = false) {
-  if (!(typeof value === 'number' && Number.isInteger(value) && ((value >= 0 && value <= 16) || value === 24 || (absent && value === -1)))) invalid(path);
+  if (!(typeof value === 'number' && (isWorldRoomId(value) || (absent && value === -1)))) invalid(path);
 }
 function item(value: unknown, path: string) {
   if (value === null) return;

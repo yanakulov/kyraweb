@@ -24,6 +24,8 @@ export type GameConfig = {
   onNoteChange?: (visible: boolean) => void;
   npcFrames?: Record<number, { xOffset: number; yOffset: number }>;
   amulet?: boolean;
+  yellowJewel?: boolean;
+  onAmuletInteract?: (snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[];
   portals?: RoomPortal[];
   onExit?: (portal: RoomPortal) => void;
   onLoadingChange?: (loading: boolean) => void;

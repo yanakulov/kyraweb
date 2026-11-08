@@ -90,6 +90,7 @@ test('original tree dialogue advances to the next line after skipping its WSA sp
 
 test("exit markers use actual available portals, including doors and corner precedence", () => {
   for (const room of worldData.rooms as WorldRoom[]) {
+    if (room.id >= 17) continue; // Timbermist uses the original EMC room packs.
     const pack = parseScenePack(gunzipSync(readFileSync(`public/assets/world/${room.id}.kyr.gz`)));
     const clip = new IndexedClip(pack, pack.clips.mask);
     const portals = roomPortals(room, { width: 320, height: 144, pixels: Array.from(clip.frame(0)) });
@@ -136,6 +137,7 @@ test("Westwood RLE decodes forest literals, short fills and big-endian long fill
 test("all forest exits have reachable approaches from every arrival, and the broken bridge stays closed", () => {
   const rooms = worldData.rooms as WorldRoom[];
   for (const room of rooms) {
+    if (room.id >= 17) continue;
     const bytes = readFileSync(`public/assets/world/${room.id}.kyr.gz`);
     assert.equal(createHash("sha256").update(bytes).digest("hex"), worldData.rooms[room.id].sha256);
     const pack = parseScenePack(gunzipSync(bytes));
@@ -587,6 +589,7 @@ test('scenery clicks approach reachable floor around obstacles without crossing 
   assert.deepEqual(findClickPath(start,{x:40,y:50},thinWall),[]);
   let improved=0;
   for(const room of worldData.rooms as WorldRoom[]) {
+    if (room.id >= 17) continue;
     const pack=parseScenePack(gunzipSync(readFileSync(`public/assets/world/${room.id}.kyr.gz`)));
     const clip=new IndexedClip(pack,pack.clips.mask),mask={width:clip.info.width,height:clip.info.height,pixels:Array.from(clip.frame(0))};
     const from=nearestFloor(mask,room.entrances.south),passable=(p:Vec2)=>isWalkable(p,{...scene,uiMaskY:136},mask);

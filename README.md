@@ -13,8 +13,9 @@ KyraWeb is an unofficial web remake of *The Legend of Kyrandia*, the first book 
 - Open the book to read the prologue and enter the intro. After the Westwood and AkulaFlow logos, the cutscene leads to Kallak’s desk and the **Start Journey** menu.
 - Follow Brandon into his home, discover what happened to Kallak, and speak to the tree. The tree conversation plays on your first attempt to leave if you haven’t spoken to it yet.
 - Explore the first forest region and complete the original quest chain through the bridge repair. Visit Brynn, heal the willow, follow Merith, find the amulet, and bring Herman the saw. You can cross the repaired bridge and return.
+- Continue into the Timbermist Woods. Meet Darm, Brandywine, and Nolby, plant the three seeds, and use the amulet to heal the songbird. Bring Darm the feather and collect his magic scroll.
 
-The game has English and Russian text. CD voice acting and the areas beyond the bridge landing are outside the current release.
+The game has English and Russian text. The playable story reaches Darm's magic scroll. The birthstone quest, the Serpent's Grotto, and CD voice acting are outside the current release.
 
 ## Controls and saves
 

@@ -33,6 +33,7 @@ const game = await startGame(canvas, { scene: gemCutScene, world: "/kyraweb/asse
 const { rooms } = await fetch("/kyraweb/assets/world/world.json").then(r => r.json()) as { rooms: WorldRoom[] };
 const portals = new Map<number, ReturnType<typeof roomPortals>>();
 for (const room of rooms) {
+  if (room.id >= 17) continue;
   const pack = await loadScenePack(`/kyraweb/assets/world/${room.id}.kyr.gz`), mask = new IndexedClip(pack, pack.clips.mask);
   portals.set(room.id, roomPortals(room, { width: 320, height: 144, pixels: Array.from(mask.frame(0)) }));
 }

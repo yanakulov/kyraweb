@@ -12,7 +12,7 @@ import {
   decodeWsa,
 } from "./indexed_resources.mjs";
 import { parseEmc, runEmc } from "./emc.mjs";
-import { decodeDat, decodeMask, restoreBackgroundColumns } from "./world.mjs";
+import { decodeDat, decodeMask, REGION, restoreBackgroundColumns } from "./world.mjs";
 import { encodeScenePack } from "./scene_pack.mjs";
 import { vocDuration } from "./opening.mjs";
 
@@ -36,6 +36,9 @@ const ROOMS = {
   CAVEB: 24,
   NWCLIFB: 15,
 };
+for (const [id, region] of REGION.entries()) {
+  if (id >= 17 && region && !(region[0] in ROOMS)) ROOMS[region[0]] = id;
+}
 // ScummVM k1DefaultShapesDOS, indices 70..105 become shapes 77..112.
 const HERMAN = [
   [0, 0, 3, 48, -12, -46],
@@ -76,6 +79,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     "_NPC.EMC",
     "CHAPTER1.VRM",
     "AMULET.WSA",
+    "JEWELS3.CPS",
     "DROPUP.WSA",
     "DROPDOWN.WSA",
   ]);
@@ -215,10 +219,11 @@ export async function buildForest(root, out = "public/assets/forest") {
         palette: image.palette,
         transparentIndex: -1,
       };
-    for (const [actor, first, defs] of [
+    const actors = id < 17 ? [
       ["HERMAN", 77, HERMAN],
       ["MERITH", 41, MERITH],
-    ]) {
+    ] : [];
+    for (const [actor, first, defs] of actors) {
       const sheet = decodeCps(get(`${actor}.CPS`), get("PALETTE.COL"));
       for (const [i, [x, y, w, h]] of defs.entries()) {
         const pixels = new Uint8Array(w * 8 * h);
@@ -259,9 +264,7 @@ export async function buildForest(root, out = "public/assets/forest") {
       exits:
         name === "BRIDGE"
           ? [null, 9, null, 24]
-          : name === "CAVEB"
-            ? [null, 7, null, null]
-            : base.exits,
+          : base.exits,
       npcFrames: Object.fromEntries([
         ...MERITH.map((f, i) => [i + 41, { xOffset: f[4], yOffset: f[5] }]),
         ...HERMAN.map((f, i) => [i + 77, { xOffset: f[4], yOffset: f[5] }]),
@@ -297,9 +300,17 @@ export async function buildForest(root, out = "public/assets/forest") {
     }),
   );
   const amulet = decodeWsa(get("AMULET.WSA"));
+  const jewels = decodeCps(get("JEWELS3.CPS"), get("PALETTE.COL"));
+  // JEWELS3 uses a 32 × 17 grid. Yellow is jewel 1 in the DOS HUD.
+  const yellowFrames = [359, 354, 349, 344, 339, 335, 340, 345, 350, 355, 324, 330].map(shape => {
+    const row = shape < 330 ? 0 : shape < 335 ? 6 : 1 + Math.floor((shape - 335) / 5);
+    const column = shape < 330 ? shape - 324 : shape < 335 ? shape - 330 : (shape - 335) % 5;
+    return Uint8Array.from({ length: 32 * 17 }, (_, i) => jewels.pixels[(row * 17 + Math.floor(i / 32)) * 320 + column * 32 + i % 32]);
+  });
   await writeFile(
     join(out, "amulet.kyr.gz"),
     encodeScenePack({
+      "yellow-jewel": { width: 32, height: 17, frames: yellowFrames, palette: jewels.palette, transparentIndex: 0 },
       "amulet-rest": {
         ...amulet,
         frames: [amulet.frames.at(-1)],
