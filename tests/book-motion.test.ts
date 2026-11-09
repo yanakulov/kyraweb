@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BOOK_READING_MS, bookHandoff, bookTransition, candleMotion, optionsTransition, pageCameraFraming } from '../src/components/bookTransition';
+import { BOOK_READING_MS, bookHandoff, bookTransition, candleMotion, optionsTransition, pageCameraFraming, roomFrameFocus } from '../src/components/bookTransition';
+import { photoBounds } from '../src/components/pixelBookPaint';
+import { ROOM_ART } from '../src/engine/core/constants';
+
+test('book portraits use available scenery when Brandon is against either edge', () => {
+  const image = { width: ROOM_ART.w, height: ROOM_ART.h } as HTMLCanvasElement;
+  const page = { x: 341, y: 69, w: 179, h: 199 };
+  const left = photoBounds(image, page, roomFrameFocus({ x: ROOM_ART.x, y: 110 }));
+  const right = photoBounds(image, page, roomFrameFocus({ x: ROOM_ART.x + ROOM_ART.w, y: 110 }));
+  assert.equal(left.x, page.x);
+  assert.equal(right.x + right.w, page.x + page.w);
+  assert.equal(left.w / left.h, image.width / image.height);
+});
 import { MeshStandardMaterial, PerspectiveCamera, Texture, Vector3 } from 'three';
 import { inscribePage, illustrationLevels } from '../src/components/storybookInk';
 

@@ -2,7 +2,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { WorldSave } from '../src/engine/core/types';
-import { AUTOSAVE_SLOT, readAutosave, readSaveSlots, writeAutosave, writeSaveSlot, validateWorldSave } from '../src/engine/gameplay/saveStorage';
+import { AUTOSAVE_SLOT, readAutosave, readSaveSlots, writeAutosave, writeSaveSlot, deleteSaveSlot, validateWorldSave } from '../src/engine/gameplay/saveStorage';
 
 const png = `data:image/png;base64,${readFileSync('public/assets/intro/logo_bg.png').toString('base64')}`;
 function state(): WorldSave {
@@ -25,7 +25,8 @@ function state(): WorldSave {
 const payload = () => ({ name: ' Bridge repaired ', location: 'The bridge', thumbnail: png, state: state() });
 function memoryStorage(t: TestContext) {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage'), entries = new Map<string, string>();
-  const storage = { getItem: (key: string) => entries.get(key) ?? null, setItem: (key: string, value: string) => { entries.set(key, value); } };
+  const storage = { getItem: (key: string) => entries.get(key) ?? null, setItem: (key: string, value: string) => { entries.set(key, value); },
+    removeItem: (key: string) => { entries.delete(key); } };
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
   t.after(() => { if (previous) Object.defineProperty(globalThis, 'localStorage', previous); else Reflect.deleteProperty(globalThis, 'localStorage'); });
   return { entries, storage };
@@ -73,6 +74,21 @@ test('autosave replaces only its own checkpoint and keeps the last valid record 
   next.state.rooms[7].pos.x = NaN;
   assert.throws(() => writeAutosave(next), /Invalid save/);
   assert.equal(entries.get('kyrandia.autosave'), previous);
+});
+
+test('deleting a manual slot preserves the other slots and the autosave', t => {
+  const { entries, storage } = memoryStorage(t);
+  writeSaveSlot(0, payload());
+  const other = writeSaveSlot(1, payload()), autosave = writeAutosave(payload());
+  assert.throws(() => deleteSaveSlot(AUTOSAVE_SLOT), /three save slots/);
+  deleteSaveSlot(0);
+  assert.equal(readSaveSlots()[0].save, null);
+  assert.deepEqual(readSaveSlots()[1].save, other);
+  assert.deepEqual(readAutosave().save, autosave);
+  const previous = entries.get('kyrandia.save.2');
+  storage.removeItem = () => { throw new Error('blocked'); };
+  assert.throws(() => deleteSaveSlot(1), /could not be deleted/);
+  assert.equal(entries.get('kyrandia.save.2'), previous);
 });
 
 test('state validation rejects malformed nested runtime, quest and inventory before writing', t => {

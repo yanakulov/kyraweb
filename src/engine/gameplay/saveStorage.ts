@@ -11,7 +11,10 @@ export const AUTOSAVE_SLOT = SLOT_COUNT;
 const AUTOSAVE_KEY = 'kyrandia.autosave';
 const forestFiles = new Set('GEMCUT HEALER SICKWIL ALTAR BROKEN BRIDGE SORROW TRUNK FNORTH FGOWEST WILLOW FORESTB FORESTA XEDGE XEDGEC CAVEB NWCLIFB ALGAE FOUNTN'.split(' '));
 const itemNames = new Set('letter ruby saw apple appleEaten rose silverRose marble teardrop'.split(' '));
-const slotKey = (index: number) => `kyrandia.save.${index + 1}`;
+function slotKey(index: number) {
+  if (!Number.isInteger(index) || index < 0 || index >= SLOT_COUNT) throw new Error('Choose one of the three save slots.');
+  return `kyrandia.save.${index + 1}`;
+}
 
 function invalid(path: string): never { throw new Error(`Invalid save data (${path}). Choose another slot or save again.`); }
 function object(value: unknown, path: string, fields?: string): Record<string, unknown> {
@@ -232,8 +235,14 @@ function writeRecord(key: string, value: Pick<SaveRecord, 'name' | 'location' | 
 }
 
 export function writeSaveSlot(index: number, value: Pick<SaveRecord, 'name' | 'location' | 'thumbnail' | 'state'>): SaveRecord {
-  if (!Number.isInteger(index) || index < 0 || index >= SLOT_COUNT) throw new Error('Choose one of the three save slots.');
   return writeRecord(slotKey(index), value);
+}
+
+export function deleteSaveSlot(index: number) {
+  const key = slotKey(index);
+  const store = storage();
+  try { store.removeItem(key); }
+  catch { throw new Error('The chapter could not be deleted.'); }
 }
 
 export function writeAutosave(value: Pick<SaveRecord, 'location' | 'thumbnail' | 'state'>): SaveRecord {

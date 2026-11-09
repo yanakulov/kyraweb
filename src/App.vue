@@ -1,25 +1,42 @@
 <template>
-  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()" @pointermove.capture="rememberMouse" @pointerover.capture="menuHover" @click.capture="menuClick">
-    <FantasyBook v-if="!bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :opening-frame-ready="openingFrameReady || !!openingSnapshot || !!gameError" :snapshot="openingSnapshot ?? undefined" :frame-focus="bookFocus" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="beginOpening" @ready="openingReadingReady = true" @open="openBook">
+  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane, 'is-portrait': pixelBook && mobilePortrait }"
+    :style="cinematicArt ? { '--cinematic-ratio': cinematicArt.w / cinematicArt.h } : undefined"
+    ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()" @pointermove.capture="rememberMouse" @pointerover.capture="menuHover" @click.capture="menuClick">
+    <PixelBook v-if="pixelBook && (!bookOpened || bookSnapshot || mobilePortrait)" ref="openingBook"
+      :options="!!bookSnapshot" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy"
+      :returning="bookReturning" :message="bookMessage" :initial-view="bookInitialView" :setup="firstRun" :show-prologue="openingPrologue"
+      :latest-save="!!latestSave" :location="locationName" :film-bounds="cinematicArt ?? undefined"
+      :snapshot="bookSnapshot ?? openingSnapshot ?? undefined" :game-canvas="canvasRef ?? undefined" :game-stage="stageRef ?? undefined"
+      :focus="bookFocus" :opening-ready="openingFrameReady || !!openingSnapshot || !!gameError" :portrait="mobilePortrait"
+      :orientation-only="bookOpened && !bookSnapshot"
+      :slots="bookSlots" :dev-scene="activeDevScene" :dev-finished="devFinished"
+      :walk-speed="walkSpeed" :control-mode="controlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen"
+      :music="music" :music-state="musicState" @begin="beginOpening" @ready="bookOptionsReady"
+      @open="openBook" @prologue="finishPrologue" @continue="continueJourney" @finish-setup="finishSetup"
+      @start="startJourney" @resume="resumeBook" @returned="finishBookResume" @save="saveChapter" @load="loadChapter" @delete="deleteChapter"
+      @control="setControlMode" @speed="walkSpeed = $event" @fullscreen="toggleFullscreen"
+      @leave="leaveBook" @dev-run="launchDevScene" @leave-dev="returnToStory" />
+    <FantasyBook v-if="!pixelBook && !bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :opening-frame-ready="openingFrameReady || !!openingSnapshot || !!gameError" :snapshot="openingSnapshot ?? undefined" :frame-focus="bookFocus" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="beginOpening" @ready="openingReadingReady = true" @open="openBook">
       <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" :show-story="!prologueSeen" @page-turn="music.bookSound('page')" @continue="finishPrologue">
         <template #audio><MusicSettings v-if="musicState" :player="music" :state="musicState" /></template>
       </BookPrologue>
       <template #invitation><button v-if="latestSave" class="book-continue" type="button" :disabled="bookBusy" @click.stop="continueJourney">{{ t('Continue journey') }}</button><p v-if="bookBusy || bookMessage" class="book-status" role="status">{{ t(bookBusy ? 'Opening your saved chapter…' : bookMessage) }}</p></template>
     </FantasyBook>
-    <FirstRunLetter v-if="firstRun && musicState" :player="music" :state="musicState" :mode="controlMode" @finish="finishSetup" />
-    <FantasyBook v-if="bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :frame-focus="bookFocus" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
+    <FirstRunLetter v-if="!pixelBook && firstRun && musicState" :player="music" :state="musicState" :mode="controlMode" @finish="finishSetup" />
+    <FantasyBook v-if="!pixelBook && bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :frame-focus="bookFocus" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
       <BookPrologue v-if="readingHistory" :ready="bookReady" returning @page-turn="music.bookSound('page')" @continue="readingHistory = false" />
       <BookMenu v-else :gameplay="!introActive" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookMessage" :slots="bookSlots" :initial-view="bookInitialView" :dev-scene="activeDevScene" :dev-finished="devFinished"
         v-model:walk-speed="walkSpeed" :control-mode="controlMode" @update:control-mode="setControlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen" :music-player="music" :music-state="musicState"
         @start-journey="startJourney" @page-turn="music.bookSound('page')" @read-prologue="readingHistory = true; music.bookSound('page')" @resume="resumeBook" @save="saveChapter" @load="loadChapter" @fullscreen="toggleFullscreen" @main-menu="leaveBook('menu')" @replay-intro="leaveBook('intro')" @dev-run="launchDevScene" @leave-dev="returnToStory" />
     </FantasyBook>
-    <div class="game-frame" :class="{ 'is-concealed': !bookOpened && !openingFrameReady && !openingSnapshot && !gameError }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot">
+    <div class="game-frame" :class="{ 'is-concealed': !bookOpened && !openingFrameReady && !openingSnapshot && !gameError }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot || mobilePortrait">
       <canvas ref="sceneBackdrop" class="scene-backdrop" :width="ROOM_ART.w" :height="ROOM_ART.h" aria-hidden="true"></canvas>
       <div class="stage" ref="stageRef" :class="{ 'cursor-controlled': gamePointerVisible || endingActive }" :aria-busy="loading"
         @pointerenter="handleMove" @pointermove="handleMove" @pointerleave="leaveStage"
         @pointerdown="handlePointerDown" @pointerup="handlePointerUp" @pointercancel="cancelGesture" @contextmenu.prevent="handleContextMenu">
         <div class="scene-plane" :style="cinematicPlane">
-        <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :scale-y="subtitleScaleY" :alpha="subtitleAlpha" :visible="subtitleVisible" />
+        <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :scale-y="subtitleScaleY" :bounds="cinematicArt ?? sceneBounds"
+          :alpha="subtitleAlpha" :visible="subtitleVisible" />
         <canvas ref="canvasRef" width="320" height="200" :aria-label="t('Kyrandia game scene')" @click="handleClick"></canvas>
         <canvas ref="statusTextCanvas" class="status-text" aria-hidden="true" hidden></canvas>
         <canvas ref="inventoryCanvas" class="radial-surface" aria-hidden="true" hidden></canvas>
@@ -36,7 +53,7 @@
         <p v-if="navigationError" class="scene-notice" role="status">{{ t(navigationError) }}</p>
       </div>
     </div>
-    <dialog v-if="mobilePortrait" ref="rotationDialog" class="rotation-dialog" aria-labelledby="rotation-title" aria-describedby="rotation-help" @cancel.prevent>
+    <dialog v-if="mobilePortrait && !pixelBook" ref="rotationDialog" class="rotation-dialog" aria-labelledby="rotation-title" aria-describedby="rotation-help" @cancel.prevent>
       <svg class="rotation-icon" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="5" y="5" width="15" height="26" rx="2" />
         <rect x="17" y="32" width="26" height="13" rx="2" />
@@ -55,6 +72,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 const FantasyBook = defineAsyncComponent(() => import('./components/FantasyBook.vue'));
+const PixelBook = defineAsyncComponent(() => import('./components/PixelBook.vue'));
+const pixelBook = new URLSearchParams(location.search).get('book') !== '3d';
 import BookMenu from './components/BookMenu.vue';
 import BookPrologue from './components/BookPrologue.vue';
 import FirstRunLetter from './components/FirstRunLetter.vue';
@@ -81,7 +100,8 @@ function menuClick(event: MouseEvent) {
   const control = menuControl(event.target);
   if (control && (!control.matches('label') || event.target instanceof HTMLInputElement)) music.bookSound('click');
 }
-import { AUTOSAVE_SLOT, readAutosave, readSaveSlots, writeAutosave, writeSaveSlot, type SaveRecord, type SaveSlot } from './engine/gameplay/saveStorage';
+import { AUTOSAVE_SLOT, readAutosave, readSaveSlots, writeAutosave, writeSaveSlot, deleteSaveSlot, type SaveRecord, type SaveSlot } from './engine/gameplay/saveStorage';
+import { roomFrameFocus } from './components/bookTransition';
 import type { DevRoom, DevRoomScene, DevScene } from './engine/gameplay/devScenes';
 const activeDevScene = shallowRef<DevScene | null>(null);
 const devFinished = ref(false);
@@ -90,7 +110,7 @@ let storyBeforeDev: StoryCheckpoint | null = null;
 const bookOpened = ref(false);
 function hasReadPrologue() { try { return localStorage.getItem('kyrandia.prologueSeen') === '1'; } catch { return false; } }
 const prologueSeen = hasReadPrologue();
-const openingPrologue = ref(true), openingReadingReady = ref(false), readingHistory = ref(false), kallakMenu = ref(false), noteVisible = ref(false);
+const openingPrologue = ref(!prologueSeen), openingReadingReady = ref(false), readingHistory = ref(false), kallakMenu = ref(false), noteVisible = ref(false);
 function finishPrologue() { try { localStorage.setItem('kyrandia.prologueSeen', '1'); } catch { /* Reading remains available without storage. */ } music.bookSound('enter'); openingPrologue.value = false; }
 const openingBook = ref<{ openBook: () => void } | null>(null);
 const openingSnapshot = shallowRef<HTMLCanvasElement | null>(null), bookSnapshot = shallowRef<HTMLCanvasElement | null>(null);
@@ -117,7 +137,7 @@ async function finishSetup(mode: ControlMode) {
   setControlMode(mode);
   firstRun.value = false;
   await nextTick();
-  if (!latestSave.value) openingBook.value?.openBook();
+  if (!pixelBook && !latestSave.value) openingBook.value?.openBook();
 }
 const bookReturning = ref(false), bookReady = ref(false), bookBusy = ref(false), canSave = ref(false), gameOver = ref(false);
 const bookMessage = ref(''), bookInitialView = ref<'main' | 'load' | 'dev'>('main');
@@ -140,7 +160,9 @@ function openBook() {
   if (openingSnapshot.value && game) {
     bookOpened.value = true; openingSnapshot.value = null; game.setPaused(mobilePortrait.value); syncControls();
   } else if (openingFrameReady.value || gameError.value) {
-    bookOpened.value = true; intro?.setPaused(mobilePortrait.value);
+    bookOpened.value = true;
+    if (kallakMenu.value) showBookOptions();
+    else intro?.setPaused(mobilePortrait.value);
   } else prepareOpening();
 }
 function closePanels() { if (readingHistory.value) { readingHistory.value = false; return; } if (!kallakMenu.value) resumeBook(); }
@@ -187,7 +209,8 @@ let mousePoint: Vec2 | null = null;
 function rememberMouse(event: PointerEvent) {
   if (event.pointerType === 'mouse') mousePoint = { x: event.clientX, y: event.clientY };
 }
-let gesture: { id: number; x: number; y: number; travel: number; started: number } | null = null;
+const touchContacts = new Map<number, { x: number; y: number; travel: number; released: boolean }>();
+let touchStarted = 0;
 function syncControls() {
   gameViewHeight.value = canvasRef.value?.height ?? LOGICAL_HEIGHT;
   if (!touchPointer.value && mousePoint && canvasRef.value && stageRef.value) {
@@ -270,11 +293,13 @@ function handlePanelKey(event: KeyboardEvent) {
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
 }
 const introSteps = buildIntroSteps();
+const menuStep = introSteps.findIndex(step => step.id === "kallak_writing");
 let introRunId = 0;
 let subtitleResizeObserver: ResizeObserver | null = null;
 const currentIntroStep = ref(introSteps[0]?.id ?? "");
+const cinematicArt = computed(() => introActive.value ? introArtBounds(currentIntroStep.value) : openingScene.value ? ROOM_ART : null);
 const cinematicPlane = computed(() => {
-  const art = introActive.value ? introArtBounds(currentIntroStep.value) : openingScene.value ? ROOM_ART : null;
+  const art = cinematicArt.value;
   return art ? { left: `${-art.x / art.w * 100}%`, top: `${-art.y / art.h * 100}%`,
     width: `${LOGICAL_WIDTH / art.w * 100}%`, height: `${gameViewHeight.value / art.h * 100}%` } : undefined;
 });
@@ -333,7 +358,7 @@ function captureBookFrame() {
   const copy = document.createElement('canvas');
   copy.width = w; copy.height = h;
   copy.getContext('2d')!.drawImage(source, x, y, w, h, 0, 0, w, h);
-  if (actor) bookFocus.value = { x: (actor.x - x) / w, y: 1 - (actor.y - y - 20) / h };
+  if (actor) bookFocus.value = roomFrameFocus(actor);
   else if (kallakMenu.value) bookFocus.value = { x: .72, y: .61 };
   return copy;
 }
@@ -395,6 +420,13 @@ function saveChapter(index: number, name: string) {
     writeSaveSlot(index, { name, location: locationName.value, thumbnail: captureFrame().toDataURL('image/webp', .8), state });
     refreshSaveSlots(); bookMessage.value = `“${name}” saved.`;
   } catch (error) { bookMessage.value = error instanceof Error ? error.message : 'The chapter could not be saved.'; }
+}
+function deleteChapter(index: number) {
+  if (bookBusy.value) return;
+  try {
+    deleteSaveSlot(index);
+    if (refreshSaveSlots()) bookMessage.value = 'Chapter deleted.';
+  } catch (error) { bookMessage.value = error instanceof Error ? error.message : 'The chapter could not be deleted.'; }
 }
 async function restoreChapter(record?: StoryCheckpoint, devRoom?: DevRoom) {
   if (!canvasRef.value) throw new Error('The game is not ready.');
@@ -501,7 +533,7 @@ async function continueJourney() {
 async function boot() {
   if (!canvasRef.value) return;
   updateSubtitleScale();
-  await launchIntro(0, true);
+  await launchIntro(prologueSeen ? menuStep : 0, true);
 }
 
 function updateSubtitleScale() {
@@ -560,7 +592,10 @@ async function startIntro(startIndex: number, autoStartGame: boolean, singleStep
       }
     },
     onStepReady: id => {
-      if (id === 'kallak_writing' && autoStartGame && runId === introRunId) { kallakMenu.value = true; showBookOptions(); }
+      if (id === 'kallak_writing' && autoStartGame && runId === introRunId) {
+        kallakMenu.value = true;
+        if (bookOpened.value) showBookOptions();
+      }
     },
     onSubtitleChange: (payload) => {
       if (runId !== introRunId) return;
@@ -661,7 +696,7 @@ async function launchIntro(startIndex: number, autoStartGame: boolean, singleSte
 
 function openMenu() {
   closePanels();
-  void launchIntro(introSteps.findIndex(step => step.id === "kallak_writing"), true);
+  void launchIntro(menuStep, true);
 }
 
 function replayIntro() {
@@ -718,18 +753,26 @@ function handlePointerDown(event: PointerEvent) {
   if (overlayOpen.value) return;
   touchPointer.value = event.pointerType !== 'mouse';
   if (!touchPointer.value) { handleMove(event); return; }
-  if (!event.isPrimary) { cancelGesture(); return; }
-  gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, travel: 0, started: performance.now() };
+  if (touchContacts.size === 0) {
+    if (!event.isPrimary) return;
+    touchStarted = performance.now();
+  } else if (touchContacts.size >= 2) {
+    cancelGesture();
+    return;
+  }
+  touchContacts.set(event.pointerId, { x: event.clientX, y: event.clientY, travel: 0, released: false });
   canvasRef.value?.setPointerCapture(event.pointerId);
 }
 
 function handleMove(event: PointerEvent) {
   if (overlayOpen.value || !canvasRef.value) return;
   if (event.pointerType !== 'mouse') {
-    if (!gesture || gesture.id !== event.pointerId) return;
-    const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
-    gesture.travel += Math.hypot(dx, dy);
-    gesture.x = event.clientX; gesture.y = event.clientY;
+    const contact = touchContacts.get(event.pointerId);
+    if (!contact || contact.released) return;
+    const dx = event.clientX - contact.x, dy = event.clientY - contact.y;
+    contact.travel += Math.hypot(dx, dy);
+    contact.x = event.clientX; contact.y = event.clientY;
+    if (touchContacts.size > 1) return;
     const rect = canvasRef.value.getBoundingClientRect();
     cursor.value = clampCursor({ x: cursor.value.x + dx * LOGICAL_WIDTH / rect.width,
       y: cursor.value.y + dy * gameViewHeight.value / rect.height });
@@ -750,17 +793,24 @@ function leaveStage(event: PointerEvent) {
 }
 
 function handlePointerUp(event: PointerEvent) {
-  if (!gesture || gesture.id !== event.pointerId) return;
-  const tap = gesture.travel < 6;
-  const hold = performance.now() - gesture.started >= 420;
+  const contact = touchContacts.get(event.pointerId);
+  if (!contact) return;
+  contact.released = true;
+  const contacts = [...touchContacts.values()];
+  if (contacts.some(contact => !contact.released)) return;
+  const duration = performance.now() - touchStarted;
+  const twoFingers = contacts.length === 2;
   cancelGesture();
-  if (tap) {
-    if (introActive.value) intro?.skipLine();
-    else if (hold && controlMode.value === 'modern') toggleInventory();
-    else interact(cursor.value);
+  if (contacts.some(contact => contact.travel >= (twoFingers ? 9 : 6))) return;
+  if (twoFingers) {
+    if (duration <= 320 && !introActive.value) toggleInventory();
+    return;
   }
+  if (introActive.value) intro?.skipLine();
+  else if (duration >= 420 && controlMode.value === 'modern') toggleInventory();
+  else interact(cursor.value);
 }
-function cancelGesture() { gesture = null; }
+function cancelGesture() { touchContacts.clear(); }
 
 function updateOrientation() {
   mobilePortrait.value = portraitMedia.matches;
@@ -788,6 +838,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  cancelGesture();
   cancelAnimationFrame(autosaveFrame);
   music.dispose(); document.removeEventListener('visibilitychange', musicVisibility);
   introRunId++;

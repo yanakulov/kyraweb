@@ -10,7 +10,7 @@ async function size(dir) {
   }
   return { bytes, files };
 }
-// The 3D menu is budgeted separately from the game.
+// Each book presentation is budgeted separately from the game.
 // Expand with measured content additions; this is not a full-game size target.
 // The complete LGPL source archive is distributed, but never automatically fetched.
 // The optional GeneralUser GS bank has its own limit and loads only when selected.
@@ -28,12 +28,16 @@ const bookChunks = (await readdir('dist/assets')).filter(name => /^FantasyBook-.
 const bookFiles = [...bookChunks, 'interface/book-cover.webp'];
 const bookSizes = await Promise.all(bookFiles.map(async name => (await stat(join('dist/assets', name))).size));
 const menu = model + bookSizes.reduce((total, bytes) => total + bytes, 0);
-const runtime = result.bytes - source - soundfont - effects - voices - controlPreviews - menu;
+const pixelBookChunks = (await readdir('dist/assets')).filter(name => /^PixelBook-.*\.(js|css)$/.test(name));
+const pixelBook = (await size('dist/assets/interface/pixel-book')).bytes
+  + (await Promise.all(pixelBookChunks.map(async name => (await stat(join('dist/assets', name))).size))).reduce((total, bytes) => total + bytes, 0);
+const runtime = result.bytes - source - soundfont - effects - voices - controlPreviews - menu - pixelBook;
 console.log(`Production build: ${result.bytes.toLocaleString('en-US')} bytes in ${result.files} files.`);
-console.log(`Runtime: ${runtime.toLocaleString('en-US')} bytes; 3D menu: ${menu.toLocaleString('en-US')} bytes; optional bank: ${soundfont.toLocaleString('en-US')} bytes; CD voices: ${voices.toLocaleString('en-US')} bytes; fallback SFX: ${effects.toLocaleString('en-US')} bytes; source archive: ${source.toLocaleString('en-US')} bytes; first-run previews: ${controlPreviews.toLocaleString('en-US')} bytes.`);
+console.log(`Runtime: ${runtime.toLocaleString('en-US')} bytes; 3D menu: ${menu.toLocaleString('en-US')} bytes; pixel book: ${pixelBook.toLocaleString('en-US')} bytes; optional bank: ${soundfont.toLocaleString('en-US')} bytes; CD voices: ${voices.toLocaleString('en-US')} bytes; fallback SFX: ${effects.toLocaleString('en-US')} bytes; source archive: ${source.toLocaleString('en-US')} bytes; first-run previews: ${controlPreviews.toLocaleString('en-US')} bytes.`);
 if (soundfont !== 32_319_396) throw new Error('Unexpected size for the pinned GeneralUser GS bank.');
 if (runtime > runtimeBudget) throw new Error('Runtime asset budget exceeded.');
 if (menu > menuBudget) throw new Error('3D menu budget exceeded.');
+if (pixelBook > 800_000) throw new Error('Pixel book budget exceeded.');
 if (effects > 600_000) throw new Error('Fallback sound effects budget exceeded.');
 if (voices > 7_750_000) throw new Error('CD voice asset budget exceeded.');
 if (controlPreviews > 60_000) throw new Error('First-run previews budget exceeded.');
