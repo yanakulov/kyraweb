@@ -13,6 +13,7 @@ import { findSpawnDestination } from './drops';
 import { devRoomFlags } from './devScenes';
 import { finalePreview } from './finale';
 import { initInventory } from './inventory';
+import { translateGameText } from '../../i18n';
 
 export const SIDES = ["north", "east", "south", "west"] as const;
 const scatteredGemIds = new Set([...groveGems, 1, 8]);
@@ -117,6 +118,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   // Saves from before Timbermist have not initialized the four unpicked acorns.
   if (restored && !restored.rooms[31]) for (const flag of [72, 73, 74, 75]) quest.flags.add(flag);
   let active = true, busy = false, paused = config.paused ?? false, currentId = restored?.currentRoom ?? dev?.room ?? 0, current: RoomGame;
+  let currentTitle = '';
   let pointer: Vec2 | null = null;
   let tokenCounter = 0, callbackOwner = 0;
   const saved = new Map<number, RoomSnapshot>(restored ? Object.entries(restored.rooms).map(([id, room]) => [Number(id), room]) : []);
@@ -263,7 +265,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       transitionImage.getContext('2d')!.drawImage(canvas, 0, 0);
     }
     const portals = roomPortals(meta, mask, cursorTrack);
-    try { game = await startRoom(canvas, { ...config, world: undefined, saveState: undefined, paused, locationSign, roomResource: meta.name, backgroundPack: pack, transitionImage,
+    const repeatLocation = !!currentTitle && translateGameText(currentTitle.trim()) === translateGameText(meta.title.trim());
+    try { game = await startRoom(canvas, { ...config, world: undefined, saveState: undefined, paused, locationSign, repeatLocation, roomResource: meta.name, backgroundPack: pack, transitionImage,
       scene: { ...config.scene, name: meta.title, indexedBackground: { src, clip: "room" }, maskClip: "mask",
         indexedUi: { src: withBase("assets/packs/kallak-room.kyr.gz"), clip: "hud" }, meta, emc: { sceneAnimShapes: meta.shapes }, actorScale: meta.actorScale,
         opening: id === 0 ? config.scene.opening : undefined, items: id === 0 ? config.scene.items : [],
@@ -404,9 +407,10 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       const next = await load(portal.target, portal, currentId);
       if (!active) { next.game.stop(); return; }
       current.stop(); current = next.game; currentId = portal.target;
+      currentTitle = next.meta.title;
       current.setControlMode(config.controlMode ?? 'classic');
       current.setPointer(pointer);
-      config.onLocationChange?.(next.meta.title, currentId, next.meta.name);
+      config.onLocationChange?.(currentTitle, currentId, next.meta.name);
       config.onNavigationError?.("");
       prepareNeighbours(next.portals);
     } catch (error) {
@@ -432,7 +436,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   const entry = dev?.via && { id: 'script', target: currentId, side: dev.via[1],
     rect: { x: 0, y: 0, w: 0, h: 0 }, point: { x: 0, y: 0 } };
   const first = await load(currentId, entry, dev?.via?.[0], !!restored); current = first.game;
-  config.onLocationChange?.(first.meta.title, currentId, first.meta.name);
+  currentTitle = first.meta.title;
+  config.onLocationChange?.(currentTitle, currentId, first.meta.name);
   prepareNeighbours(first.portals);
   return {
     setTarget: point => { if (!busy && !paused) current.setTarget(point); },

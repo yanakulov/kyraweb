@@ -8,6 +8,7 @@ export type GameConfig = {
   inventoryTooltipCanvas?: HTMLCanvasElement;
   statusTextCanvas?: HTMLCanvasElement;
   locationSign?: HTMLImageElement;
+  repeatLocation?: boolean;
   backdropCanvas?: HTMLCanvasElement;
   scene: SceneConfig;
   controlMode?: ControlMode;

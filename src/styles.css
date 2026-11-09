@@ -49,7 +49,7 @@ body {
   margin-inline: auto;
 }
 .app.is-modern { width: 100%; }
-.app:is(.is-modern, .is-cinematic) .game-frame { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; }
+.app.is-modern .game-frame { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; }
 
 .game-frame {
   position: relative;
@@ -68,21 +68,21 @@ body {
   isolation: isolate;
 }
 .is-modern .stage { width: min(100%, calc(100dvh * 19 / 8)); aspect-ratio: 19 / 8; }
+.is-modern.is-cinematic .stage { background: transparent; }
 .scene-backdrop { display: none; }
 .is-modern .scene-backdrop {
   display: block;
   position: absolute;
-  inset: -32px;
-  width: calc(100% + 64px);
-  height: calc(100% + 64px);
+  inset: -48px;
+  width: calc(100% + 96px);
+  height: calc(100% + 96px);
   object-fit: cover;
-  filter: blur(16px) brightness(.56);
+  filter: blur(24px) brightness(.58);
   pointer-events: none;
 }
 .scene-plane { position: absolute; inset: 0; }
 /* Display the room art from (8, 8) to (312, 136). Keep input in original coordinates. */
 .is-modern .scene-plane { inset: -6.25% -2.631579% 0; }
-.is-cinematic .stage { width: min(100%, calc(100dvh * var(--cinematic-ratio, 1.6))); height: auto; aspect-ratio: var(--cinematic-ratio, 1.6); }
 .is-cinematic .scene-plane { inset: auto; }
 
 .stage canvas {
@@ -92,15 +92,6 @@ body {
   image-rendering: pixelated;
   /* A finger aims inside the scene; two fingers can still zoom the page. */
   touch-action: pinch-zoom;
-}
-.scene-loading-logo {
-  position: absolute;
-  z-index: 6;
-  inset: 0;
-  margin: auto;
-  width: min(34%, 256px);
-  image-rendering: pixelated;
-  pointer-events: none;
 }
 .book-status-logo { width: 104px; height: auto; image-rendering: pixelated; }
 .stage .radial-surface { position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 3; }
@@ -172,7 +163,7 @@ button:disabled { cursor: default; }
 
 .app:fullscreen { --game-surround: #000; width: 100%; max-width: none; height: 100%; display: grid; place-items: center; background: #000; }
 .app:fullscreen .game-frame { width: min(100%, calc(100dvh * 1.6)); }
-.app:is(.is-modern, .is-cinematic):fullscreen .game-frame { width: 100%; }
+.app.is-modern:fullscreen .game-frame { width: 100%; }
 
 .rotation-dialog {
   width: min(360px, calc(100vw - 32px - env(safe-area-inset-left) - env(safe-area-inset-right)));
