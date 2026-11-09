@@ -59,7 +59,7 @@ for (const name of ["KallakWriting", "MalcolmTree", "KallakMalcolm"]) {
     }
     if (op === 15 || op === 16) {
       closeText();
-      activeSubtitle = { startMs: round(time), endMs: 0, textId: p[0], x: op === 15 ? 160 : p[1] + 256 * p[2], y: op === 15 ? 180 : p[3], type: op === 15 ? "text" : "talk" };
+      activeSubtitle = { startMs: round(time), endMs: 0, textId: p[0], x: op === 15 ? 160 : p[1] + 256 * p[2], y: op === 15 ? 180 : p[3], type: op === 15 ? "text" : "talk", colorIndex: op === 15 ? 15 : p[4] };
       subtitles.push(activeSubtitle);
     }
     if (op === 17 || op === 18) closeText();

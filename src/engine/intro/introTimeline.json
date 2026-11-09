@@ -1297,7 +1297,8 @@
         "textId": 46,
         "x": 160,
         "y": 180,
-        "type": "text"
+        "type": "text",
+        "colorIndex": 15
       },
       {
         "startMs": 3756,
@@ -1305,7 +1306,8 @@
         "textId": 47,
         "x": 160,
         "y": 180,
-        "type": "text"
+        "type": "text",
+        "colorIndex": 15
       },
       {
         "startMs": 7796,
@@ -1313,7 +1315,8 @@
         "textId": 48,
         "x": 160,
         "y": 180,
-        "type": "text"
+        "type": "text",
+        "colorIndex": 15
       },
       {
         "startMs": 12968,
@@ -1321,7 +1324,8 @@
         "textId": 49,
         "x": 160,
         "y": 180,
-        "type": "text"
+        "type": "text",
+        "colorIndex": 15
       }
     ],
     "effects": [
@@ -2506,7 +2510,8 @@
         "textId": 31,
         "x": 80,
         "y": 45,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 11452,
@@ -2514,7 +2519,8 @@
         "textId": 22,
         "x": 80,
         "y": 45,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 16436,
@@ -2522,7 +2528,8 @@
         "textId": 23,
         "x": 80,
         "y": 45,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 18844,
@@ -2530,7 +2537,8 @@
         "textId": 24,
         "x": 80,
         "y": 45,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 24501.333,
@@ -2538,7 +2546,8 @@
         "textId": 25,
         "x": 80,
         "y": 45,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 26273.333,
@@ -2546,7 +2555,8 @@
         "textId": 26,
         "x": 80,
         "y": 45,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 28693.333,
@@ -2554,7 +2564,8 @@
         "textId": 28,
         "x": 80,
         "y": 45,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 31593.333,
@@ -2562,7 +2573,8 @@
         "textId": 29,
         "x": 80,
         "y": 45,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 33721.333,
@@ -2570,7 +2582,8 @@
         "textId": 30,
         "x": 80,
         "y": 45,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       }
     ],
     "effects": [
@@ -3969,7 +3982,8 @@
         "textId": 2,
         "x": 80,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 7192.667,
@@ -3977,7 +3991,8 @@
         "textId": 3,
         "x": 80,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 11592.667,
@@ -3985,7 +4000,8 @@
         "textId": 4,
         "x": 80,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 14562,
@@ -3993,7 +4009,8 @@
         "textId": 5,
         "x": 240,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 15
       },
       {
         "startMs": 16108.667,
@@ -4001,7 +4018,8 @@
         "textId": 6,
         "x": 240,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 15
       },
       {
         "startMs": 22344,
@@ -4009,7 +4027,8 @@
         "textId": 7,
         "x": 240,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 15
       },
       {
         "startMs": 26165.333,
@@ -4017,7 +4036,8 @@
         "textId": 8,
         "x": 80,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 28712.667,
@@ -4025,7 +4045,8 @@
         "textId": 9,
         "x": 80,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 31416.667,
@@ -4033,7 +4054,8 @@
         "textId": 10,
         "x": 80,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 34964.667,
@@ -4041,7 +4063,8 @@
         "textId": 11,
         "x": 240,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 15
       },
       {
         "startMs": 37174.667,
@@ -4049,7 +4072,8 @@
         "textId": 12,
         "x": 240,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 15
       },
       {
         "startMs": 41104.667,
@@ -4057,7 +4081,8 @@
         "textId": 13,
         "x": 80,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 49218,
@@ -4065,7 +4090,8 @@
         "textId": 14,
         "x": 80,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 51781.333,
@@ -4073,7 +4099,8 @@
         "textId": 15,
         "x": 80,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 54344.667,
@@ -4081,7 +4108,8 @@
         "textId": 16,
         "x": 80,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       },
       {
         "startMs": 57752,
@@ -4089,7 +4117,8 @@
         "textId": 17,
         "x": 80,
         "y": 58,
-        "type": "talk"
+        "type": "talk",
+        "colorIndex": 5
       }
     ],
     "effects": [

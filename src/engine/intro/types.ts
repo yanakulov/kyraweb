@@ -100,4 +100,5 @@ export type IntroSubtitle = {
   maxWidth?: number;
   type?: "text" | "talk";
   color?: string;
+  colorIndex?: number;
 };

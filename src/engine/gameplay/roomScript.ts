@@ -37,7 +37,7 @@ export type RoomAction =
       y: number;
       color: number;
       blocking: boolean;
-      speaker?: number | "brandywine";
+      speaker?: number | "brandywine" | "malcolm";
     }
   | { op: "flag"; flag: number; value: boolean }
   | { op: "scatterGem"; item: number; room: number }
