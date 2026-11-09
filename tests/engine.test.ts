@@ -18,7 +18,8 @@ import { findWalkPath, findClickPath } from "../src/engine/gameplay/pathfinding"
 import { getSequence } from "../src/engine/gameplay/movement";
 import { BRANDON_FRAMES } from "../src/engine/characters/brandonFrames";
 import { isWalkable } from "../src/engine/scene/masks";
-import { buildDropPath, dropItemAt, updateDrops, findDropDestination } from "../src/engine/gameplay/drops";
+import { buildDropPath, dropItemAt, updateDrops, findDropDestination, findSpawnDestination } from "../src/engine/gameplay/drops";
+import { buildInventoryItems, drawSceneItems } from "../src/engine/gameplay/inventory";
 import { startGame } from "../src/engine/gameplay/game";
 import { radialLayout } from "../src/engine/gameplay/radialInventory";
 import type { SceneConfig, MaskData, DropAnim, SceneItem, Vec2 } from "../src/engine/core/types";
@@ -667,6 +668,31 @@ test("drop placement checks icon width, occupied slots, capacity and rejection",
   assert.ok(realDestination.y >= 85 && realDestination.y < 136);
 });
 
+test("scattered stones avoid foreground across their full footprint and retry beyond the requested column", () => {
+  const mask = openMask();
+  mask.pixels.fill(0x80);
+  for (let y = 63; y < 80; y++) {
+    mask.pixels.fill(y === 79 ? 1 : 0x84, y * 320 + 72, y * 320 + 88);
+    mask.pixels.fill(y === 79 ? 1 : 0x81, y * 320 + 112, y * 320 + 128);
+  }
+  assert.deepEqual(findSpawnDestination({ x: 80, y: 80 }, scene, mask, [], [], 60), { x: 120, y: 80 });
+  assert.equal(findSpawnDestination({ x: 80, y: 80 }, scene, mask, [], [{ x: 125, y: 63, w: 5, h: 17 }], 60), null);
+  assert.equal(findSpawnDestination({ x: 80, y: 80 }, scene, mask, [{ id: 'ruby', x: 120, y: 80 }], [], 60), null);
+});
+
+test("a settled stone is clipped at a tree's foreground edge even when it draws in front of Brandon", () => {
+  const h = introHarness();
+  try {
+    const mask = openMask();
+    for (let y = 64; y < 80; y++) mask.pixels.fill(4, y * 320 + 72, y * 320 + 80);
+    const ctx = h.canvas.getContext('2d')!;
+    drawSceneItems(ctx, {} as HTMLImageElement, buildInventoryItems(),
+      [{ id: 'ruby', x: 80, y: 80 }], mask, [0, 20], 70, 'front');
+    assert.equal(h.draws.length, 1);
+    assert.deepEqual(h.clips, Array.from({ length: 16 }, (_, row) => [80, 64 + row, 8, 1]));
+  } finally { h.restore(); }
+});
+
 test("game input preserves held items on failed drops and exchanges scene items", async () => {
   const h = introHarness();
   const original = { Image: globalThis.Image, fetch: globalThis.fetch };
@@ -1069,6 +1095,18 @@ test('world saves restore visited props, quest files, NPCs and inventory without
     loaded.runSequence([{ op: 'exit', target: 10, entry: { x: 280, y: 110 } }]);
     await until(() => location === 10 && !!loaded.getSaveState(), 'return to the forest did not finish');
     assert.equal(score.at(-1), 2, 'leaving the pool restores the shared forest score');
+    const oldForestSave = validateWorldSave(loaded.getSaveState());
+    const hiddenGem = { id: 'item-10', x: 260, y: 106 } as const;
+    delete oldForestSave.rooms[10].gemPlacementChecked;
+    oldForestSave.rooms[10].sceneItems = [hiddenGem];
+    delete oldForestSave.quest.scatteredGems?.[10];
+    const recovered = await startGame(h.canvas, { ...config, saveState: oldForestSave, paused: true });
+    games.push(recovered);
+    const [recoveredGem] = recovered.getSnapshot().sceneItems;
+    assert.equal(recoveredGem.id, hiddenGem.id);
+    assert.notDeepEqual(recoveredGem, hiddenGem, 'a gem placed in a tree by the old fallback moves into view');
+    assert.equal(recovered.getSaveState()!.rooms[10].gemPlacementChecked, true);
+    recovered.stop();
     loaded.runSequence([{ op: 'exit', target: 5, entry: { x: 280, y: 110 } }]);
     await until(() => location === 5 && !!loaded.getSaveState(), 'the trunk did not become ready');
     assert.equal(score.at(-1), 2);

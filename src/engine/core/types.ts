@@ -53,7 +53,7 @@ export type GameConfig = {
 export type RoomPortal = { id: string; target: number; side: "north" | "east" | "south" | "west";
   rect: { x: number; y: number; w: number; h: number }; point: Vec2; entry?: Vec2 | null };
 export type RoomSnapshot = { pos: Vec2; facing?: number; walkDelayTicks?: number; wispMs?: number; inventorySlots: (InventoryItemId | null)[]; itemInHand: InventoryItemId | null;
-  sceneItems: SceneItem[]; overlays: SceneOverlayState[]; treeSpoken: boolean; runtime?: RoomRuntimeSnapshot };
+  sceneItems: SceneItem[]; overlays: SceneOverlayState[]; treeSpoken: boolean; gemPlacementChecked?: boolean; runtime?: RoomRuntimeSnapshot };
 
 export type SavedNpc = { x: number; y: number; facing: number; shape: number; room: number };
 export type SavedLayer = { clip: string; index: number; x: number; y: number; permanent: boolean };
