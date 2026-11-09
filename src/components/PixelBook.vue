@@ -768,9 +768,17 @@ function sceneViewport(source: HTMLCanvasElement): Rect {
   if (!stage?.width || !stage.height) return photoBounds(source, view, undefined, true);
   const outer = canvas.value!.getBoundingClientRect();
   const sx = view.w / outer.width, sy = view.h / outer.height;
-  const viewport = { x: view.x + (stage.left - outer.left) * sx, y: view.y + (stage.top - outer.top) * sy,
+  const art = props.filmBounds;
+  const gameCanvas = props.gameCanvas;
+  const frame = gameCanvas?.getBoundingClientRect();
+  if (art && gameCanvas && frame?.width && frame.height) {
+    const fx = frame.width / gameCanvas.width;
+    const fy = frame.height / gameCanvas.height;
+    return { x: view.x + (frame.left + art.x * fx - outer.left) * sx,
+      y: view.y + (frame.top + art.y * fy - outer.top) * sy, w: art.w * fx * sx, h: art.h * fy * sy };
+  }
+  return { x: view.x + (stage.left - outer.left) * sx, y: view.y + (stage.top - outer.top) * sy,
     w: stage.width * sx, h: stage.height * sy };
-  return props.filmBounds ? photoBounds(source, viewport, undefined, true) : viewport;
 }
 function dissolveToScene(progress: number) {
   const count = Math.floor(clamp((progress - .78) / .22) * 16);

@@ -68,7 +68,7 @@ body {
   isolation: isolate;
 }
 .is-modern .stage { width: min(100%, calc(100dvh * 19 / 8)); aspect-ratio: 19 / 8; }
-.is-modern.is-cinematic .stage { background: transparent; }
+.is-modern.is-cinematic .stage { width: 100%; max-height: 100dvh; aspect-ratio: var(--film-ratio); background: transparent; }
 .scene-backdrop { display: none; }
 .is-modern .scene-backdrop {
   display: block;

@@ -165,12 +165,7 @@ export function playIntro(
         return lines.length ? lines : [value];
       };
 
-      const getActiveSubtitles = (lines: IntroSubtitle[], elapsedMs: number) =>
-        lines.filter((line) => elapsedMs >= line.startMs && elapsedMs < line.endMs);
-
-      const drawSubtitles = (lines: IntroSubtitle[], elapsedMs: number, alpha: number) => {
-        if (!lines.length) return;
-        const active = getActiveSubtitles(lines, elapsedMs);
+      const drawSubtitles = (active: IntroSubtitle[], alpha: number) => {
         if (!active.length) return;
         ctx.save();
         ctx.globalAlpha = alpha;
@@ -449,11 +444,14 @@ export function playIntro(
         }
 
         // Emit empty lists too: cuts and gaps must clear the DOM overlay.
-        const activeSubtitles = subtitleLoopRange ? [] : getActiveSubtitles(step.subtitles ?? [], subtitleElapsed);
+        const palette = resources.indexed?.clip.info.palette;
+        const activeSubtitles = subtitleLoopRange ? [] : (step.subtitles ?? [])
+          .filter(line => subtitleElapsed >= line.startMs && subtitleElapsed < line.endMs)
+          .map(line => palette && line.colorIndex !== undefined
+            ? { ...line, color: `rgb(${palette.slice(line.colorIndex * 3, line.colorIndex * 3 + 3).join(",")})` }
+            : line);
         options?.onSubtitleChange?.({ stepId: step.id, lines: activeSubtitles, alpha });
-        if (renderSubtitlesOnCanvas && !subtitleLoopRange && step.subtitles?.length) {
-          drawSubtitles(step.subtitles, subtitleElapsed, alpha);
-        }
+        if (renderSubtitlesOnCanvas) drawSubtitles(activeSubtitles, alpha);
         if (firstFrame) { firstFrame = false; options?.onFirstFrame?.(); }
         if (sceneChanged) options?.onStepReady?.(step.id);
         if (running && !paused) animationFrame = requestAnimationFrame(loop);

@@ -130,9 +130,9 @@ test('Darm and Brandywine use separate dialogue anchors and the original Darm ta
   const q = quest();
   q.enter('SPELL');
   const first = q.run('SPELL', 1, 130, 76).actions;
-  const lines = first.flatMap(action => action.op === 'say' ? [[action.voiceId, action.speaker, action.x, action.y]] : []);
+  const lines = first.flatMap(action => action.op === 'say' ? [[action.voiceId, action.speaker, action.x, action.y, action.color]] : []);
   assert.deepEqual(lines[0].slice(0, 2), [42, 0]);
-  assert.deepEqual(lines.slice(1, 3), [[43, 'brandywine', 140, 52], [44, 8, 140, 36]]);
+  assert.deepEqual(lines.slice(1, 3), [[43, 'brandywine', 140, 52, 114], [44, 8, 140, 36, 85]]);
   assert.ok(first.some(action => action.op === 'frame' && action.clip === 'brandyw3' && action.index === 19));
   const repeat = q.run('SPELL', 1, 130, 76).actions;
   const delivered: RoomAction[] = [];
@@ -141,7 +141,7 @@ test('Darm and Brandywine use separate dialogue anchors and the original Darm ta
   const line = delivered.find(action => action.op === 'say')!;
   assert.equal(line.voiceId, 71);
   assert.equal(line.speaker, 8);
-  assert.deepEqual([line.x, line.y, line.color], [140, 36, 85]);
+  assert.deepEqual([line.x, line.y, line.color], [130, 44, 85]);
   const visible = (index: number) => delivered.filter(action => action.op === 'ambient' && action.internal && action.index === index)
     .map(action => action.op === 'ambient' && action.enabled);
   assert.deepEqual(visible(5), [false]);
@@ -150,6 +150,22 @@ test('Darm and Brandywine use separate dialogue anchors and the original Darm ta
   script.update(0);
   assert.deepEqual(visible(5).slice(0, 2), [false, true]);
   assert.deepEqual(visible(6).slice(0, 2), [true, false]);
+});
+
+test('the man on the bench and Zanthia use their own positions and palette colours', () => {
+  const q = quest();
+  q.enter('WISE');
+  const conversation = q.run('WISE', 1, 145, 83).actions;
+  const wiseLines = conversation.filter(line => line.op === 'say' && [0, 1, 5].includes(line.voiceId));
+  assert.deepEqual(wiseLines.map(line => [line.voiceId, line.speaker, line.x, line.y, line.color]), [
+    [0, 9, 162, 70, 58], [1, 9, 162, 70, 58], [5, 9, 162, 70, 58]
+  ]);
+  assert.ok(conversation.some(action => action.op === 'ambient' && action.index === 1 && action.enabled));
+
+  q.enter('POTION');
+  const line = q.run('POTION', 1, 233, 51).actions.find(action => action.op === 'say' && action.voiceId === 90);
+  assert.ok(line);
+  assert.deepEqual([line.speaker, line.x, line.y, line.color], [7, 240, 41, 216]);
 });
 
 test('the original grotto script branches at the knife and the flute reopens the cave', () => {

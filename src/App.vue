@@ -31,11 +31,12 @@
     </FantasyBook>
     <div class="game-frame" :class="{ 'is-concealed': !bookOpened && !openingFrameReady && !openingSnapshot && !gameError }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot || mobilePortrait">
       <canvas ref="sceneBackdrop" class="scene-backdrop" :width="ROOM_ART.w" :height="ROOM_ART.h" aria-hidden="true"></canvas>
-      <div class="stage" ref="stageRef" :class="{ 'cursor-controlled': gamePointerVisible || endingActive }" :aria-busy="loading"
+      <div class="stage" ref="stageRef" :class="{ 'cursor-controlled': gamePointerVisible || endingActive }"
+        :style="cinematicArt && { '--film-ratio': cinematicArt.w / cinematicArt.h }" :aria-busy="loading"
         @pointerenter="handleMove" @pointermove="handleMove" @pointerleave="leaveStage"
         @pointerdown="handlePointerDown" @pointerup="handlePointerUp" @pointercancel="cancelGesture" @contextmenu.prevent="handleContextMenu">
         <div class="scene-plane" :style="cinematicPlane">
-        <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :scale-y="subtitleScaleY" :bounds="cinematicArt ?? sceneBounds"
+        <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :scale-y="subtitleScaleY" :bounds="subtitleBounds"
           :alpha="subtitleAlpha" :visible="subtitleVisible" />
         <canvas ref="canvasRef" width="320" height="200" :aria-label="t('Kyrandia game scene')" @click="handleClick"></canvas>
         <canvas ref="statusTextCanvas" class="status-text" aria-hidden="true" hidden></canvas>
@@ -314,16 +315,14 @@ const modernViewport = computed(() => controlMode.value === 'modern' && (!!cinem
 const cinematicPlane = computed(() => {
   const art = cinematicArt.value;
   if (!art) return;
-  const ratio = modernViewport.value ? ROOM_ART.w / ROOM_ART.h : LOGICAL_WIDTH / LOGICAL_HEIGHT;
-  const artRatio = art.w / art.h;
-  const w = Math.min(1, artRatio / ratio);
-  const h = Math.min(1, ratio / artRatio);
+  const w = modernViewport.value ? 1 : Math.min(1, (art.w / art.h) / (LOGICAL_WIDTH / LOGICAL_HEIGHT));
   const height = gameViewHeight.value;
   return {
     left: `${(1 - w) * 50 - art.x / art.w * w * 100}%`,
-    top: `${(1 - h) * 50 - art.y / art.h * h * 100}%`,
+    top: '50%',
+    transform: `translateY(${-(art.y + art.h / 2) / height * 100}%)`,
     width: `${LOGICAL_WIDTH / art.w * w * 100}%`,
-    height: `${height / art.h * h * 100}%`,
+    aspectRatio: `${LOGICAL_WIDTH} / ${height}`,
     clipPath: `inset(${art.y / height * 100}% ${(LOGICAL_WIDTH - art.x - art.w) / LOGICAL_WIDTH * 100}% ${Math.max(0, height - art.y - art.h) / height * 100}% ${art.x / LOGICAL_WIDTH * 100}%)`,
   };
 });
@@ -336,6 +335,14 @@ const locationName = ref("");
 const navigationError = ref("");
 const subtitleScale = ref(1);
 const subtitleScaleY = ref(1);
+const stageHeight = ref(0);
+const subtitleBounds = computed(() => {
+  const art = cinematicArt.value;
+  if (!art) return sceneBounds.value;
+  if (!modernViewport.value || !stageHeight.value) return art;
+  const h = Math.min(art.h, stageHeight.value / subtitleScaleY.value);
+  return { ...art, y: art.y + (art.h - h) / 2, h };
+});
 
 
 const config = {
@@ -568,6 +575,7 @@ function updateSubtitleScale() {
     if ((sx !== subtitleScale.value || sy !== subtitleScaleY.value) && game?.setInventoryOpen(false)) syncControls();
     subtitleScale.value = sx;
     subtitleScaleY.value = sy;
+    stageHeight.value = stageRef.value?.getBoundingClientRect().height ?? 0;
   }
 }
 
@@ -885,6 +893,7 @@ onMounted(() => {
   portraitMedia.addEventListener('change', updateOrientation);
   subtitleResizeObserver = new ResizeObserver(updateSubtitleScale);
   if (canvasRef.value) subtitleResizeObserver.observe(canvasRef.value);
+  if (stageRef.value) subtitleResizeObserver.observe(stageRef.value);
   window.addEventListener("resize", updateSubtitleScale);
 });
 

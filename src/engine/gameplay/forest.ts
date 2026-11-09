@@ -172,6 +172,18 @@ export function dispelMagic(room: number, activeWisp: boolean): RoomAction[] {
   ];
 }
 
+// LoK's DOS character text palette, heights, and fixed actors' starting positions.
+const talkColors = [15, 9, 201, 128, 5, 129, 14, 216, 85, 58, 58];
+const talkHeights = [48, 40, 48, 47, 56, 44, 42, 47, 38, 35, 40];
+const fixedSpeakers = [
+  { x: 43, y: 103, idle: 3, talk: 4 },  // Brynn
+  { x: 202, y: 103, idle: 1, talk: 2 },
+  { x: 240, y: 96, idle: 1, talk: 5 },   // Zanthia
+  { x: 130, y: 90, idle: 5, talk: 6 },   // Darm
+  { x: 162, y: 113, idle: 0, talk: 1 },  // Nolby
+  { x: 66, y: 118, idle: 6, talk: 7 },   // Faun
+];
+
 /** Execute original conditionals against a copy, then play the resulting actions.
  * State changes are applied by the same clock as dialogue, never on an interrupted trace. */
 export function traceForest(
@@ -640,44 +652,32 @@ export function traceForest(
             voiceMs = room.durations[voiceId] ?? 2000;
             voiceElapsed = 0;
             const custom = id === 0x34;
-            // SPELL's shared WSA uses different anchors for Darm and Brandywine.
-            const speaker = custom ? (room.name === 'SPELL' ? (a[3] === 36 ? 8 : 'brandywine') : undefined) : a[2];
-            const darm = room.name === 'SPELL' && speaker === 8;
-            const faun = room.name === 'LEPHOLE' && speaker === 10;
-            const partner = typeof speaker === 'number' ? npcs[speaker] : undefined;
-            const anchor = custom ? { x: a[2], y: a[3] }
-              : partner ? { x: partner.x, y: partner.y - 56 }
-              : darm ? { x: 140, y: 36 }
-              : faun ? { x: 66, y: 62 }
-              : speaker === 5 ? { x: 44, y: 44 }
-              : { x: actor.x, y: actor.y - 56 };
-            if (darm && !custom) {
+            const characterId = a[2];
+            const fixed = custom ? undefined : fixedSpeakers[characterId - 5];
+            const talker = custom || characterId === 0 ? actor : npcs[characterId] ?? fixed;
+            if (!talker) throw new Error(`Unknown speaking character ${characterId} in ${room.name}`);
+            const scale = (scaleOverrides.get(talker.y) ?? actorScaleAt(talker.y, room.actorScale) * 256) / 256;
+            const speaker = custom
+              ? room.name === 'SPELL' ? (a[4] === talkColors[8] ? 8 : 'brandywine') : undefined
+              : characterId;
+            if (fixed) {
               emit({ op: "waitVoice" });
-              animateTalk(5, 6, true);
+              animateTalk(fixed.idle, fixed.talk, true);
             }
-            if (faun) animateTalk(6, 7, true);
             emit({
               op: "say",
               text: text[a[1]],
               voiceId,
               ms: voiceMs,
               speaker,
-              ...anchor,
-              color: custom
-                ? a[4]
-                : darm ? 85 : faun ? 0x3a : speaker === 2
-                  ? 201
-                  : speaker === 1
-                    ? 144
-                    : speaker === 5
-                      ? 129
-                      : 15,
+              x: custom ? a[2] : talker.x,
+              y: custom ? a[3] : talker.y - Math.floor(scale * talkHeights[characterId]) - 8,
+              color: custom ? a[4] & 0xff : talkColors[characterId],
               blocking: !custom,
             });
             if (!custom) {
               voiceElapsed = voiceMs;
-              if (darm) animateTalk(5, 6, false);
-              if (faun) animateTalk(6, 7, false);
+              if (fixed) animateTalk(fixed.idle, fixed.talk, false);
             }
             return 0;
           }

@@ -114,7 +114,7 @@ export function createFinalBattle(reunion: RoomAction[]) {
         if (taunt && ready) {
           taunt = false;
           return [{ op: 'say', text: 'Very clever!  But your feeble efforts are futile.', voiceId: -1, x: 60, y: 31,
-            ms: 180 * tickMs, color: 5, blocking: true }];
+            ms: 180 * tickMs, color: 5, speaker: 'malcolm', blocking: true }];
         }
         if (taunt || !ready || tick < retryAt) return;
         startAt = tick - 14 * 8;

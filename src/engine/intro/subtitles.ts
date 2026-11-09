@@ -39,7 +39,7 @@ const voiceByTextId: Record<number, number> = { 22: 19, 23: 20, 24: 21, 25: 22, 
 const voiceLead: Record<number, number> = { 23: 700, 25: 420 };
 
 // Frames and text use the same decoded DOS script clock; do not stretch the dialogue.
-export function timelineSubtitles(events: { startMs: number; endMs: number; textId: number; x: number; y: number; type: string }[]): IntroSubtitle[] {
+export function timelineSubtitles(events: { startMs: number; endMs: number; textId: number; x: number; y: number; type: string; colorIndex: number }[]): IntroSubtitle[] {
   return events.map(({ textId, ...event }, i) => ({
     ...event,
     startMs: Math.max(0, event.startMs - (voiceLead[textId] ?? 0)),
@@ -48,8 +48,7 @@ export function timelineSubtitles(events: { startMs: number; endMs: number; text
     text: textById[textId] ?? "",
     type: event.type as "text" | "talk",
     align: "center" as const,
-    maxWidth: event.type === "talk" ? 220 : 300,
-    color: event.type === "talk" ? "#f2f2f2" : "#f2e6c9"
+    maxWidth: event.type === "talk" ? 220 : 300
   })).filter((line) => line.text.length > 0);
 }
 

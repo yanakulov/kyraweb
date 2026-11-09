@@ -565,6 +565,9 @@ test("decoded dialogue retains pauses, speakers and variable frame timing", () =
   assert.ok(conversation.subtitles![0].startMs > 4000);
   assert.equal(conversation.subtitles!.find(s => s.text === "So, slay me now!")!.x, 240);
   assert.equal(conversation.subtitles!.find(s => s.text.startsWith("I mean to harm"))!.x, 80);
+  assert.ok(conversation.subtitles!.every(line => line.colorIndex === (line.x === 80 ? 5 : 15)));
+  assert.ok(steps.filter(step => step.id.startsWith('tree_anim_')).flatMap(step => step.subtitles!)
+    .every(line => line.colorIndex === 5));
   assert.ok(conversation.durationMs > 60000);
   assert.equal(frameAtTime([0, 100, 400], 399), 1);
   assert.equal(frameAtTime([0, 100, 400], 400), 2);
