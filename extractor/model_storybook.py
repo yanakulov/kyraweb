@@ -254,10 +254,15 @@ box("Walnut tabletop", (0,-.37,0), (55,.42,72), wood, .035, uv_scale=(1/15,1/15)
 # Closed book; its hinge is an exported empty, never merged into the cover.
 box("Back leather board", (0,-.045,0), (3.13,.16,4.15), leather, .07, uv_scale=(1.2,1.2))
 box("Page block", (.025,.178,0), (2.96,.36,3.94), page_edge, .045)
-# Individual leaves make the fore-edge visible without dense geometry.
-for i in range(22):
-    h = .014 + i*.0152
-    box(f"Leaf edge {i+1}", (.028,h,0), (2.967,.006,3.947), parchment, .002)
+# The individual leaves share one beveled mesh in the exported scene.
+leaf = box("Leaf edge 1", (.028,.014,0), (2.967,.006,3.947), parchment, .002)
+bpy.ops.object.modifier_apply(modifier="Soft handmade edges")
+bpy.ops.object.modifier_apply(modifier="Weighted surface normals")
+for i in range(1, 22):
+    copy = leaf.copy()
+    copy.name = f"Leaf edge {i+1}"
+    copy.location.z += i*.0152
+    bpy.context.collection.objects.link(copy)
 box("Blank right parchment", (.025,.365,0), (2.94,.01,3.91), parchment, .025)
 hinge = bpy.data.objects.new("CoverHinge", None)
 bpy.context.collection.objects.link(hinge)
@@ -362,8 +367,51 @@ for obj in candle_objects:
     obj.parent=candle_root
     obj.matrix_parent_inverse=candle_root.matrix_world.inverted()
 
-# Kallak's desk has two small groups of objects. The quill stays beyond the
-# back edge of the moving cover, and the letter stays to its right.
+# Place the other volumes beyond the fore-edge of the moving cover.
+stack_leather = [
+    leather,
+    material("Faded green bookcloth", (.042,.078,.042), 0, .88, normal=leather_normal),
+    material("Indigo leather", (.035,.041,.082), 0, .79, normal=leather_normal),
+]
+stack_y = -.16
+for i, (x, z, width, depth, height, angle) in enumerate([
+    (-2.82, 2.63, 1.56, .96, .25, .09),
+    (-2.91, 2.60, 1.40, .88, .21, -.10),
+    (-2.73, 2.58, 1.16, .83, .18, .14),
+]):
+    assert z - depth/2 - abs(angle)*width/2 > 2.05
+    def stack_point(local_x, y, local_z):
+        c, s = math.cos(angle), math.sin(angle)
+        return x + c*local_x + s*local_z, y, z - s*local_x + c*local_z
+
+    binding = stack_leather[i]
+    for part, part_y, inset, thickness, surface in [
+        ("back", stack_y+.024, 0, .048, binding),
+        ("leaves", stack_y+height/2, .075, height-.066, page_edge),
+        ("front", stack_y+height-.024, 0, .048, binding),
+    ]:
+        obj = box(f"Stack volume {i+1} {part}", (x,part_y,z),
+                  (width-inset,thickness,depth-inset), surface, .022)
+        obj.rotation_euler.z = angle
+    spine = box(f"Rounded spine {i+1}", stack_point(-width/2+.035,stack_y+height/2,0),
+                (.17,height,depth), binding, .062)
+    spine.rotation_euler.z = angle
+    for band in [-.32, -.19, .19, .32]:
+        tube("Gilt spine band", [stack_point(u,stack_y+height*v,depth*band)
+             for u,v in [(-width/2+.035,.93),(-width/2-.045,.74),
+                         (-width/2-.055,.28),(-width/2+.033,.08)]], .009, gold_edge)
+    if i == 2:
+        top = stack_y + height + .003
+        for margin in [.06, .086]:
+            u, v = width/2-margin, depth/2-margin
+            tube("Tooled cover border", [stack_point(a,top,b)
+                 for a,b in [(-u,-v),(u,-v),(u,v),(-u,v),(-u,-v)]], .006, gold_edge)
+        for scale in [1,.63]:
+            tube("Gilt diamond tool", [stack_point(scale*a,top,scale*b)
+                 for a,b in [(0,-.24),(.16,0),(0,.24),(-.16,0),(0,-.24)]], .009, gold_edge)
+    stack_y += height
+
+# The quill stays beyond the back edge of the moving cover.
 ink_z = -2.60
 assert ink_z + .37 < -2.05
 ink_blue = material("Midnight blue ink glass", (.031,.10,.12), .24, .25)
@@ -418,16 +466,21 @@ mesh("Seal diamond", [letter_point(x,-.050,z+.065) for x,z in
      [(0,-.076),(.051,0),(0,.076),(-.051,0)]], [(3,2,1,0)], seal_dark)
 
 def desk_gem(name, x, z, radius, colour):
-    gem = material(name, colour, .28, .20)
-    rings = [(-.157,.56),(-.12,1),(-.024,.61)]
-    verts = [(x+r*radius*math.cos(a*math.tau/6),y,
-              z+r*radius*math.sin(a*math.tau/6)) for y,r in rings for a in range(6)]
-    faces = [(i+6*j,(i+1)%6+6*j,(i+1)%6+6*(j+1),i+6*(j+1))
-             for i in range(6) for j in range(2)]
-    mesh(name, verts, faces + [(17,16,15,14,13,12)], gem)
+    gem = material(name, colour, 0, .09)
+    glass = gem.node_tree.nodes.get("Principled BSDF")
+    glass.inputs["Transmission Weight"].default_value = .98
+    glass.inputs["IOR"].default_value = 1.49
+    rings = [(-.157,.52,0),(-.103,1,0),(-.024,.59,.5)]
+    verts = [(x+r*radius*math.cos((a+phase)*math.tau/8),y,
+              z+r*radius*math.sin((a+phase)*math.tau/8)) for y,r,phase in rings for a in range(8)]
+    faces = []
+    for i in range(8):
+        j = (i+1)%8
+        faces.extend([(i,8+i,8+j,j),(8+i,16+i,8+j),(8+i,16+(i-1)%8,16+i)])
+    mesh(name, verts, faces + [tuple(range(8)),tuple(range(23,15,-1))], gem)
 
-desk_gem("Malachite", 2.12, 2.02, .17, (.035,.29,.12))
-desk_gem("Garnet", 2.49, 2.13, .125, (.48,.027,.039))
+desk_gem("Emerald glass", 2.12, 2.02, .19, (.49,.86,.65))
+desk_gem("Ruby glass", 2.49, 2.13, .15, (.92,.52,.57))
 
 # Pack the source-derived maps into the GLB; no runtime modeling is needed.
 for obj in list(bpy.context.scene.objects):

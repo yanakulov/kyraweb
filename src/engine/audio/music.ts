@@ -7,11 +7,13 @@ import { readRoms, storeRoms, readRomFiles, type Mt32Roms } from './romStorage';
 import { introCue, wanderCue, type MusicCue } from './cues';
 import { readLocalRoms } from './localRoms';
 import { RecordedEffects } from './recordedEffects';
+import type { BookFoley } from './bookFoley';
 import { Voices } from './voices';
 import { readSoundFonts, storeSoundFont, localSoundFonts, publicSoundFont, soundFontData, validateSoundFont, MAX_SOUNDFONT_BYTES, type SoundFontBank } from './soundfonts';
 
 export type MusicState = { renderer: string; banks: { id: string; name: string }[]; enabled: boolean; volume: number; sfxEnabled: boolean; sfxVolume: number; voiceEnabled: boolean; voiceVolume: number; available: boolean; ready: boolean; busy: boolean; previewing: boolean; message: string; soundFontProgress?: number; romNames: string[]; source: 'none' | 'browser' | 'local' };
 type Device = { context: AudioContext; node: AudioWorkletNode; gain: GainNode };
+const bookMusic: MusicCue = { file: 'KYRA1B', track: 4 }; // Pool of Sorrow, original wander command 7.
 function preference(key: string, fallback: string) { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 function remember(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Session controls still work. */ } }
 
@@ -29,6 +31,7 @@ export class MusicPlayer {
   private adlibBanks = new Map<string, Promise<ArrayBuffer>>();
   private cue: MusicCue = { file: 'INTRO', track: 2 };
   private paused = true;
+  private book = false;
   private hidden = false;
   private faded = false;
   private command = -1;
@@ -48,7 +51,7 @@ export class MusicPlayer {
   private voiceBank = 'INTRO';
   private usesNativeEffects() { return this.state.renderer === 'mt32' && !!this.roms; }
   private prepareRecordedEffects() {
-    if (this.disposed || this.restoring || !this.userActivated || !this.state.sfxEnabled || this.usesNativeEffects()) return;
+    if (this.disposed || this.restoring && !this.book || !this.userActivated || !this.state.sfxEnabled || this.usesNativeEffects() && !this.book) return;
     this.recordedEffects.setVolume(this.state.sfxVolume);
     this.recordedEffects.prepare();
   }
@@ -130,7 +133,7 @@ export class MusicPlayer {
   }
   private syncVolumes() { this.device?.node.port.postMessage({ type: 'volumes', music: this.state.enabled || this.state.previewing && !this.previewMix ? this.state.volume : 0, effects: this.state.sfxEnabled ? this.state.sfxVolume : 0 }); }
   effect(track: number, preview = false) {
-    if (!this.state.sfxEnabled || this.state.previewing !== preview || !Number.isInteger(track) || track < 0 || track > 119) return;
+    if (!this.state.sfxEnabled || this.book && !preview || this.state.previewing !== preview || !Number.isInteger(track) || track < 0 || track > 119) return;
     const device = this.device, epoch = this.effectEpoch, file = preview ? 'INTRO' : this.cue.file;
     if (!this.usesNativeEffects()) { this.recordedEffects.play(file, track); return; }
     if (!device) return; // Never replay stale interactions after ROM initialization.
@@ -344,6 +347,7 @@ export class MusicPlayer {
   }
   play(cue: MusicCue, restart = false) {
     if (!restart && !this.faded && cue.file === this.cue.file && cue.track === this.cue.track) return;
+    if (this.book) { this.cue = cue; this.faded = false; return; }
     if (cue.file !== this.cue.file) this.stopEffects();
     // Stop the outgoing score while the new bank is loading, as the DOS driver does.
     if (!this.state.previewing) this.device?.node.port.postMessage({ type: 'track', file: cue.file });
@@ -359,8 +363,8 @@ export class MusicPlayer {
     const cue = wanderCue(command, this.cue.file === 'INTRO' ? 'KYRA1B' : this.cue.file);
     if (cue) this.play(cue, true); else this.fade();
   }
-  fade() { this.faded = true; this.request++; if (!this.state.previewing) this.device?.node.port.postMessage({ type: 'fade' }); }
-  stop() { this.faded = true; this.command = -1; this.request++; this.stopEffects(); this.stopSpeech(); this.device?.node.port.postMessage({ type: 'stop' }); }
+  fade() { this.faded = true; if (!this.book && !this.state.previewing) { this.request++; this.device?.node.port.postMessage({ type: 'fade' }); } }
+  stop() { this.faded = true; this.command = -1; this.stopEffects(); this.stopSpeech(); if (!this.book && !this.state.previewing) { this.request++; this.device?.node.port.postMessage({ type: 'stop' }); } }
   preview(mix = false) {
     if (this.state.previewing) { this.stopPreview(); return; }
     this.stopEffects(); this.stopSpeech();
@@ -392,8 +396,8 @@ export class MusicPlayer {
   private applyCue() {
     const request = ++this.request, device = this.device;
     if (!device) return;
-    if ((!this.state.enabled || this.faded) && !this.state.previewing) { device.node.port.postMessage({ type: 'track', file: this.cue.file }); return; }
-    const cue = this.state.previewing ? { file: 'INTRO', track: 2 } : this.cue;
+    if ((!this.state.enabled || this.faded && !this.book) && !this.state.previewing) { device.node.port.postMessage({ type: 'track', file: this.cue.file }); return; }
+    const cue = this.state.previewing ? { file: 'INTRO', track: 2 } : this.book ? bookMusic : this.cue;
     const adlib = this.state.renderer === 'adlib';
     const pending = adlib
       ? this.loadAdlibBank(cue.file).then(bank => ({ bank, track: cue.track }))
@@ -407,15 +411,25 @@ export class MusicPlayer {
     }).catch(error => { if (request === this.request) this.fail(this.error(error)); });
   }
   setPaused(value: boolean) { this.paused = value; this.syncPause(); }
+  setBook(value: boolean) {
+    if (value === this.book) return;
+    this.book = value;
+    if (value) { this.stopEffects(); this.prepareRecordedEffects(); }
+    this.syncPause();
+    if (!this.state.previewing) this.applyCue();
+  }
+  bookSound(cue: BookFoley | 'hover' | 'click') {
+    if (this.book && !this.hidden && this.state.sfxEnabled && !this.state.previewing) this.recordedEffects.book(cue);
+  }
   setHidden(value: boolean) {
     this.hidden = value; this.syncPause();
     if (this.device) void (value ? this.device.context.suspend() : this.device.context.resume()).catch(() => this.publish('Click Enable music to allow browser audio.'));
   }
   private syncPause() {
     const pauseSamples = this.hidden || !this.previewMix && (this.paused || this.state.previewing);
-    this.recordedEffects.setPaused(pauseSamples);
+    this.recordedEffects.setPaused(pauseSamples && !(this.book && !this.hidden && !this.state.previewing));
     this.voices.setPaused(pauseSamples);
-    this.device?.node.port.postMessage({ type: 'pause', value: this.hidden || this.paused && !this.state.previewing });
+    this.device?.node.port.postMessage({ type: 'pause', value: this.hidden || this.paused && !this.book && !this.state.previewing });
   }
   private closeContext(context: AudioContext) { this.contexts.delete(context); void context.close().catch(() => {}); }
   private close(device: Device) { device.node.port.postMessage({ type: 'dispose' }); device.node.disconnect(); device.gain.disconnect(); device.node.port.close(); this.closeContext(device.context); }

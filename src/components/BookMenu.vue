@@ -81,7 +81,7 @@ const props = withDefaults(defineProps<{
   musicPlayer?: MusicPlayer; musicState?: MusicState;
 }>(), { initialView: 'main', mainMenu: false });
 const emit = defineEmits<{
-  resume: []; save: [index: number, name: string]; load: [index: number]; startJourney: []; readPrologue: [];
+  resume: []; save: [index: number, name: string]; load: [index: number]; startJourney: []; readPrologue: []; pageTurn: [];
   mainMenu: []; replayIntro: []; fullscreen: [];
   'update:walkSpeed': [value: WalkSpeed];
   'update:controlMode': [value: ControlMode];
@@ -101,6 +101,7 @@ watch(settingsPage, () => {
   content.value?.scrollTo(0, 0);
 });
 async function go(next: View) {
+  emit('pageTurn');
   view.value = next;
   settingsPage.value = 'game';
   overwrite.value = null;

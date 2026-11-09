@@ -5,7 +5,7 @@
     <div v-if="audioOpen" class="prologue-audio"><slot name="audio" /></div>
     <div v-else-if="showStory" class="prologue-story"><p class="sr-only">{{ chapter.text }}</p><p aria-hidden="true"><span v-if="letters" class="opening-word"><span class="initial">{{ revealedText.slice(0, 1) }}</span>{{ revealedText.slice(1, firstWordLength) }}</span>{{ revealedText.slice(firstWordLength) }}<span v-if="letters < chapter.text.length" class="ink-mark">✦</span></p></div>
     <nav v-if="showStory && !audioOpen" :aria-label="locale === 'ru' ? 'Страницы пролога' : 'Prologue pages'">
-      <button v-if="index" type="button" :disabled="!ready" @click="index--" :aria-label="locale === 'ru' ? 'Предыдущая страница' : 'Previous page'">‹</button>
+      <button v-if="index" type="button" :disabled="!ready" @click="turnPage(-1)" :aria-label="locale === 'ru' ? 'Предыдущая страница' : 'Previous page'">‹</button>
       <span>{{ ['I', 'II', 'III', 'IV'][index] }}</span>
       <button class="prologue-next" type="button" :disabled="!ready" @click="advance">{{ nextLabel }}</button>
     </nav>
@@ -20,7 +20,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { locale, t } from '../i18n';
 import { prologue } from './prologue';
 const props = withDefaults(defineProps<{ ready: boolean; returning?: boolean; showStory?: boolean }>(), { returning: false, showStory: true });
-const emit = defineEmits<{ continue: [] }>();
+const emit = defineEmits<{ continue: []; pageTurn: [] }>();
 const index = ref(0), letters = ref(0), page = ref<HTMLElement | null>(null);
 const audioOpen = ref(false), audioButton = ref<HTMLButtonElement | null>(null);
 const pageLabel = computed(() => audioOpen.value ? t('Sound settings') : !props.showStory ? t('Book One') : locale.value === 'ru' ? 'Пролог' : 'Prologue');
@@ -50,8 +50,12 @@ async function write() {
 }
 function advance() {
   if (letters.value < chapter.value.text.length) { cancelAnimationFrame(frame); letters.value = chapter.value.text.length; }
-  else if (index.value < 3) index.value++;
+  else if (index.value < 3) turnPage(1);
   else emit('continue');
+}
+function turnPage(direction: number) {
+  index.value += direction;
+  emit('pageTurn');
 }
 watch([chapter, () => props.ready], write, { immediate: true });
 onBeforeUnmount(() => cancelAnimationFrame(frame));

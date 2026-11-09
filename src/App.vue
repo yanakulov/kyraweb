@@ -1,19 +1,19 @@
 <template>
-  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()">
-    <FantasyBook v-if="!bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :snapshot="openingSnapshot ?? undefined" :frame-focus="bookFocus" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="prepareOpening" @ready="openingReadingReady = true" @open="openBook">
-      <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" :show-story="!prologueSeen" @continue="finishPrologue">
+  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()" @pointerover.capture="menuHover" @click.capture="menuClick">
+    <FantasyBook v-if="!bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :opening-frame-ready="openingFrameReady || !!openingSnapshot || !!gameError" :snapshot="openingSnapshot ?? undefined" :frame-focus="bookFocus" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="beginOpening" @ready="openingReadingReady = true" @open="openBook">
+      <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" :show-story="!prologueSeen" @page-turn="music.bookSound('page')" @continue="finishPrologue">
         <template #audio><MusicSettings v-if="musicState" :player="music" :state="musicState" /></template>
       </BookPrologue>
       <template #invitation><button v-if="latestSave" class="book-continue" type="button" :disabled="bookBusy" @click.stop="continueJourney">{{ t('Continue journey') }}</button><p v-if="bookBusy || bookMessage" class="book-status" role="status">{{ t(bookBusy ? 'Opening your saved chapter…' : bookMessage) }}</p></template>
     </FantasyBook>
     <FirstRunLetter v-if="firstRun && musicState" :player="music" :state="musicState" :mode="controlMode" @finish="finishSetup" />
     <FantasyBook v-if="bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :frame-focus="bookFocus" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
-      <BookPrologue v-if="readingHistory" :ready="bookReady" returning @continue="readingHistory = false" />
+      <BookPrologue v-if="readingHistory" :ready="bookReady" returning @page-turn="music.bookSound('page')" @continue="readingHistory = false" />
       <BookMenu v-else :gameplay="!introActive" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookMessage" :slots="bookSlots" :initial-view="bookInitialView"
         v-model:walk-speed="walkSpeed" :control-mode="controlMode" @update:control-mode="setControlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen" :music-player="music" :music-state="musicState"
-        @start-journey="startJourney" @read-prologue="readingHistory = true" @resume="resumeBook" @save="saveChapter" @load="loadChapter" @fullscreen="toggleFullscreen" @main-menu="leaveBook('menu')" @replay-intro="leaveBook('intro')" />
+        @start-journey="startJourney" @page-turn="music.bookSound('page')" @read-prologue="readingHistory = true; music.bookSound('page')" @resume="resumeBook" @save="saveChapter" @load="loadChapter" @fullscreen="toggleFullscreen" @main-menu="leaveBook('menu')" @replay-intro="leaveBook('intro')" />
     </FantasyBook>
-    <div class="game-frame" :class="{ 'is-concealed': !bookOpened }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot">
+    <div class="game-frame" :class="{ 'is-concealed': !bookOpened && !openingFrameReady && !openingSnapshot && !gameError }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot">
       <canvas ref="sceneBackdrop" class="scene-backdrop" :width="ROOM_ART.w" :height="ROOM_ART.h" aria-hidden="true"></canvas>
       <div class="stage" :class="{ 'cursor-controlled': customCursor }" :aria-busy="loading"
         @pointerenter="handleMove" @pointermove="handleMove" @pointerleave="leaveStage"
@@ -63,12 +63,29 @@ import { MusicPlayer, type MusicState } from './engine/audio/music';
 const musicState = shallowRef<MusicState>();
 const music = new MusicPlayer(state => { musicState.value = state; });
 musicState.value = { ...music.state };
+function menuControl(target: EventTarget | null) {
+  if (!(target instanceof Element)) return null;
+  const control = target.closest('button, [role="option"], a[href], summary, label');
+  return control?.closest('.fantasy-book, .setup-letter') && !control.matches(':disabled,[aria-disabled="true"]') ? control : null;
+}
+let lastMenuHover = -Infinity;
+function menuHover(event: PointerEvent) {
+  if (event.pointerType !== 'mouse') return;
+  const control = menuControl(event.target), now = performance.now();
+  if (!control || control === menuControl(event.relatedTarget) || now - lastMenuHover < 90) return;
+  lastMenuHover = now;
+  music.bookSound('hover');
+}
+function menuClick(event: MouseEvent) {
+  const control = menuControl(event.target);
+  if (control && (!control.matches('label') || event.target instanceof HTMLInputElement)) music.bookSound('click');
+}
 import { AUTOSAVE_SLOT, readAutosave, readSaveSlots, writeAutosave, writeSaveSlot, type SaveRecord, type SaveSlot } from './engine/gameplay/saveStorage';
 const bookOpened = ref(false);
 function hasReadPrologue() { try { return localStorage.getItem('kyrandia.prologueSeen') === '1'; } catch { return false; } }
 const prologueSeen = hasReadPrologue();
 const openingPrologue = ref(true), openingReadingReady = ref(false), readingHistory = ref(false), kallakMenu = ref(false), noteVisible = ref(false);
-function finishPrologue() { try { localStorage.setItem('kyrandia.prologueSeen', '1'); } catch { /* Reading remains available without storage. */ } openingPrologue.value = false; }
+function finishPrologue() { try { localStorage.setItem('kyrandia.prologueSeen', '1'); } catch { /* Reading remains available without storage. */ } music.bookSound('enter'); openingPrologue.value = false; }
 const openingBook = ref<{ openBook: () => void } | null>(null);
 const openingSnapshot = shallowRef<HTMLCanvasElement | null>(null), bookSnapshot = shallowRef<HTMLCanvasElement | null>(null);
 const bookFocus = shallowRef<Vec2>();
@@ -100,7 +117,12 @@ const saveSlots = shallowRef<SaveSlot[]>([]);
 const latestSave = computed(() => saveSlots.value.filter(slot => slot.save).sort((a,b) => b.save!.savedAt.localeCompare(a.save!.savedAt))[0]);
 const bookSlots = computed(() => saveSlots.value.map(slot => ({ index: slot.index, ...slot.save, error: slot.error })));
 let afterBookResume: (() => void) | null = null;
-let openingStarted = false, openingFinished = false, introFrameReady = false;
+let openingStarted = false, openingFinished = false;
+const openingFrameReady = ref(false);
+function beginOpening() {
+  prepareOpening();
+  music.bookSound('cover');
+}
 function prepareOpening() {
   if (openingStarted || openingSnapshot.value) return;
   openingStarted = true; void boot();
@@ -109,7 +131,7 @@ function openBook() {
   openingFinished = true; bookBusy.value = false;
   if (openingSnapshot.value && game) {
     bookOpened.value = true; openingSnapshot.value = null; game.setPaused(mobilePortrait.value); syncControls();
-  } else if (introFrameReady || gameError.value) {
+  } else if (openingFrameReady.value || gameError.value) {
     bookOpened.value = true; intro?.setPaused(mobilePortrait.value);
   } else prepareOpening();
 }
@@ -311,12 +333,13 @@ function showBookOptions(view: 'main' | 'load' = 'main') {
   bookInitialView.value = view; bookReady.value = false; bookReturning.value = false;
   readingHistory.value = false;
   bookSnapshot.value = captureBookFrame();
+  music.bookSound('page');
 }
 async function bookOptionsReady() {
   bookReady.value = true; await nextTick();
   appRef.value?.querySelector<HTMLElement>('[role="dialog"]')?.focus();
 }
-function resumeBook() { if (gameOver.value || bookBusy.value || !bookSnapshot.value || bookReturning.value) return; bookReturning.value = true; }
+function resumeBook() { if (gameOver.value || bookBusy.value || !bookSnapshot.value || bookReturning.value) return; music.bookSound('enter'); bookReturning.value = true; }
 function finishBookResume() {
   bookSnapshot.value = null; bookReady.value = false; bookReturning.value = false;
   intro?.setPaused(mobilePortrait.value); game?.setPaused(mobilePortrait.value); syncControls();
@@ -444,10 +467,10 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   const steps = introSteps.slice(startIndex);
   currentIntroStep.value = steps[0]?.id ?? '';
   let introVoice: number | undefined;
-  introFrameReady = false;
+  openingFrameReady.value = false;
   intro = playIntro(canvasRef.value, steps, {
     onFirstFrame: () => {
-      introFrameReady = true;
+      openingFrameReady.value = true;
       if (bookOpened.value || openingFinished) bookOpened.value = true;
       intro?.setPaused(mobilePortrait.value || !bookOpened.value);
     },
@@ -714,6 +737,10 @@ watch(introActive, (active) => {
 
 function musicVisibility() { music.setHidden(document.hidden); }
 watch([bookOpened, bookSnapshot, loading, gameError, mobilePortrait],
-  () => music.setPaused(!bookOpened.value || !!bookSnapshot.value || loading.value || !!gameError.value || mobilePortrait.value),
+  () => {
+    const book = !bookOpened.value || !!bookSnapshot.value;
+    music.setPaused(book || loading.value || !!gameError.value || mobilePortrait.value);
+    music.setBook(book && !mobilePortrait.value);
+  },
   { immediate: true, flush: 'sync' });
 </script>
