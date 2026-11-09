@@ -191,7 +191,7 @@ test('the real AdLib WASM plays the title and the original forest, Timbermist an
   assert.ok(timbermist.every(rms => rms > .002), 'the forest, Darm, songbird and Malcolm cues all reach the synth');
   assert.equal(new Set(timbermist.slice(0, -1)).size, 5, 'each command changes the audible score');
   assert.equal(timbermist.at(-1), timbermist[0], 'returning to the forest restarts its theme');
-  for (const command of [21, 22, 23, 24, 25, 26, 32, 55]) {
+  for (const command of [21, 22, 23, 24, 25, 26, 27, 29, 31, 32, 34, 55]) {
     const cue = wanderCue(command)!;
     assert.ok(signal(cue.file, cue.track, 1) > .001, `Faeriewood score ${command} is audible`);
   }

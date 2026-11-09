@@ -182,6 +182,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let actorShape: number | null = null;
     let heroPose: { image: HTMLCanvasElement; xOffset: number; yOffset: number } | undefined;
     let wispMs = config.resume?.wispMs ?? 0;
+    let heroScale: number | undefined;
     const floatingWisp = scriptRenderers.get('hero-wisp-float');
     let poisoned = config.poisoned ?? false;
     let poisonAtlas: HTMLCanvasElement | undefined;
@@ -466,7 +467,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       const frame = pose ? { x: 0, y: 0, w: pose.image.width, h: pose.image.height,
         xOffset: pose.xOffset, yOffset: pose.yOffset } : frames[frameIndex] ?? frames[0];
       const atlas = pose?.image ?? actorAtlas();
-      const scale = actorScaleAt(state.pos.y, scene.actorScale);
+      const scale = heroScale ?? actorScaleAt(state.pos.y, scene.actorScale);
       const drawX = state.pos.x + Math.trunc(frame.xOffset * scale);
       const drawY = state.pos.y + Math.trunc(frame.yOffset * scale);
       const drawW = Math.max(1, Math.trunc(frame.w * scale)), drawH = Math.max(1, Math.trunc(frame.h * scale));
@@ -933,6 +934,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           break;
         }
         case 'wisp': wispMs = action.ms; break;
+        case 'heroScale': heroScale = action.value; break;
         case 'heroFrame': {
           const animation = action.clip && scriptRenderers.get(`hero-${action.clip}`);
           heroPose = animation && action.index !== undefined && action.clip

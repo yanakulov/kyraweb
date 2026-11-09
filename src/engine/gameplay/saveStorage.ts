@@ -36,6 +36,12 @@ function item(value: unknown, path: string) {
   if (value === null) return;
   if (typeof value !== 'string' || !(itemNames.has(value) || (/^item-(0|[1-9]\d{0,2})$/.test(value) && Number(value.slice(5)) <= 106))) invalid(path);
 }
+function sceneItem(value: unknown, path: string) {
+  const entry = object(value, path, 'id x y');
+  coordinates(entry, path);
+  item(entry.id, path);
+  if (entry.id === null) invalid(path);
+}
 function coordinates(value: Record<string, unknown>, path: string) {
   number(value.x, `${path}.x`, -1024, 1024, false); number(value.y, `${path}.y`, -1024, 1024, false);
 }
@@ -97,9 +103,7 @@ export function validateWorldSave(value: unknown): WorldSave {
     if (room.wispMs !== undefined) number(room.wispMs, 'wispMs', 0, 300_000, false);
     if (room.gemPlacementChecked !== undefined) boolean(room.gemPlacementChecked, 'gemPlacementChecked');
     list(room.inventorySlots, 'inventory', 10, item); item(room.itemInHand, 'held item'); boolean(room.treeSpoken, 'treeSpoken');
-    list(room.sceneItems, 'sceneItems', 256, (value, path) => {
-      const entry = object(value, path, 'id x y'); coordinates(entry, path); item(entry.id, path); if (entry.id === null) invalid(path);
-    });
+    list(room.sceneItems, 'sceneItems', 256, sceneItem);
     list(room.overlays, 'overlays', 256, (value, path) => {
       const entry = object(value, path, 'id shape x y flags offsetX offsetY replaceShape replaceX replaceY active pickable');
       coordinates(entry, path); item(entry.id, path); if (entry.id === null) invalid(path);
@@ -112,7 +116,7 @@ export function validateWorldSave(value: unknown): WorldSave {
     runtime(room.runtime, `rooms.${key}.runtime`);
   }
   if (!Object.prototype.hasOwnProperty.call(rooms, String(data.currentRoom))) invalid('current room snapshot');
-  const quest = object(data.quest, 'quest', 'flags files phasing vase vaseInitialized merith herman birthstones scatteredGems poison cauldron crystals');
+  const quest = object(data.quest, 'quest', 'flags files phasing vase vaseInitialized merith herman birthstones scatteredGems poison cauldron crystals pendingItems');
   if (quest.vaseInitialized !== undefined) boolean(quest.vaseInitialized, 'quest.vaseInitialized');
   list(quest.flags, 'quest.flags', 512, (value, path) => number(value, path, 0, 511));
   if (quest.birthstones !== undefined) {
@@ -133,6 +137,11 @@ export function validateWorldSave(value: unknown): WorldSave {
     list(quest.crystals, 'quest.crystals', 2, (value, path) => {
       if (value !== -1) number(value, path, 60, 65);
     });
+  }
+  if (quest.pendingItems !== undefined) for (const [key, items] of Object.entries(object(quest.pendingItems, 'quest.pendingItems'))) {
+    roomId(Number(key), 'offscene item room');
+    if (String(Number(key)) !== key) invalid('offscene item room');
+    list(items, 'offscene items', 256, sceneItem);
   }
   const files = object(quest.files, 'quest.files');
   for (const [key, value] of Object.entries(files)) {

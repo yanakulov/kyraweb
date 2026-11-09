@@ -25,6 +25,7 @@ export const faeriewood = {
   64: ['FSOUTHB', 46, 65, null, 63],
   65: ['EDGE', 47, null, null, 64],
   73: ['XEDGE', null, 55, 60, null],
+  48: ['LEPHOLE', null, null, null, null],
   49: ['MIX', null, null, 105, null],
   52: ['LAGOON', null, null, 84, null],
   75: ['FORESTA', 99, 103, 107, 102],
@@ -57,4 +58,5 @@ export const faeriewood = {
   106: ['FSOUTH', 102, 107, null, 105],
   107: ['FSOUTHB', 75, 108, null, 106],
   108: ['EDGE', 103, null, null, 107],
+  199: ['LANDING', null, 200, null, null],
 };

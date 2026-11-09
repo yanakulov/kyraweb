@@ -467,3 +467,40 @@ test('the Crystals of Alchemy retain the first ingredient and clear both after a
     assert.deepEqual(q.state.crystals, [-1, -1]);
   }
 });
+
+test('the original amulet, Faun and Pegasus scripts connect Faeriewood to the castle island', () => {
+  const q = quest();
+  const snapshot = q.snapshot;
+  const chalice = traceForest({ ...data.rooms.FORESTA, id: 46 }, 4, q.state, snapshot, snapshot.pos, () => true, [], -1, 4);
+  assert.equal(chalice.handled, true);
+  assert.ok(chalice.actions.some(action => action.op === 'frame' && action.clip === 'steal1'));
+  for (const action of chalice.actions) applyForestState(q.state, action);
+  assert.ok(q.state.flags.has(188));
+
+  const use = (name: string) => traceForest({ ...data.rooms[name], ...data.flute }, 0, q.state, snapshot).actions;
+  snapshot.itemInHand = 'item-68';
+  const shrink = use('GLADE');
+  assert.ok(shrink.some(action => action.op === 'heroScale' && action.value === 0.5));
+  assert.ok(shrink.some(action => action.op === 'exit' && action.target === 48));
+  for (const action of shrink) applyForestState(q.state, action);
+  const greeting = q.run('LEPHOLE', 2).actions;
+  assert.ok(greeting.some(action => action.op === 'say' && action.speaker === 10));
+  assert.deepEqual(q.state.pendingItems[102], [{ id: 'apple', x: 160, y: 134 }]);
+
+  snapshot.itemInHand = 'apple';
+  q.run('LEPHOLE', 1, 75, 99);
+  assert.equal(snapshot.itemInHand, null);
+  assert.deepEqual(q.state.pendingItems[47], [{ id: 'item-24', x: 290, y: 90 }]);
+  assert.ok(q.run('LEPHOLE', 1, 270, 50).actions.some(action => action.op === 'exit' && action.target === 47));
+
+  snapshot.itemInHand = 'item-67';
+  const flight = use('LAGOON');
+  assert.ok(flight.some(action => action.op === 'frame' && action.clip === 'pegasus' && action.index === 112));
+  assert.ok(flight.some(action => action.op === 'music' && action.command === 34));
+  assert.ok(flight.some(action => action.op === 'exit' && action.target === 199));
+  for (const action of flight) applyForestState(q.state, action);
+  const landing = q.run('LANDING', 2).actions;
+  assert.ok(landing.some(action => action.op === 'movie' && action.clip === 'landing'));
+  assert.ok(landing.some(action => action.op === 'music' && action.command === 31));
+  assert.ok(!q.state.flags.has(201));
+});

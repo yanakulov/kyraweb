@@ -95,7 +95,9 @@ export async function buildForest(root, out = "public/assets/forest") {
   const programs = Object.fromEntries(
     names.map((n) => [n, parseEmc(get(`${n}.EMC`))]),
   );
+  const selfMovies = { GLADE: ["LEP_IN.WSA"], LAGOON: ["PEGASUS.WSA"] };
   const movies = [
+    ...Object.values(selfMovies).flat(),
     ...new Set(
       Object.values(programs).flatMap((p) =>
         p.strings.filter((s) => /\.WSA$/i.test(s)),
@@ -114,7 +116,7 @@ export async function buildForest(root, out = "public/assets/forest") {
   const noteClip = { width: 194, height: 128, frames: [notePixels], palette: note.palette, transparentIndex: -1 };
   const npcProgram = parseEmc(get('_NPC.EMC')), npcVoices = readPak(get('CHAPTER1.VRM'));
   const flute = { program: npcProgram, durations: Object.fromEntries(
-    [...npcVoices].filter(([name]) => /^(100[01]|2007|201[01]|700[0124]|800[0-6]|901[3-9]|902[0-9]|9030|904[0-9]|9050|9091)\.VOC$/.test(name))
+    [...npcVoices].filter(([name]) => /^(100[01]|2007|201[01]|700[0124]|800[0-6]|900[0-2]|901[3-9]|902[0-9]|903[0-4]|904[0-9]|9050|9091)\.VOC$/.test(name))
       .map(([name, data]) => [parseInt(name, 10), vocDuration(data)])) };
   function selfActions(item, room = 0, readable = false) {
     const actions = [];
@@ -212,7 +214,7 @@ export async function buildForest(root, out = "public/assets/forest") {
       palette: image.palette,
       transparentIndex: -1,
     };
-    for (const file of program.strings.filter((s) => /\.WSA$/i.test(s)))
+    for (const file of [...program.strings.filter((s) => /\.WSA$/i.test(s)), ...(selfMovies[name] ?? [])])
       clips[file.slice(0, -4).toLowerCase()] = {
         ...decodeWsa(get(file)),
         palette: image.palette,

@@ -1,6 +1,6 @@
 # Forest regions
 
-The playable CD quest chain runs from Brandon’s home through Shadowrealm to Zanthia’s cauldron and the Crystals of Alchemy in Faeriewood.
+The playable CD quest chain runs from Brandon’s home through Shadowrealm and Faeriewood to the Pegasus landing on the island of Castle Kyrandia.
 
 | ID | Original resource | Location |
 | --- | --- | --- |
@@ -24,8 +24,9 @@ The playable CD quest chain runs from Brandon’s home through Shadowrealm to Za
 | 17–36 | Timbermist Woods | CAVEB and the paths, huts, clearings, and landmarks beyond it |
 | 109–198 | Shadowrealm | The mineral pool, maze, iron grate, moonlight altar, chasm and volcanic river |
 | 37–38 | PLTCAVE / PLATEAU | The cave exit and the plateau before Faeriewood |
-| 39–47, 53–65, 73 | Faeriewood | The falling branch, Zanthia’s laboratory, the Enchanted Fountain, the flaming tree and the blueberry waterfall |
+| 39–48, 53–65, 73 | Faeriewood | The falling branch, Zanthia’s laboratory, the Enchanted Fountain, the flaming tree, the blueberry waterfall and the Faun’s home |
 | 49, 52, 75, 80–108 | Deeper Faeriewood | The woods behind the laboratory, the tropical lagoon and the Crystals of Alchemy |
+| 199 | LANDING | The Pegasus landing on the castle island |
 
 Click the scene edges, doorways or lift to leave. An exit changes the desktop cursor's direction. Brandon walks to a reachable approach before the scene changes. The first attempt to leave home plays the original tree conversation, including when carrying an item. Returning home preserves its completion state.
 
@@ -63,7 +64,7 @@ Brynn displays the original NOTEENG bitmap and waits for Continue. The home vase
 
 In Shadowrealm, the original room scripts use the brightest carried or dropped fireberry to choose the cave palette. Carried berries lose a stage at room transitions, and dropped berries keep their stage. The Shadowrealm browser scenario starts at a chapter checkpoint, collects the five rocks and coin, opens the grate, exchanges the coin at the well, awakens the purple jewel, freezes the river, retrieves the gold key and reaches the plateau. It also checks the dark-cave death and reloading the wisp form.
 
-In Faeriewood, the fountain's original EMC switches room 42 between the FOUNTN and ALGAE resources. The browser scenario follows the falling branch and both conversations with Zanthia. It also checks Malcolm’s music cues, the scroll animation, both fountain resources, the drinking animation and the blue jewel.
+In Faeriewood, the fountain's original EMC switches room 42 between the FOUNTN and ALGAE resources. The browser scenario follows the falling branch and both conversations with Zanthia. It also checks Malcolm’s music cues, both fountain resources, and the blue jewel. The same route continues through alchemy, the Faun’s trade, and the Pegasus flight to the island. Off-scene quest items survive a save before Brandon enters the room that receives them.
 
 ## Pointer and touch controls
 

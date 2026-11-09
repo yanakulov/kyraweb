@@ -17,7 +17,7 @@ KyraWeb is an unofficial web remake of *The Legend of Kyrandia*, the first book 
 
 - Solve the birthstone puzzle at the marble altar, recover the flute, and confront Malcolm at Serpent's Grotto.
 - Explore Shadowrealm with fireberries, unlock the purple jewel, recover the gold key and reach the plateau beyond the Chasm of Everfall.
-- Continue into Faeriewood, meet Zanthia, restore the Enchanted Fountain and awaken the blue jewel. Pick fresh blueberries, explore the woods behind Zanthia’s laboratory and mix potions at the Crystals of Alchemy.
+- Continue into Faeriewood, meet Zanthia, restore the Enchanted Fountain and awaken the blue jewel. Pick fresh blueberries, explore the woods behind Zanthia’s laboratory and mix potions at the Crystals of Alchemy. Bargain with the Faun for the Royal Chalice and fly as Pegasus to the island of Castle Kyrandia.
 
 The game has English and Russian text and original English CD voices.
 
