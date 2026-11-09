@@ -17,7 +17,7 @@ test('Russian covers the complete imported intro, home, forest and item dialogue
     ...opening.tree.map(action => 'text' in action ? action.text : ''),
     ...Object.values(forest.rooms).flatMap(room => room.program.strings),
     ...npc.strings, ...world.rooms.map(room => room.title),
-  ].filter((text): text is string => !!text && /[a-z]/i.test(text) && !/^[-A-Z0-9_]+(?:\.(?:WSA|CPS|EMC|VRM|DAT|COL))?$/.test(text));
+  ].filter((text): text is string => !!text && /[a-z]/i.test(text) && !/^[-A-Z0-9_]+(?:\.(?:WSA|CPS|EMC|VRM|DAT|COL|TMP))?$/.test(text));
   const unique = [...new Set(texts.map(text => text.replace(/\s+/g, ' ').trim()))];
   assert.ok(unique.length > 400);
   assert.deepEqual(unique.filter(text => !russian[text]?.trim()), [], 'A visible line has no Russian translation');

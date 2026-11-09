@@ -128,6 +128,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     const destinations = new Set(portals.map(portal => portal.target));
     if (currentId === 47) destinations.add(48);
     if (currentId === 52) destinations.add(199);
+    if (currentId === 207) destinations.add(245);
     for (const id of destinations) {
       const { meta, src } = roomSource(id);
       // A failed speculative request is retried by the real entrance, with its normal error UI.
@@ -155,6 +156,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     if (restoring && !state?.runtime) throw new Error("This saved room is incomplete. Choose another saved game.");
     if (restoring) for (const change of state!.runtime!.masks) changeMask(change);
     const planned = structuredClone(quest);
+    const returningThroughFireplace = id === 207 && previous === 245;
+    if (returningThroughFireplace) planned.flags.add(225);
     let setupActions:RoomAction[]=!questRoom && !restoring ? meta.entryMusic ?? [] : [];
     const facing=restoring ? state!.facing ?? 5 : from?({north:0,east:3,south:4,west:5}[from.side]):5;
     if (restoring) arrival = { ...state!.pos };
@@ -169,7 +172,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     if (questRoom) {
       const setup = traceForest(questRoom, 0, planned, snapshot);
       cursorTrack = setup.cursorTrack ?? cursorTrack;
-      if (!restoring) setupActions = setup.actions;
+      setupActions = restoring ? setup.actions.filter(action => action.op === 'fill') : setup.actions;
     }
     if(questRoom && !restoring){
       for(const action of setupActions){
@@ -210,7 +213,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     const scriptedArrival = from?.id === 'script' && (
       id === 80 && previous === 45 || id === 45 && previous === 80 ||
       id === 48 && previous === 47 || id === 47 && previous === 48 || id === 199 && previous === 52);
-    if (scriptedArrival || id === 45 && previous === 39 && !planned.flags.has(161)) {
+    if (scriptedArrival || returningThroughFireplace || id === 45 && previous === 39 && !planned.flags.has(161)) {
       setupActions.push({ op: 'visible', visible: false });
     }
     if (from && from.id !== 'phase' && meta.title && ![...setupActions, ...(entryActions ?? [])].some(action =>
@@ -259,8 +262,9 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
         const closingGate = id === 115 && !quest.flags.has(116) && !quest.flags.has(117);
         const chasm = id === 114 && (portal.target === 120 && !quest.flags.has(113) || portal.target === 121 && quest.flags.has(113));
         const lava = id === 117 && portal.target === 198 && !quest.flags.has(179);
-        if (!grotto && !closingGate && !chasm && !lava && portal.id !== 'faun-door' && portal.id !== 'castle-path') return null;
-        const trigger = closingGate ? { x: 165, y: 100 } : chasm ? { x: 180, y: portal.target === 120 ? 52 : 108 } : lava ? { x: 8, y: 8 } : point;
+        const forceField = id === 232 && portal.target === 230 && !quest.flags.has(234);
+        if (!grotto && !closingGate && !chasm && !lava && !forceField && portal.id !== 'faun-door' && portal.id !== 'castle-path') return null;
+        const trigger = forceField ? { x: 157, y: 35 } : closingGate ? { x: 165, y: 100 } : chasm ? { x: 180, y: portal.target === 120 ? 52 : 108 } : lava ? { x: 8, y: 8 } : point;
         return traceForest(questRoom, 1, quest, snapshot, trigger,
           p => isWalkable(p, { uiMaskY: 136 } as GameConfig['scene'], mask), [], grotto || portal.id === 'castle-path' ? -5 : originalItem(snapshot.itemInHand)).actions;
       } : undefined,
@@ -282,7 +286,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
           const pressed: RoomAction[] = [{ op: 'sfx', track: 0x45 },
             { op: 'frame', clip: 'blue-jewel', index: 11, ...BLUE_JEWEL_POS, ms: 100 },
             { op: 'close', clip: 'blue-jewel' }];
-          const spell = id === 46 && questRoom ? traceForest(questRoom, 4, quest, snapshot, snapshot.pos,
+          const spell = (id === 46 || id === 232) && questRoom ? traceForest(questRoom, 4, quest, snapshot, snapshot.pos,
             p => isWalkable(p, { uiMaskY: 136 } as GameConfig['scene'], mask), [], -1, 4) : undefined;
           return [...pressed, ...(spell?.handled ? spell.actions : [...reveal, ...dispelMagic(id, !!snapshot.wispMs),
             say('That felt strange.', 2007, forest.flute.durations[2007] ?? 1900)])];

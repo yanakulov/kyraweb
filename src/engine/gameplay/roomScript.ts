@@ -24,6 +24,7 @@ export type RoomAction =
       y: number;
       ms: number;
       permanent?: boolean;
+      shapes?: { shape: number; x: number; y: number; flags: number }[];
     }
   | { op: "close"; clip: string }
   | {
@@ -62,6 +63,7 @@ export type RoomAction =
     }
   | { op: "phase"; active: boolean }
   | { op: "shape"; shape: number; x: number; y: number; flags: number }
+  | { op: "fill"; x: number; y: number; w: number; h: number; color: number }
   | { op: "mask"; x: number; y: number; w: number; h: number; blocked: boolean }
   | { op: "noDrop"; x: number; y: number; w: number; h: number }
   | { op: "hand"; item: import("../core/types").InventoryItemId | null }
@@ -74,7 +76,7 @@ export type RoomAction =
   | { op: "confirm" }
   | { op: "choice"; resume: (point: { x: number; y: number }) => RoomAction[] }
   | { op: "vase"; item: number }
-  | { op: "exit"; target: number; entry?: { x: number; y: number } }
+  | { op: "exit"; target: number; side?: import("../core/types").RoomPortal["side"]; entry?: { x: number; y: number } }
   | { op: "death" }
   | { op: "shake"; ms: number }
   | { op: "palette"; start: number; colors: number[]; ms: number }

@@ -120,9 +120,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     if (openingPack) for (const [name, info] of Object.entries(openingPack.clips)) {
       scriptRenderers.set(name, { clip: new IndexedClip(openingPack, info), renderer: new IndexedRenderer(info, false) });
     }
-    const scriptLayers = new Map<string, { image: HTMLCanvasElement; index: number; x: number; y: number }>();
+    const scriptLayers = new Map<string, { image: HTMLCanvasElement; index: number; x: number; y: number; shapes?: Extract<RoomAction, { op: "frame" }>["shapes"] }>();
     const permanentLayers = new Map<string, { image: HTMLCanvasElement; index: number; x: number; y: number }>();
     const maskChanges: RoomRuntimeSnapshot["masks"] = [];
+    const roomFills: Extract<RoomAction, { op: "fill" }>[] = [];
     const questShapes: {shape:number;x:number;y:number;flags:number}[] = [];
     const noDropRegions: {x:number;y:number;w:number;h:number}[] = [];
     const npcs = new Map<number,Extract<RoomAction,{op:'npc'}>>();
@@ -423,6 +424,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
       ctx.save();
       ctx.beginPath(); ctx.rect(8, 8, 304, scene.uiMaskY - 8); ctx.clip();
+      if (backgroundName === "room" && roomPalette) for (const fill of roomFills) {
+        ctx.fillStyle = `rgb(${roomPalette.slice(fill.color * 3, fill.color * 3 + 3).join(",")})`;
+        ctx.fillRect(fill.x, fill.y, fill.w, fill.h);
+      }
       const movingAtmosphere = atmosphere && backgroundName === 'room' && !reducedMotion?.matches;
       if (movingAtmosphere && !paletteFade && coastSky && roomPalette) ctx.drawImage(coastSky(clockMs, roomPalette), 0, 0);
       if (backgroundName === "room" && spriteDefMap && filteredSceneAnimShapes.length) {
@@ -537,7 +542,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       drawAmbient(true);
       if (!blackout) drawNpcs(true);
       if (!blackout && backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, drawLayerTable, state.pos.y, "front");
-      for (const [name, layer] of scriptLayers) if (!behindActors(name)) ctx.drawImage(layer.image, layer.x, layer.y);
+      for (const [name, layer] of scriptLayers) if (!behindActors(name)) {
+        ctx.drawImage(layer.image, layer.x, layer.y);
+        if (layer.shapes && spriteDefMap) drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, layer.shapes);
+      }
 
       if (scene.opening && packedBackground && movingAtmosphere) drawKallakAtmosphere(ctx, clockMs);
       ctx.restore();
@@ -933,7 +941,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         case 'death':dead=true;actorVisible=false;break;
         case 'blackout':blackout=action.active;break;
         case 'shake': shakeUntil = clockMs + action.ms; break;
-        case 'exit':config.onExit?.({id:'script',target:action.target,side:'north',entry:action.entry,rect:{x:0,y:0,w:0,h:0},point:state.pos});break;
+        case 'exit':config.onExit?.({id:'script',target:action.target,side:action.side ?? 'north',entry:action.entry,rect:{x:0,y:0,w:0,h:0},point:state.pos});break;
         case 'palette':if(roomPalette){const to=roomPalette.slice();to.splice(action.start*3,action.colors.length,...action.colors);paletteFade={from:roomPalette.slice(),to,ms:action.ms,age:0,step:-1};updatePalette(0);}break;
         case 'fadeIn':
           if (roomPalette) {
@@ -997,7 +1005,16 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           break;
         case 'hand':state.itemInHand=action.item;break;
         case 'item':state.sceneItems.push({id:action.item,x:action.x,y:action.y});break;
-        case 'shape':questShapes.push({ shape: action.shape, x: action.x, y: action.y, flags: action.flags });foregroundFrames.clear();break;
+        case 'shape': {
+          const { shape, x, y, flags } = action;
+          const replace = config.roomResource === 'LIBRARY' || config.roomResource === 'CATACOM';
+          const previous = replace ? questShapes.findIndex(existing => existing.x === x && existing.y === y) : -1;
+          if (previous >= 0) questShapes[previous] = { shape, x, y, flags };
+          else questShapes.push({ shape, x, y, flags });
+          foregroundFrames.clear();
+          break;
+        }
+        case 'fill': roomFills.push(action); break;
         case 'noDrop':noDropRegions.push({ x: action.x, y: action.y, w: action.w, h: action.h });break;
         case 'mask':
           maskChanges.push({ x: action.x, y: action.y, w: action.w, h: action.h, blocked: action.blocked });
@@ -1047,7 +1064,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           const pixels=animation.clip.frame(action.index);
           if(action.permanent || behindActors(action.clip)) foregroundFrames.clear();
           if(action.permanent){scriptLayers.delete(action.clip);permanentLayers.set(action.clip,{image:buildIndexedCanvas(animation.clip.info,pixels),index:action.index,x:action.x,y:action.y});}
-          else {scriptLayers.delete(action.clip);scriptLayers.set(action.clip, { image: animation.renderer.render(pixels), index:action.index, x: action.x, y: action.y });}
+          else {scriptLayers.delete(action.clip);scriptLayers.set(action.clip, { image: animation.renderer.render(pixels), index:action.index, x: action.x, y: action.y, shapes: action.shapes });}
           if (actorMovies.has(action.clip)) actorVisible = false;
           break;
         }
@@ -1132,6 +1149,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     if (config.entry || config.resume?.facing !== undefined) face(config.entry?.facing ?? config.resume!.facing!);
     const restored = config.resume?.runtime;
     if (restored) {
+      for (const action of config.setupActions ?? []) if (action.op === 'fill') applyScript(action);
       clockMs = restored.clockMs; sceneTicks = restored.sceneTicks; sceneAccumulatorMs = restored.sceneAccumulatorMs;
       if (restored.sceneAnims.length !== sceneAnims.length) throw new Error("This save does not match the room's animations.");
       restored.sceneAnims.forEach((saved, index) => {
