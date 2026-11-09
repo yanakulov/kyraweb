@@ -48,9 +48,13 @@ document.querySelector('#voices').onclick = async () => {
     await until(() => !audible(), 'Skipped voice kept playing');
     player.speak('SPELL', 43);
     await until(audible, 'Brandywine voice did not reach the speakers');
+    player.stopSpeech();
+    await until(() => !audible(), 'Brandywine voice kept playing');
+    player.speak('SPELL', 71);
+    await until(audible, 'Darm voice did not reach the speakers');
     player.setVoiceVolume(0);
     await until(() => !audible(), 'Voice volume did not mute speech');
-    result.textContent = 'PASS: original intro and Brandywine voices decode and play with music and effects off. Skip and voice volume mute playback.';
+    result.textContent = 'PASS: original intro, Brandywine and Darm voices play independently. Skip and voice volume mute playback.';
   } catch (error) { result.textContent = `FAIL: ${error.message}`; }
   finally {
     player.dispose();

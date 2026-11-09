@@ -148,14 +148,13 @@ export function traceForest(
     character = 2,
     phasing = state.phasing;
   let actor = { ...snapshot.pos, facing: snapshot.facing ?? 5 },
-    voice = 0,
+    voiceMs = 0,
     voiceElapsed = 0,
     hand = originalItem(snapshot.itemInHand);
   let poison = state.poison;
   const delays: Record<number, number> = { 0: snapshot.walkDelayTicks ?? 6, 1: 7, 2: 8 };
   const slots = new Map<number, string>();
   const emit = (action: RoomAction) => actions.push(action);
-  const duration = () => room.durations[voice] ?? 2000;
   const wait = (ms: number) => {
     if (ms > 0) {
       emit({ op: "wait", ms });
@@ -182,6 +181,12 @@ export function traceForest(
   };
   const npcAction = () =>
     emit({ op: "npc", character, ...npc, visible: npc.room === room.id && npc.shape !== 88 });
+  const animateDarm = (talking: boolean) => {
+    for (const [index, enabled] of [[5, !talking], [6, talking]] as const) {
+      emit({ op: "ambient", index, enabled, internal: false });
+      emit({ op: "ambient", index, enabled, internal: true });
+    }
+  };
   const setFlag = (flag: number, value: boolean) => {
     if (value) flags.add(flag);
     else flags.delete(flag);
@@ -456,9 +461,9 @@ export function traceForest(
             const count = Math.abs(a[1] - a[0]) + 1,
               repeat = Math.max(1, a[6]);
             const time =
-              (duration() * Math.abs(a[7])) / 100 -
+              (voiceMs * Math.abs(a[7])) / 100 -
               (a[7] < 0 ? voiceElapsed : 0);
-            const ticks = a[7]
+            const ticks = a[7] && voiceElapsed < voiceMs
               ? Math.floor(Math.max(0, time) / (count * repeat) / (1000 / 60))
               : a[4];
             for (let r = 0; r < repeat; r++)
@@ -474,34 +479,33 @@ export function traceForest(
           }
           case 1:
           case 0x34: {
-            voice = a[0];
+            const voiceId = a[0];
+            voiceMs = room.durations[voiceId] ?? 2000;
             voiceElapsed = 0;
-            const custom = id === 0x34,
-              speaker = custom ? (a[4] === 15 ? 0 : 5) : a[2];
-            const partner = npcs[speaker];
+            const custom = id === 0x34;
+            // SPELL's shared WSA uses different anchors for Darm and Brandywine.
+            const speaker = custom ? (room.name === 'SPELL' ? (a[3] === 36 ? 8 : 'brandywine') : undefined) : a[2];
+            const darm = room.name === 'SPELL' && speaker === 8;
+            const partner = typeof speaker === 'number' ? npcs[speaker] : undefined;
+            const anchor = custom ? { x: a[2], y: a[3] }
+              : partner ? { x: partner.x, y: partner.y - 56 }
+              : darm ? { x: 140, y: 36 }
+              : speaker === 5 ? { x: 44, y: 44 }
+              : { x: actor.x, y: actor.y - 56 };
+            if (darm && !custom) {
+              emit({ op: "waitVoice" });
+              animateDarm(true);
+            }
             emit({
               op: "say",
               text: text[a[1]],
-              voiceId: voice,
-              ms: duration(),
+              voiceId,
+              ms: voiceMs,
               speaker,
-              x: custom
-                ? a[2]
-                : partner
-                  ? partner.x
-                  : speaker === 5
-                    ? 44
-                    : actor.x,
-              y: custom
-                ? a[3]
-                : partner
-                  ? partner.y - 56
-                  : speaker === 5
-                    ? 44
-                    : actor.y - 56,
+              ...anchor,
               color: custom
                 ? a[4]
-                : speaker === 2
+                : darm ? 85 : speaker === 2
                   ? 201
                   : speaker === 1
                     ? 144
@@ -510,7 +514,10 @@ export function traceForest(
                       : 15,
               blocking: !custom,
             });
-            if (!custom) voiceElapsed = duration();
+            if (!custom) {
+              voiceElapsed = voiceMs;
+              if (darm) animateDarm(false);
+            }
             return 0;
           }
           case 0x35:
@@ -521,7 +528,10 @@ export function traceForest(
             return 0;
           case 0x21:
             if (a[0] < 0) wait((-a[0] * 1000) / 60);
-            else if (a[0] === 0) emit({ op: "waitVoice" });
+            else if (a[0] === 0) {
+              emit({ op: "waitVoice" });
+              voiceElapsed = Math.max(voiceElapsed, voiceMs);
+            }
             return 0;
           case 0x10:
           case 0x11:

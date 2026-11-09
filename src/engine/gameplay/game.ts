@@ -117,7 +117,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const noDropRegions: {x:number;y:number;w:number;h:number}[] = [];
     const npcs = new Map<number,Extract<RoomAction,{op:'npc'}>>();
     const heldNpcPoses = new Map<number,Extract<RoomAction,{op:'npc'}>>();
-    let speaker = 0;
+    let speaker: Extract<RoomAction, { op: 'say' }>['speaker'] = 0;
     let hasAmulet=config.amulet??false;
     let hasYellowJewel = config.yellowJewel ?? false;
     let shakeUntil = 0;

@@ -31,6 +31,7 @@ window.addEventListener("error", (event) => {
 const lines: string[] = [];
 let fireFrame = -1, featherFalling = false;
 let knifeChoice = false;
+const scores: number[] = [];
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   try {
@@ -47,6 +48,7 @@ const config: GameConfig = {
     dead = true;
   },
   onScriptAction: action => {
+    if (action.op === 'music') scores.push(action.command);
     if (action.op === 'frame' && action.clip === 'balance2') onRope = true;
     if (action.op === 'frame' && action.clip === 'brandyw3') fireFrame = action.index;
     if (action.op === 'ambientRun' && id === 30) featherFalling = true;
@@ -135,6 +137,10 @@ async function travel(target: number) {
 async function route(...targets: number[]) {
   for (const target of targets) await travel(target);
 }
+function expectScore(command: number) {
+  const score = scores.at(-1);
+  if (score !== command) throw Error(`Room ${id} should play score ${command}, got ${score}`);
+}
 function held(item: string | null) {
   if (game.getSnapshot().itemInHand !== item)
     throw Error(`Expected ${item}, held ${game.getSnapshot().itemInHand}`);
@@ -219,6 +225,7 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     game.stop();
     game = await startGame(canvas, { ...config, saveState: bridgeSave });
     await route(24, 26, 27);
+    expectScore(12);
     const spellPack = await loadScenePack('/kyraweb/assets/forest/spell.kyr.gz');
     game.handleClick({ x: 130, y: 76 });
     await until(() => fireFrame >= 4, 'Brandywine breathing fire');
@@ -227,7 +234,17 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     await settle();
     if (!lines.includes("I'll need a quill.")) throw Error('Darm did not ask for a quill');
     capture('Darm and Brandywine');
-    await route(26, 33, 30);
+    game.handleClick({ x: 130, y: 76 });
+    await until(() => document.querySelector('#line')!.textContent === 'Well Branson...', 'Darm’s repeat dialogue');
+    const talking = game.getSnapshot().runtime!.sceneAnims;
+    if (talking[5].visible || !talking[6].visible || !talking[6].play) throw Error('Darm did not switch from the idle to the talk animation');
+    game.handleClick({ x: 130, y: 76 });
+    await settle();
+    const idle = game.getSnapshot().runtime!.sceneAnims;
+    if (!idle[5].visible || idle[6].visible) throw Error('Darm did not restore his idle animation after dialogue');
+    await travel(26);
+    expectScore(11);
+    await route(33, 30);
     await click(128, 125);
     held('item-27');
     await click(120, 165);
@@ -261,11 +278,13 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     assertScenePixels(new IndexedClip(songPack, songPack.clips['songbird-rest']), 0, 186, 38, 2, 0, 11, 8, 'The bird disappeared while the feather was falling');
     capture('The healed bird stays in the nest while the feather falls', false);
     await settle();
+    expectScore(13);
     if (!lines.some(line => line.includes('heal his wing'))) throw Error('The yellow jewel did not heal the songbird');
     capture('Healed songbird');
     await click(183, 125);
     held('item-46');
     await route(33, 26, 27);
+    expectScore(12);
     await click(130, 76);
     held(null);
     await click(153, 78);
@@ -351,6 +370,8 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     if (!cave) throw Error('Missing Serpent’s Grotto entrance');
     game.handleClick({ x: cave.rect.x + cave.rect.w / 2, y: cave.rect.y + cave.rect.h / 2 });
     await until(() => knifeChoice, 'Malcolm’s thrown knife');
+    expectScore(16);
+    if (scores.slice(-3).join() !== '1,15,16') throw Error('The grotto did not fade into both Malcolm cues');
     capture('Malcolm challenges Brandon at the grotto', false);
     await click(42, 80);
     const frozen = validateWorldSave(game.getSaveState());
@@ -361,6 +382,7 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     await click(hero.x, hero.y - 16);
     if (game.getSaveState()?.quest.flags.includes(82)) throw Error('The flute did not shatter the ice');
     await travel(109);
+    expectScore(3);
     capture('The entrance to Shadowrealm');
     results.textContent += 'ALL PASSED — forest, Timbermist, birthstones, poison cure, flute, Malcolm and Shadowrealm entrance';
     document.title = "PASS — forest quests";

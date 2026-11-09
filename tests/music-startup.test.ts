@@ -168,7 +168,7 @@ test('missing saved Roland ROMs fall back to AdLib without overriding a saved mu
   } finally { player.dispose(); env.restore(); }
 });
 
-test('the real AdLib WASM produces distinct title and forest signals from the DOS banks', async () => {
+test('the real AdLib WASM plays the title, forest and Timbermist score changes', async () => {
   const synth = await loadAdlib(Uint8Array.from(readFileSync('public/assets/audio/adlib.wasm')).buffer, 48000);
   const left = new Float32Array(48000), right = new Float32Array(48000);
   function signal(file: string, track: number) {
@@ -179,5 +179,9 @@ test('the real AdLib WASM produces distinct title and forest signals from the DO
   }
   const title = signal('INTRO', 2), forest = signal('KYRA1B', 2);
   assert.ok(title > .002 && forest > .002 && title !== forest);
+  const timbermist = [2, 3, 4, 6, 7, 2].map(track => signal('KYRA2A', track));
+  assert.ok(timbermist.every(rms => rms > .002), 'the forest, Darm, songbird and Malcolm cues all reach the synth');
+  assert.equal(new Set(timbermist.slice(0, -1)).size, 5, 'each command changes the audible score');
+  assert.equal(timbermist.at(-1), timbermist[0], 'returning to the forest restarts its theme');
   assert.equal(signal('KYRA1B', 0), 0, 'the stop command renders silence');
 });
