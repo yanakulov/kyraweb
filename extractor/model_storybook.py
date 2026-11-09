@@ -254,10 +254,15 @@ box("Walnut tabletop", (0,-.37,0), (55,.42,72), wood, .035, uv_scale=(1/15,1/15)
 # Closed book; its hinge is an exported empty, never merged into the cover.
 box("Back leather board", (0,-.045,0), (3.13,.16,4.15), leather, .07, uv_scale=(1.2,1.2))
 box("Page block", (.025,.178,0), (2.96,.36,3.94), page_edge, .045)
-# Individual leaves make the fore-edge visible without dense geometry.
-for i in range(22):
-    h = .014 + i*.0152
-    box(f"Leaf edge {i+1}", (.028,h,0), (2.967,.006,3.947), parchment, .002)
+# The individual leaves share one beveled mesh in the exported scene.
+leaf = box("Leaf edge 1", (.028,.014,0), (2.967,.006,3.947), parchment, .002)
+bpy.ops.object.modifier_apply(modifier="Soft handmade edges")
+bpy.ops.object.modifier_apply(modifier="Weighted surface normals")
+for i in range(1, 22):
+    copy = leaf.copy()
+    copy.name = f"Leaf edge {i+1}"
+    copy.location.z += i*.0152
+    bpy.context.collection.objects.link(copy)
 box("Blank right parchment", (.025,.365,0), (2.94,.01,3.91), parchment, .025)
 hinge = bpy.data.objects.new("CoverHinge", None)
 bpy.context.collection.objects.link(hinge)
@@ -361,6 +366,121 @@ bpy.context.view_layer.update()
 for obj in candle_objects:
     obj.parent=candle_root
     obj.matrix_parent_inverse=candle_root.matrix_world.inverted()
+
+# Place the other volumes beyond the fore-edge of the moving cover.
+stack_leather = [
+    leather,
+    material("Faded green bookcloth", (.042,.078,.042), 0, .88, normal=leather_normal),
+    material("Indigo leather", (.035,.041,.082), 0, .79, normal=leather_normal),
+]
+stack_y = -.16
+for i, (x, z, width, depth, height, angle) in enumerate([
+    (-2.82, 2.63, 1.56, .96, .25, .09),
+    (-2.91, 2.60, 1.40, .88, .21, -.10),
+    (-2.73, 2.58, 1.16, .83, .18, .14),
+]):
+    assert z - depth/2 - abs(angle)*width/2 > 2.05
+    def stack_point(local_x, y, local_z):
+        c, s = math.cos(angle), math.sin(angle)
+        return x + c*local_x + s*local_z, y, z - s*local_x + c*local_z
+
+    binding = stack_leather[i]
+    for part, part_y, inset, thickness, surface in [
+        ("back", stack_y+.024, 0, .048, binding),
+        ("leaves", stack_y+height/2, .075, height-.066, page_edge),
+        ("front", stack_y+height-.024, 0, .048, binding),
+    ]:
+        obj = box(f"Stack volume {i+1} {part}", (x,part_y,z),
+                  (width-inset,thickness,depth-inset), surface, .022)
+        obj.rotation_euler.z = angle
+    spine = box(f"Rounded spine {i+1}", stack_point(-width/2+.035,stack_y+height/2,0),
+                (.17,height,depth), binding, .062)
+    spine.rotation_euler.z = angle
+    for band in [-.32, -.19, .19, .32]:
+        tube("Gilt spine band", [stack_point(u,stack_y+height*v,depth*band)
+             for u,v in [(-width/2+.035,.93),(-width/2-.045,.74),
+                         (-width/2-.055,.28),(-width/2+.033,.08)]], .009, gold_edge)
+    if i == 2:
+        top = stack_y + height + .003
+        for margin in [.06, .086]:
+            u, v = width/2-margin, depth/2-margin
+            tube("Tooled cover border", [stack_point(a,top,b)
+                 for a,b in [(-u,-v),(u,-v),(u,v),(-u,v),(-u,-v)]], .006, gold_edge)
+        for scale in [1,.63]:
+            tube("Gilt diamond tool", [stack_point(scale*a,top,scale*b)
+                 for a,b in [(0,-.24),(.16,0),(0,.24),(-.16,0),(0,-.24)]], .009, gold_edge)
+    stack_y += height
+
+# The quill stays beyond the back edge of the moving cover.
+ink_z = -2.60
+assert ink_z + .37 < -2.05
+ink_blue = material("Midnight blue ink glass", (.031,.10,.12), .24, .25)
+ink_dark = material("Wet black ink", (.008,.013,.018), .11, .16)
+lathe("Octagonal inkwell", (-2.55,-.157,ink_z),
+      [(0,.29),(.04,.34),(.17,.35),(.28,.30),(.35,.21),(.42,.16),(.45,.17)],
+      ink_blue, 8)
+lathe("Inkwell brass collar", (-2.55,.254,ink_z),
+      [(0,.166),(.023,.184),(.05,.181),(.062,.155)], brass, 10)
+lathe("Ink in the well", (-2.55,.307,ink_z), [(0,.148),(.008,.148)], ink_dark, 10)
+
+shaft = material("Quill shaft", (.53,.36,.16), 0, .61)
+feather = material("Pheasant feather", (.48,.29,.14), 0, .84)
+feather_tip = material("Pheasant feather shadows", (.30,.143,.066), 0, .87)
+quill_start = Vector((-2.55,.28,ink_z))
+quill_end = Vector((-3.86,.90,-2.78))
+quill = [tuple(quill_start.lerp(quill_end, t) + Vector((0,.12*math.sin(t*math.pi),0)))
+         for t in np.linspace(0, 1, 15)]
+quill_spine = tube("Pheasant quill", quill, .014, shaft)
+quill_spine.data.bevel_resolution = 1
+vane = [0,.062,.105,.147,.171,.162,.126,.08,0]
+for side, mat in [(-1, feather_tip), (1, feather)]:
+    verts = []
+    for i, (centre, width) in enumerate(zip(quill[6:], vane)):
+        dx, dy, dz = centre
+        spread = width * (1 if side > 0 else .72) * (1 if i not in (4,7) else .75)
+        verts.extend([(dx,dy,dz), (dx+.55*spread,dy+.42*side*spread,dz-1.25*side*spread)])
+    mesh("Quill vane", verts, [(i,i+1,i+3,i+2) for i in range(0,len(verts)-2,2)], mat)
+
+letter_x, letter_z, letter_angle = 2.63, 1.36, -.18
+letter_width = 1.25
+assert letter_x - .72 > -1.55 + 3.2
+def letter_point(x, y, z):
+    c, s = math.cos(letter_angle), math.sin(letter_angle)
+    return (letter_x+x*c-z*s, y, letter_z+x*s+z*c)
+
+envelope = material("Folded letter paper", (.47,.31,.15), 0, .87, paper_image)
+crease = material("Folded letter crease", (.40,.23,.10), 0, .86)
+body = box("Sealed letter", letter_point(0,-.131,0), (letter_width,.052,.83), envelope, .023)
+body.rotation_euler.z = -letter_angle
+body.modifiers["Soft handmade edges"].segments = 2
+mesh("Letter flap", [letter_point(x,y,z) for x,y,z in
+     [(-.60,-.101,-.39),(.60,-.101,-.39),(0,-.085,.07)]], [(2,1,0)], envelope)
+fold = tube("Letter fold", [letter_point(x,-.095,z) for x,z in [(-.58,-.36),(0,.07),(.58,-.36)]],
+            .009, crease)
+fold.data.bevel_resolution = 1
+seal = material("Oxblood sealing wax", (.32,.023,.025), 0, .46)
+seal_dark = material("Wax seal engraving", (.14,.008,.009), 0, .59)
+lathe("Wax seal", letter_point(0,-.101,.065),
+      [(0,.112),(.01,.148),(.026,.137),(.041,.124),(.049,.105)], seal, 14)
+mesh("Seal diamond", [letter_point(x,-.050,z+.065) for x,z in
+     [(0,-.076),(.051,0),(0,.076),(-.051,0)]], [(3,2,1,0)], seal_dark)
+
+def desk_gem(name, x, z, radius, colour):
+    gem = material(name, colour, 0, .09)
+    glass = gem.node_tree.nodes.get("Principled BSDF")
+    glass.inputs["Transmission Weight"].default_value = .98
+    glass.inputs["IOR"].default_value = 1.49
+    rings = [(-.157,.52,0),(-.103,1,0),(-.024,.59,.5)]
+    verts = [(x+r*radius*math.cos((a+phase)*math.tau/8),y,
+              z+r*radius*math.sin((a+phase)*math.tau/8)) for y,r,phase in rings for a in range(8)]
+    faces = []
+    for i in range(8):
+        j = (i+1)%8
+        faces.extend([(i,8+i,8+j,j),(8+i,16+i,8+j),(8+i,16+(i-1)%8,16+i)])
+    mesh(name, verts, faces + [tuple(range(8)),tuple(range(23,15,-1))], gem)
+
+desk_gem("Emerald glass", 2.12, 2.02, .19, (.49,.86,.65))
+desk_gem("Ruby glass", 2.49, 2.13, .15, (.92,.52,.57))
 
 # Pack the source-derived maps into the GLB; no runtime modeling is needed.
 for obj in list(bpy.context.scene.objects):

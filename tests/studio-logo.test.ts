@@ -10,11 +10,11 @@ import { gunzipSync } from 'node:zlib';
 
 test('the page starts blank, draws in ink before colour, then zooms into the game viewport', () => {
   assert.deepEqual(bookTransition(0), { hinge: 0, ink: 0, colour: 0, zoom: 0, done: false });
-  assert.equal(bookTransition(1800).ink, 0);
-  assert.ok(bookTransition(3000).ink > 0 && bookTransition(3000).ink < 1);
-  assert.deepEqual(bookTransition(4400), { hinge: 1, ink: 1, colour: 0, zoom: 0, done: false });
-  assert.deepEqual(bookTransition(6400), { hinge: 1, ink: 1, colour: 1, zoom: 0, done: false });
-  assert.deepEqual(bookTransition(8900), { hinge: 1, ink: 1, colour: 1, zoom: 1, done: true });
+  assert.equal(bookTransition(1050).ink, 0);
+  assert.ok(bookTransition(2200).ink > 0 && bookTransition(2200).ink < 1);
+  assert.deepEqual(bookTransition(3000), { hinge: 1, ink: 1, colour: 0, zoom: 0, done: false });
+  assert.equal(bookTransition(3820).colour, 1);
+  assert.deepEqual(bookTransition(4480), { hinge: 1, ink: 1, colour: 1, zoom: 1, done: true });
   for (const [width, height] of [[1280, 720], [390, 844], [320, 700]]) {
     const gameHeight = Math.min(width - 8, 1280, (height - 8) * 1.6) / 1.6;
     const distance = pageCameraDistance(height, gameHeight, 35);

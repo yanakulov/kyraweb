@@ -7,7 +7,6 @@
       <img v-if="fallback && !isOptions" class="book-fallback" :src="`${base}assets/interface/book-cover.webp`" :alt="t('The original Kyrandia cover embossed into leather')" />
       <span v-if="!ready && !fallback && !isOptions" class="book-loading" role="status">{{ t('Preparing your story…') }}</span>
     </div>
-    <div ref="letterbox" class="book-letterbox" aria-hidden="true"></div>
     <canvas ref="handoff" class="book-handoff" width="320" height="200" aria-hidden="true"></canvas>
     <div ref="pageLayer" class="book-ui">
       <div v-if="hasReadingPage" ref="pageMenu" class="book-page-menu" data-book-page :class="{ 'is-visible': menuVisible }" :inert="!menuVisible" @click.stop @pointerdown.stop><slot /></div>
@@ -36,18 +35,18 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { CSS3DObject, CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
-import { bookTransition, candleMotion, optionsTransition, pageCameraFraming } from './bookTransition';
+import { BOOK_READING_MS, bookHandoff, bookTransition, candleMotion, optionsTransition, pageCameraFraming } from './bookTransition';
 import { inscribePage, storybookFilm } from './storybookInk';
 import { t } from '../i18n';
 import { LOGICAL_WIDTH, ROOM_ART, ROOM_VIEW_HEIGHT } from '../engine/core/constants';
 import type { Vec2 } from '../engine/core/types';
 
-const props = withDefaults(defineProps<{ mode?: 'opening' | 'options'; gameCanvas?: HTMLCanvasElement; snapshot?: HTMLCanvasElement; frameFocus?: Vec2; returning?: boolean; prologue?: boolean }>(), { mode: 'opening', returning: false, prologue: false });
+const props = withDefaults(defineProps<{ mode?: 'opening' | 'options'; gameCanvas?: HTMLCanvasElement; snapshot?: HTMLCanvasElement; frameFocus?: Vec2; returning?: boolean; prologue?: boolean; openingFrameReady?: boolean }>(), { mode: 'opening', returning: false, prologue: false });
 const emit = defineEmits<{ begin: []; open: []; ready: []; resume: [] }>();
 const isOptions = props.mode === 'options';
 const hasReadingPage = isOptions || props.prologue;
 const base = import.meta.env.BASE_URL;
-const host = ref<HTMLDivElement | null>(null), letterbox = ref<HTMLDivElement | null>(null);
+const host = ref<HTMLDivElement | null>(null);
 const pageLayer = ref<HTMLDivElement | null>(null), pageMenu = ref<HTMLDivElement | null>(null);
 const handoff = ref<HTMLCanvasElement | null>(null), coverInvitation = ref<HTMLDivElement | null>(null);
 const opening = ref(false), ready = ref(false), rendered = ref(false), fallback = ref(false), menuVisible = ref(false);
@@ -55,6 +54,7 @@ const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
 let reduced = motionPreference.matches;
 let disposed = false, frame = 0, started = 0, entered = false, readySent = false;
 let queuedOpen = false;
+let handoffCaptured = false;
 let returnStarted = 0, returnZoom = 0, currentZoom = isOptions ? 1 : 0, resumed = false;
 let lastPaint = 0, flameTime = 0, hiddenAt = 0;
 let renderer: T.WebGLRenderer | undefined, scene: T.Scene | undefined;
@@ -85,16 +85,16 @@ function prepareImage(texture: T.Texture) {
   texture.magFilter = T.NearestFilter; texture.minFilter = T.NearestFilter;
   textures.add(texture); return texture;
 }
-function drawHandoff(texture: T.Texture) {
-  const canvas = handoff.value;
-  if (!canvas) return;
-  const source = texture.image as HTMLCanvasElement | HTMLImageElement;
+function drawHandoff() {
+  const canvas = handoff.value, source = props.gameCanvas;
+  if (!canvas || !source) return;
   canvas.width = source.width;
   canvas.height = source.height;
   const context = canvas.getContext('2d');
   if (context) {
     context.imageSmoothingEnabled = false;
     context.drawImage(source, 0, 0);
+    handoffCaptured = true;
   }
 }
 function framePage() {
@@ -110,7 +110,7 @@ watch(() => props.snapshot, snapshot => {
   pageImage.update(next,!!snapshot && !hasRoomFrame()); portal.material.map = next;
   framePage();
   updateViewport();
-  drawHandoff(next);
+  handoffCaptured = false;
   if (previous !== introImage) { textures.delete(previous); previous.dispose(); }
   schedule();
 });
@@ -145,9 +145,10 @@ watch(() => props.prologue, reading => {
   if (reading || !opening.value || isOptions) return;
   menuVisible.value = false;
   if (reduced || fallback.value) { enterGame(); return; }
-  started = performance.now() - Math.min(performance.now()-started, 4200);
+  started = performance.now() - BOOK_READING_MS;
   schedule();
 });
+watch(() => props.openingFrameReady, schedule);
 function move(event: PointerEvent) {
   if (!host.value) return;
   const rect = host.value.getBoundingClientRect();
@@ -195,14 +196,17 @@ function draw(now: number) {
   const follow = 1-Math.exp(-8*delta);
   viewX += (pointerX - viewX) * follow; viewY += (pointerY - viewY) * follow;
   if (isOptions && !started) started = now;
+  const elapsed = now - started;
+  const waiting = !isOptions && opening.value && !props.prologue && !props.openingFrameReady;
+  if (waiting && elapsed > BOOK_READING_MS) started = now - BOOK_READING_MS;
   const t = isOptions
     ? optionsTransition(reduced ? 1400 : now-(props.returning ? returnStarted : started), props.returning, returnZoom)
-    : bookTransition(opening.value ? (reduced && props.prologue ? 4200 : now - started) : 0, props.prologue);
+    : bookTransition(opening.value ? (reduced && props.prologue ? BOOK_READING_MS : now - started) : 0, props.prologue);
   currentZoom = t.zoom;
   cover.rotation.z = t.hinge * Math.PI;
   ink.value = t.ink; colour.value = t.colour;
-  portal.visible = t.zoom > .65;
-  portal.material.opacity = T.MathUtils.smoothstep(t.zoom, .65, 1);
+  portal.visible = t.zoom > .26;
+  portal.material.opacity = T.MathUtils.smoothstep(t.zoom, .26, .89);
   if (hasRoomFrame() && pageImage) {
     const crop = 1 - t.zoom;
     const centre = pageImage.portraitCenter.value, span = pageImage.portraitSpan.value;
@@ -210,29 +214,35 @@ function draw(now: number) {
     map.repeat.set(1 - (1 - span.x) * crop, 1 - (1 - span.y) * crop);
     map.offset.set((centre.x - .5) * crop + (1 - map.repeat.x) / 2, (centre.y - .5) * crop + (1 - map.repeat.y) / 2);
     portal.scale.set(T.MathUtils.lerp(2.76, 1.625 * endAspect, t.zoom) / 2.6, T.MathUtils.lerp(3.74, 1.625, t.zoom) / 1.625, 1);
+    portal.position.x = .025 * crop;
     portal.position.z = pageCentre.z * t.zoom;
+  } else {
+    portal.scale.x = T.MathUtils.lerp(1, endAspect / 1.6, t.zoom);
   }
   const effects = 1 - T.MathUtils.smoothstep(t.zoom, .55, .95);
   if (ao) { ao.enabled = effects > 0; ao.blendIntensity = .65 * effects; }
   if (bloom) { bloom.enabled = effects > 0; bloom.strength = .12 * effects; }
   if (film) film.uniforms.effect.value = effects;
   // Portrait framing pulls back as the cover opens, keeping the whole spread in view.
-  const fit = Math.max(1, (3.7 + t.hinge * 2.8) / (width / height * 5.4)) * (1 + .53 * Math.sin(t.hinge * Math.PI));
+  const fit = Math.max(1, (3.7 + t.hinge * 2.8) / (width / height * 5.4)) * (1 + .08 * (1 - t.hinge) + .18 * Math.sin(t.hinge * Math.PI));
   const portrait = width/height < .85;
   const readingView = isOptions ? 1 : hasReadingPage ? t.hinge : 0;
   const focusX = T.MathUtils.lerp(-t.hinge*(portrait ? 1.55 : 1.25), portrait ? -3.1 : -1.55, readingView);
-  const focus = new T.Vector3(focusX, T.MathUtils.lerp(.1,.45,readingView), 0);
+  const focus = new T.Vector3(focusX, T.MathUtils.lerp(.1,.45,readingView), .18 * (1 - t.hinge));
   const from = new T.Vector3(focusX + viewX * .28, (7.8 - viewY * .2) * fit, 5.7 * fit);
   if (readingView) {
-    const distance = Math.max(4.6, 3.05/(width/height))/(2*Math.tan(camera.fov*Math.PI/360));
+    const spreadHeight = width >= 1024 && height >= 640 ? 5.65 : 4.6;
+    const distance = Math.max(spreadHeight, 3.05/(width/height))/(2*Math.tan(camera.fov*Math.PI/360));
     const tilt = portrait ? .18 : .36;
     from.lerp(focus.clone().add(new T.Vector3(0, Math.cos(tilt)*distance, Math.sin(tilt)*distance)),readingView);
   }
   const end = new T.Vector3(0, pageCentre.y + endView.distance, pageCentre.z);
-  camera.position.lerpVectors(from, end, t.zoom);
-  camera.up.set(0, 1 - t.zoom, -t.zoom).normalize();
-  camera.lookAt(focus.lerp(pageCentre, t.zoom));
-  camera.setViewOffset(width, height, endView.offsetX*t.zoom, endView.offsetY*t.zoom, width, height);
+  // Ease the world distance ahead of the perspective magnification near the page.
+  const approach = Math.expm1(-1.8 * t.zoom) / Math.expm1(-1.8);
+  camera.position.lerpVectors(from, end, approach);
+  camera.up.set(0, 1 - approach, -approach).normalize();
+  camera.lookAt(focus.lerp(pageCentre, approach));
+  camera.setViewOffset(width, height, endView.offsetX*approach, endView.offsetY*approach, width, height);
   if (cursorLight) {
     pointerRay.setFromCamera(pointer,camera);
     if (pointerInside && pointerRay.ray.intersectPlane(pagePlane,pointerPoint)) {
@@ -240,9 +250,12 @@ function draw(now: number) {
       cursorLight.intensity = .7*(1-t.zoom);
     } else cursorLight.intensity = 0;
   }
-  if (letterbox.value) letterbox.value.style.opacity = String(Math.max(0, (t.zoom - .72) / .28));
-  // At the handoff use the same visible pixels and CSS bounds as the live canvas.
-  if (handoff.value) handoff.value.style.opacity = t.zoom === 1 ? '1' : '0';
+  if (host.value) host.value.style.opacity = String(1 - bookHandoff(t.zoom));
+  // The last frame uses the live canvas, including its clip and surrounding scene.
+  if (handoff.value) {
+    if (t.zoom === 1 && !handoffCaptured) drawHandoff();
+    handoff.value.style.opacity = t.zoom === 1 && handoffCaptured ? '1' : '0';
+  }
   const flicker = candleMotion(flameTime);
   if (flamePivot) {
     flamePivot.rotation.set(flicker.bendX, 0, flicker.bendZ);
@@ -253,8 +266,7 @@ function draw(now: number) {
   if (flameMaterial) { flameMaterial.emissiveIntensity = 4*flicker.intensity; flameMaterial.emissive.setRGB(1,.20+.08*flicker.warmth,.009+.006*flicker.warmth); }
   // GTAO draws the geometry again; update the moving cover's shadow only once.
   renderer.shadowMap.needsUpdate = true;
-  if (t.zoom === 1) renderer.render(scene, camera);
-  else composer?.render(0);
+  if (t.zoom !== 1) composer?.render(0);
   rendered.value = true;
   menuVisible.value = isOptions ? t.done && !props.returning : props.prologue && opening.value && t.ink === 1;
   if (menu) menu.visible = menuVisible.value;
@@ -274,6 +286,7 @@ onMounted(async () => {
     document.addEventListener('visibilitychange', visibilityChanged);
     motionPreference.addEventListener('change', motionChanged);
     renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'low-power' });
+    renderer.transmissionResolutionScale = .5;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFShadowMap;
     renderer.shadowMap.autoUpdate = false;
@@ -323,13 +336,17 @@ onMounted(async () => {
     if (!hinge) throw new Error('The Blender book is missing its cover hinge');
     cover = hinge;
     prepareImage(landscape);
-    drawHandoff(landscape);
     const page = model.scene.getObjectByName('Blank_right_parchment') as T.Mesh<T.BufferGeometry,T.MeshStandardMaterial> | undefined;
     if (!page?.isMesh) throw new Error('The Blender book is missing its parchment');
     if (hasReadingPage) {
       model.scene.traverse(object => { if (/^(Inside_folio_bookplate|Original_Fables_and_Fiends_bookplate|Original_Book_One_bookplate)$/.test(object.name)) object.visible = false; });
       const lining = model.scene.getObjectByName('Front_board_suede_lining') as T.Mesh<T.BufferGeometry,T.MeshStandardMaterial> | undefined;
-      if (lining?.isMesh) { lining.material.dispose(); lining.material = page.material.clone(); }
+      if (lining?.isMesh) {
+        lining.material.dispose();
+        lining.material = page.material.clone();
+        lining.material.emissive.setHex(0xb79b69);
+        lining.material.emissiveIntensity = .23;
+      }
     }
     if (pageLayer.value) {
       uiRenderer = new CSS3DRenderer(); uiRenderer.domElement.className = 'book-projection';
@@ -354,6 +371,16 @@ onMounted(async () => {
     const pmrem = new T.PMREMGenerator(renderer), room = new RoomEnvironment();
     environment = pmrem.fromScene(room, .04); scene.environment = environment.texture;
     scene.environmentIntensity = .06; room.dispose(); pmrem.dispose();
+    model.scene.traverse(object => {
+      if (!(object instanceof T.Mesh) || !(object.material instanceof T.MeshPhysicalMaterial) || !object.material.transmission) return;
+      const glass = object.material;
+      glass.envMap = environment!.texture;
+      glass.envMapIntensity = .32;
+      glass.thickness = .17;
+      const { r, g, b } = glass.color;
+      glass.attenuationColor.setRGB(r ** 2.8, g ** 2.8, b ** 2.8);
+      glass.attenuationDistance = .28;
+    });
     scene.add(new T.HemisphereLight(0x8fa8bf, 0x221006, .10));
     const key = new T.DirectionalLight(0xffd6a0, .8); key.position.set(3, 5, -1.8); key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048); key.shadow.camera.left = -8; key.shadow.camera.right = 8;
@@ -385,8 +412,8 @@ onMounted(async () => {
       const bounds = host.value.getBoundingClientRect();
       ({ width, height } = bounds);
       const portrait = width / height < .85;
-      candlestick?.position.set(portrait ? 1.7 : 3.6, -.14, portrait ? -3.3 : -1.8);
-      candle?.position.set(portrait ? 1.7 : 3.6, 1.96, portrait ? -3.3 : -1.8);
+      candlestick?.position.set(portrait ? 1.7 : 2.94, -.14, portrait ? -3.3 : -2.32);
+      candle?.position.set(portrait ? 1.7 : 2.94, 1.96, portrait ? -3.3 : -2.32);
       const live = props.gameCanvas;
       const target = hasRoomFrame() && live?.height === ROOM_VIEW_HEIGHT
         ? live.closest('.stage')?.getBoundingClientRect() : live?.getBoundingClientRect();
@@ -401,9 +428,13 @@ onMounted(async () => {
       }
       endAspect = gameRect.width / gameRect.height;
       endView = pageCameraFraming({ width, height }, gameRect, camera.fov);
-      for (const element of [letterbox.value, handoff.value]) if (element) Object.assign(element.style, {
-        left: `${gameRect.left}px`, top: `${gameRect.top}px`, width: `${gameRect.width}px`, height: `${gameRect.height}px`,
-      });
+      if (live && handoff.value) {
+        const canvas = live.getBoundingClientRect(), stage = live.closest('.stage')?.getBoundingClientRect() ?? canvas;
+        Object.assign(handoff.value.style, {
+          left: `${canvas.left-bounds.left}px`, top: `${canvas.top-bounds.top}px`, width: `${canvas.width}px`, height: `${canvas.height}px`,
+          clipPath: `inset(${Math.max(0,stage.top-canvas.top)}px ${Math.max(0,canvas.right-stage.right)}px ${Math.max(0,canvas.bottom-stage.bottom)}px ${Math.max(0,stage.left-canvas.left)}px)`,
+        });
+      }
       renderer.setSize(width, height); composer?.setSize(width, height);
       uiRenderer?.setSize(width,height);
       ao?.setSize(Math.ceil(width*renderer.getPixelRatio()/2), Math.ceil(height*renderer.getPixelRatio()/2));
@@ -449,7 +480,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.fantasy-book { position: fixed; inset: 0; z-index: 20; overflow: hidden; isolation: isolate; background: #1b130c; }
+.fantasy-book { position: fixed; inset: 0; z-index: 20; overflow: hidden; isolation: isolate; }
 .fantasy-book.is-options:not(.is-rendered) { visibility: hidden; pointer-events: none; }
 .book-front-title, .book-front-credits { position: absolute; z-index: 2; pointer-events: none; transition: opacity 350ms, transform 350ms; }
 .book-front-title { top: max(16px,env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); }
@@ -467,11 +498,10 @@ onBeforeUnmount(() => {
 .book-page-menu { width: 320px; height: 420px; overflow: auto; overscroll-behavior: contain; color: #38240f; visibility: hidden; pointer-events: none !important; backface-visibility: hidden; }
 .book-page-menu.is-visible { visibility: visible; pointer-events: auto !important; }
 .is-fallback .book-page-menu { position: absolute; left: 50%; top: 50%; width: min(320px, calc(100vw - 32px)); height: min(460px, calc(100svh - 48px)); transform: translate(-50%,-50%) !important; background: #d1b885; padding: 14px; border: 3px double #856639; box-shadow: 0 20px 80px #000b; }
-.book-table { position: absolute; inset: 0; }
+.book-table { position: absolute; inset: 0; background: #1b130c; }
 .book-table :deep(canvas) { display: block; width: 100%; height: 100%; touch-action: pan-y; }
 .book-fallback { position: absolute; inset: 8% 0 22%; display: block; height: 70%; max-width: 80%; object-fit: contain; margin: auto; filter: drop-shadow(0 20px 20px #000); transform: rotate(-5deg); }
 .book-loading { position: absolute; inset: 45% 0 auto; text-align: center; color: #d8bb7b; font-size: 13px; }
-.book-letterbox { position: absolute; box-shadow: 0 0 0 100vmax var(--game-surround, #080a09); opacity: 0; pointer-events: none; }
 .book-handoff { position: absolute; display: block; image-rendering: pixelated; opacity: 0; pointer-events: none; }
 .book-cover-invitation { width: 288px; text-align: center; visibility: hidden; pointer-events: none !important; backface-visibility: hidden; }
 .book-cover-invitation.is-visible { visibility: visible; pointer-events: auto !important; }

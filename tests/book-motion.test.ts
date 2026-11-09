@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bookTransition, candleMotion, optionsTransition, pageCameraFraming } from '../src/components/bookTransition';
+import { BOOK_READING_MS, bookHandoff, bookTransition, candleMotion, optionsTransition, pageCameraFraming } from '../src/components/bookTransition';
 import { MeshStandardMaterial, PerspectiveCamera, Texture, Vector3 } from 'three';
 import { inscribePage, illustrationLevels } from '../src/components/storybookInk';
 
@@ -57,16 +57,19 @@ test('an early Options dismissal returns continuously from any point in the pull
 
 test('the original opening retains its final exact-frame handoff', () => {
   assert.deepEqual(bookTransition(0), { hinge: 0, ink: 0, colour: 0, zoom: 0, done: false });
-  assert.deepEqual(bookTransition(8900), { hinge: 1, ink: 1, colour: 1, zoom: 1, done: true });
+  assert.deepEqual(bookTransition(4480), { hinge: 1, ink: 1, colour: 1, zoom: 1, done: true });
+  assert.equal(bookHandoff(0), 0);
+  assert.ok(bookHandoff(.93) > 0 && bookHandoff(.93) < 1);
+  assert.equal(bookHandoff(1), 1);
 });
 
 test('the prologue holds on the illustrated spread until the reader continues', () => {
   const page = { hinge: 1, ink: 1, colour: 0, zoom: 0, done: false };
-  for (const elapsed of [4200, 8900, 600000]) assert.deepEqual(bookTransition(elapsed, true), page);
-  assert.deepEqual(bookTransition(4200), page, 'releasing the held clock is continuous');
-  assert.equal(bookTransition(6200).colour, 1);
-  assert.equal(bookTransition(8900).zoom, 1);
-  assert.equal(bookTransition(8900).done, true);
+  for (const elapsed of [BOOK_READING_MS, 4480, 600000]) assert.deepEqual(bookTransition(elapsed, true), page);
+  assert.deepEqual(bookTransition(BOOK_READING_MS), page, 'releasing the held clock is continuous');
+  const diving = bookTransition(BOOK_READING_MS + 400);
+  assert.ok(diving.colour > 0 && diving.zoom > 0, 'colour and motion start together');
+  assert.equal(bookTransition(4480).done, true);
 });
 
 test('candle motion stays bounded, smooth and independent of frame sampling', () => {

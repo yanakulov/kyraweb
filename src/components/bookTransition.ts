@@ -1,16 +1,21 @@
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
+export const BOOK_READING_MS = 3000;
+
 // Open onto bare paper, trace the landscape in ink, wash in colour, then enter it.
 export function bookTransition(ms: number, reading = false) {
-  if (reading) ms = Math.min(ms, 4200);
+  if (reading) ms = Math.min(ms, BOOK_READING_MS);
+  const dive = ms - BOOK_READING_MS;
   return {
-    hinge: smooth(ms / 2200),
-    ink: smooth((ms - 1800) / 2400),
-    colour: smooth((ms - 4500) / 1700),
-    zoom: smooth((ms - 6500) / 2400),
-    done: ms >= 8900,
+    hinge: smooth(ms / 1500),
+    ink: smooth((ms - 1050) / 1950),
+    colour: smooth(dive / 820),
+    zoom: smooth(dive / 1480),
+    done: dive >= 1480,
   };
 }
+
+export function bookHandoff(zoom: number) { return smooth((zoom - .86) / .14); }
 
 export function pageCameraDistance(viewportHeight: number, gameHeight: number, fov: number) {
   return 1.625 * viewportHeight / (gameHeight * 2 * Math.tan(fov * Math.PI / 360));
