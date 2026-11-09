@@ -14,7 +14,7 @@ async function size(dir) {
 // Expand with measured content additions; this is not a full-game size target.
 // The complete LGPL source archive is distributed, but never automatically fetched.
 // The optional GeneralUser GS bank has its own limit and loads only when selected.
-const budget = 4_900_000, runtimeBudget = 3_950_000, menuBudget = 3_200_000;
+const budget = 5_260_000, runtimeBudget = 4_310_000, menuBudget = 3_200_000;
 const result = await size('dist');
 const source = (await stat('dist/assets/audio/mt32-source.tar.gz')).size
   + (await stat('dist/assets/audio/adlib-source.tar.gz')).size;

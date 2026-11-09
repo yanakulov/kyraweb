@@ -31,6 +31,9 @@ export type GameConfig = {
   npcFrames?: Record<number, { xOffset: number; yOffset: number }>;
   amulet?: boolean;
   yellowJewel?: boolean;
+  poisoned?: boolean;
+  heroActions?: boolean;
+  onPortalInteract?: (portal: RoomPortal, point: Vec2, snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[] | null;
   onAmuletInteract?: (snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[];
   portals?: RoomPortal[];
   onExit?: (portal: RoomPortal) => void;
@@ -64,7 +67,8 @@ export type WorldSave = {
   version: 1;
   currentRoom: number;
   rooms: Record<number, RoomSnapshot>;
-  quest: { flags: number[]; files: Record<number, string>; phasing: boolean; vase: number; vaseInitialized?: boolean; merith: SavedNpc; herman: SavedNpc };
+  quest: { flags: number[]; files: Record<number, string>; phasing: boolean; vase: number; vaseInitialized?: boolean; merith: SavedNpc; herman: SavedNpc;
+    birthstones?: number[]; scatteredGems?: Record<number, number[]>; poison?: number };
   settings: { atmosphere: boolean; walkSpeed: "slowest" | "slow" | "fast" | "fastest"; animStepInterval: number };
 };
 

@@ -5,8 +5,10 @@ import { isWalkable } from "../scene/masks";
 import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneItem, SceneMeta, Vec2, WorldSave } from "../core/types";
 import { isWorldRoomId, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 import type { RoomAction } from "./roomScript";
-import { createForestState, traceForest, applyForestState, loadForestData, originalItem } from './forest';
+import { createForestState, traceForest, applyForestState, loadForestData, originalItem, itemFromOriginal,
+  curePoison, poisonArrival, scatterGem, groveGems } from './forest';
 import { validateWorldSave } from './saveStorage';
+import { findDropDestination } from './drops';
 
 export const SIDES = ["north", "east", "south", "west"] as const;
 const EXIT_FACING = { north: 0, east: 2, south: 4, west: 6 };
@@ -74,8 +76,13 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   if (!response.ok) throw new Error(`Failed to load world (${response.status})`);
   const { rooms } = await response.json() as { rooms: WorldRoom[] };
   const forest=await loadForestData(withBase('assets/forest/forest.json.gz'),config.signal);
-  const quest=restored ? { ...restored.quest, flags: new Set(restored.quest.flags) } : createForestState();
-  if (restored && !restored.quest.vaseInitialized && quest.vase === -1) quest.vase = createForestState().vase;
+  const initialQuest = createForestState();
+  const quest=restored ? { ...initialQuest, ...restored.quest, flags: new Set(restored.quest.flags) } : initialQuest;
+  if (restored && !restored.quest.vaseInitialized && quest.vase === -1) quest.vase = initialQuest.vase;
+  if (restored && !restored.quest.birthstones) {
+    for (let flag = 17; flag <= 33; flag++) quest.flags.add(flag);
+    if (quest.flags.has(78)) for (const item of groveGems) applyForestState(quest, scatterGem(item, 0, 36));
+  }
   // Saves from before Timbermist have not initialized the four unpicked acorns.
   if (restored && !restored.rooms[31]) for (const flag of [72, 73, 74, 75]) quest.flags.add(flag);
   let active = true, busy = false, paused = config.paused ?? false, currentId = restored?.currentRoom ?? 0, current: RoomGame;
@@ -125,15 +132,16 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     const state = saved.get(id), shared = current?.getSnapshot();
     const seed = timbermistSeeds[id];
     const resume = state ?? { pos: arrival, inventorySlots: [], itemInHand: null, sceneItems: seed ? [{ ...seed }] : [], overlays: [], treeSpoken: false };
-    // Keep room props local, and carry the same inventory and held item through every exit.
-    const continued = shared ? { ...resume, inventorySlots: shared.inventorySlots, itemInHand: shared.itemInHand } : state;
+    const additions = quest.scatteredGems[id] ?? [];
     if (restoring && !state?.runtime) throw new Error("This saved room is incomplete. Choose another saved game.");
     if (restoring) for (const change of state!.runtime!.masks) changeMask(change);
-    const planned={flags:new Set(quest.flags),files:{...quest.files},herman:{...quest.herman},merith:{...quest.merith},phasing:quest.phasing,vase:quest.vase};
+    const planned = structuredClone(quest);
     let setupActions:RoomAction[]=!questRoom && !restoring ? meta.entryMusic ?? [] : [];
     const facing=restoring ? state!.facing ?? 5 : from?({north:0,east:3,south:4,west:5}[from.side]):5;
     if (restoring) arrival = { ...state!.pos };
-    const snapshot={...resume,...continued,pos:arrival,facing,walkDelayTicks:({slowest:11,slow:9,fast:6,fastest:3})[settings.walkSpeed]};
+    const snapshot={...resume, inventorySlots: shared?.inventorySlots ?? resume.inventorySlots,
+      itemInHand: shared ? shared.itemInHand : resume.itemInHand,
+      sceneItems: [...resume.sceneItems], pos:arrival,facing,walkDelayTicks:({slowest:11,slow:9,fast:6,fastest:3})[settings.walkSpeed]};
     let cursorTrack = meta.cursorTrack;
     if (questRoom) {
       const setup = traceForest(questRoom, 0, planned, snapshot);
@@ -148,6 +156,11 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       arrival=nearestFloor(mask,from?.entry??meta.entrances[opposite]);snapshot.pos=arrival;
       setupActions.unshift({op:'npc',character:2,...quest.herman,visible:quest.herman.room===id},{op:'npc',character:1,...quest.merith,visible:quest.merith.room===id});
     }
+    for (const [index, gem] of additions.entries()) {
+      const preferred = { x: 46 + (id * 29 + gem * 37 + index * 17) % 222, y: Math.max(meta.northHeight, 94 + gem % 4 * 6) };
+      const floor = findDropDestination(preferred, config.scene, mask, snapshot.sceneItems) ?? nearestFloor(mask, preferred);
+      snapshot.sceneItems.push({ id: itemFromOriginal(gem)!, ...floor });
+    }
     let entryActions: RoomAction[] | undefined;
     if (!restoring && previous === 1 && id === 5) entryActions = [...lift("dropdown", 232, 8, 6), { op: "actor", x: 280, y: 116, facing: 3, visible: true }];
     if (!restoring && previous === 5 && id === 1) {
@@ -158,6 +171,9 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       const announce=traceForest(questRoom,2,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions;
       for(const action of announce)applyForestState(planned,action);
       entryActions=[...(entryActions??[]),...announce,...traceForest(questRoom,3,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions];
+    }
+    if (from && from.id !== 'phase' && quest.poison) {
+      entryActions = [...(entryActions ?? []), ...poisonArrival(quest.poison, snapshot.pos, forest.flute.durations)];
     }
     // A destination cue wins. Otherwise use the departing room's EMC score or the shared forest theme.
     if (from && from.id !== 'phase' && previous !== undefined &&
@@ -182,10 +198,18 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
         indexedUi: { src: withBase("assets/packs/kallak-room.kyr.gz"), clip: "hud" }, meta, emc: { sceneAnimShapes: meta.shapes }, actorScale: meta.actorScale,
         opening: id === 0 ? config.scene.opening : undefined, items: id === 0 ? config.scene.items : [],
         overlays: id === 0 && !questRoom ? config.scene.overlays : [], sceneMetaSrc: undefined, sceneEmcSrc: undefined, maskSrc: undefined },
-      resume: continued ? { ...continued, runtime: restoring ? continued.runtime : undefined } : undefined,
+      resume: state || shared || additions.length ? { ...snapshot, runtime: restoring ? snapshot.runtime : undefined } : undefined,
       entry: from || restoring ? { ...arrival, facing } : undefined,
       playOpening: !restoring && !from && config.playOpening !== false, entryActions, setupActions, amulet:quest.flags.has(45), npcFrames:questRoom?.npcFrames, portals,
       yellowJewel: quest.flags.has(YELLOW_JEWEL_FLAG),
+      poisoned: quest.poison > 0,
+      heroActions: quest.poison > 0 || [25, 29, 35].includes(id) || snapshot.itemInHand === 'item-55' ||
+        snapshot.inventorySlots.includes('item-55') || snapshot.sceneItems.some(item => item.id === 'item-55'),
+      onPortalInteract: id === 25 && questRoom ? (portal, point, snapshot) => {
+        if (portal.target !== 109 || quest.flags.has(71) && !quest.flags.has(82)) return null;
+        return traceForest(questRoom, 1, quest, snapshot, point,
+          p => isWalkable(p, { uiMaskY: 136 } as GameConfig['scene'], mask), [], -5).actions;
+      } : undefined,
       onAmuletInteract: snapshot => {
         const say = (text: string, voiceId: number, ms: number): RoomAction => ({ op: 'say', text, voiceId, voiceBank: 'CHAPTER1', ms,
           x: snapshot.pos.x, y: snapshot.pos.y - 56, speaker: 0, color: 15, blocking: true });
@@ -194,12 +218,17 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
         const pressed: RoomAction[] = [{ op: 'sfx', track: 0x45 },
           { op: 'frame', clip: 'yellow-jewel', index: 11, ...YELLOW_JEWEL_POS, ms: 100 },
           { op: 'close', clip: 'yellow-jewel' }];
+        if (quest.poison) return [...pressed, ...curePoison(snapshot.pos, forest.flute.durations)];
         const healing = questRoom && traceForest(questRoom, 4, quest, snapshot);
         return [...pressed, ...(healing && healing.handled ? healing.actions : [say('Gee, this could come in handy if I get hurt.', 2003, 1810)])];
       },
       onScriptAction: action=>{applyForestState(quest,action);if(action.op==='mask')changeMask(action);if(active&&callbackOwner===token)config.onScriptAction?.(action.op === 'say' && !action.voiceBank ? { ...action, voiceBank: meta.name } : action);},
       onActorInteract: snapshot => {
         const { itemInHand, pos } = snapshot;
+        if (itemInHand === 'item-55') {
+          return traceForest({ ...meta, clipFrames: questRoom?.clipFrames ?? {}, npcFrames: {}, ...forest.flute },
+            0, quest, snapshot).actions;
+        }
         const actions = itemInHand === 'letter' ? forest.letter[quest.flags.has(129) ? 'readable' : 'sealed']
           : id === 24 && !itemInHand ? forest.caveSelf : forest.self?.[originalItem(itemInHand)];
         return actions?.map(action => action.op === 'say' ? { ...action, voiceBank: 'CHAPTER1', x: pos.x, y: pos.y - 56 } : action) ?? null;
@@ -225,6 +254,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     }); } catch (error) { callbackOwner = oldOwner; throw error; }
     game.setAtmosphere(settings.atmosphere); game.setWalkSpeed(settings.walkSpeed);
     game.setAnimStepInterval(settings.interval); game.setDebug(settings.debug);
+    if (additions.length) delete quest.scatteredGems[id];
     return { game, meta, portals };
   }
 

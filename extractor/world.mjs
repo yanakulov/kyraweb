@@ -19,16 +19,17 @@ export const REGION = [
   ['ZROCK', 3, 4, null, null], ['NWCLIFB', null, null, null, 6],
   ['FGOWEST', null, 11, null, null],
   ['FNORTH', null, 34, 23, 22], ['FORESTA', 32, 20, 36, 21],
-  ['FSOUTH', 20, null, null, 36], ['EDGE', 28, null, 19, 18],
+  ['FSOUTH', 20, 25, null, 36], ['EDGE', 28, null, 19, 18],
   ['CLIFF', 34, 18, null, 23], ['ZROCK', 31, 17, null, null],
   ['ZROCK', 17, 21, null, null], ['CAVEB', null, 7, null, 26],
-  null, // Serpent's Grotto opens in the next quest.
+  ['DRAGON', null, 109, null, 19],
   ['EXTSPEL', null, 24, 33, null], ['SPELL', null, 26, null, null],
   ['SPRING', null, null, 20, 32], ['TEMPLE', null, 33, null, 31],
-  ['SONG', null, null, 32, 33], ['OAKS', null, 29, 22, null],
+  ['SONG', null, null, 32, 33], ['OAKS', 35, 29, 22, null],
   ['WELL', 30, 28, 18, 34], ['SQUARE', 26, 30, 34, 29],
-  ['WISE', 33, 32, 21, 17], null, ['DEAD', 18, 19, null, null]
+  ['WISE', 33, 32, 21, 17], ['RUBY', null, null, 31, null], ['DEAD', 18, 19, null, null]
 ];
+REGION[109] = ['ENTER', null, null, null, 25];
 
 // ScummVM copyBackgroundBlock: restore the interleaved forest backdrop columns.
 export function restoreBackgroundColumns(pixels, blocks, height=128) {

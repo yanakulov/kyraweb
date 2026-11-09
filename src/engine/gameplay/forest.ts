@@ -16,7 +16,7 @@ export type ForestRoom = WorldRoom & {
   npcFrames: Record<number, { xOffset: number; yOffset: number }>;
 };
 export type ForestData = { rooms: Record<string, ForestRoom>; letter: { sealed: RoomAction[]; readable: RoomAction[] };
-  self: Record<number, RoomAction[]>; caveSelf: RoomAction[] };
+  self: Record<number, RoomAction[]>; caveSelf: RoomAction[]; flute: Pick<ForestRoom, 'program' | 'durations'> };
 export async function loadForestData(
   src: string,
   signal?: AbortSignal,
@@ -41,18 +41,57 @@ export type ForestState = {
   files: Record<number, string>;
   phasing: boolean;
   vase: number;
+  birthstones: number[];
+  scatteredGems: Record<number, number[]>;
+  poison: number;
   merith: { x: number; y: number; facing: number; shape: number; room: number };
   herman: { x: number; y: number; facing: number; shape: number; room: number };
 };
 export function createForestState(): ForestState {
-  return {
-    flags: new Set([0, 1, 2, 3, 4, 55, 57, 72, 73, 74, 75, 172, 243, 253]),
+  const state: ForestState = {
+    flags: new Set([0, 1, 2, 3, 4, 55, 57, 72, 73, 74, 75, 172, 243, 253,
+      ...Array.from({ length: 17 }, (_, i) => 17 + i)]),
     files: {},
     phasing: false,
     vase: 38, // _STARTUP.EMC puts an apple in the marble vase.
+    birthstones: [12, Math.floor(Math.random() * 4), 7 + Math.floor(Math.random() * 5), 6],
+    scatteredGems: {},
+    poison: 0,
     merith: { x: -16, y: 126, facing: 3, shape: 41, room: -1 },
     herman: { x: 224, y: 94, facing: 5, shape: 88, room: 7 },
   };
+  const region = Math.floor(Math.random() * 2);
+  for (const item of [8, 1]) applyForestState(state, scatterGem(item, region, 0));
+  return state;
+}
+export const groveGems = [0, 3, 5, 7, 9, 10, 11, 2];
+// The original generic placement only uses eligible, connected rooms in the region.
+const gemRooms = [[9, 10, 11, 12, 13, 14, 15], [17, 18, 19, 20, 21, 22, 23, 24, 28, 30, 32, 33, 34]];
+export function scatterGem(item: number, region: number, currentRoom: number): Extract<RoomAction, { op: 'scatterGem' }> {
+  const rooms = (gemRooms[region] ?? gemRooms[0]).filter(id => id !== currentRoom);
+  return { op: 'scatterGem', item, room: rooms[Math.floor(Math.random() * rooms.length)] };
+}
+
+const waitTicks = (ticks: number): RoomAction => ({ op: 'wait', ms: ticks * 1000 / 60 });
+const heroFrames = (clip: string, indices: number[], ticks: number): RoomAction[] =>
+  indices.flatMap(index => [{ op: 'heroFrame', clip, index }, waitTicks(ticks)]);
+const indices = (start: number, length: number) => Array.from({ length }, (_, i) => start + i);
+export function heroLine(text: string, voiceId: number, pos: Vec2, durations: ForestRoom['durations']): RoomAction {
+  return { op: 'say', text, voiceId, voiceBank: 'CHAPTER1', ms: durations[voiceId] ?? 2000,
+    x: pos.x, y: pos.y - 56, speaker: 0, color: 15, blocking: true };
+}
+export function poisonArrival(crossings: number, pos: Vec2, durations: ForestRoom['durations']): RoomAction[] {
+  const line = (text: string, voice: number) => heroLine(text, voice, pos, durations);
+  if (crossings > 1) return [{ op: 'poison', crossings: 1 },
+    line("I don't feel so good...", 7002), line('That snake must be poisonous!', 7004)];
+  return [{ op: 'music', command: 1, restart: true }, line('The poison...', 7000), line("I can't breathe...", 7001),
+    ...heroFrames('poison', [1, 0], 30), ...heroFrames('poison', indices(2, 15), 8), waitTicks(60),
+    ...heroFrames('poison', [17, 18, 19], 8), waitTicks(60), { op: 'death' }];
+}
+export function curePoison(pos: Vec2, durations: ForestRoom['durations']): RoomAction[] {
+  return [{ op: 'poison', crossings: 0 }, { op: 'sfx', track: 0x50 },
+    ...heroFrames('cure', indices(0, 30), 8), { op: 'heroFrame' },
+    heroLine('Amazing!', 2010, pos, durations), heroLine('The effects of the poison are gone!', 2011, pos, durations)];
 }
 const items: Record<number, InventoryItemId> = {
   0: "ruby",
@@ -85,6 +124,7 @@ export function traceForest(
   point: Vec2 = snapshot.pos,
   walkable: (p: Vec2) => boolean = () => true,
   confirmations: Vec2[] = [],
+  mouseState = originalItem(snapshot.itemInHand),
 ): { actions: RoomAction[]; handled: boolean; cursorTrack?: CursorTrack } {
   const initialState = {
     ...state,
@@ -111,10 +151,9 @@ export function traceForest(
     voice = 0,
     voiceElapsed = 0,
     hand = originalItem(snapshot.itemInHand);
+  let poison = state.poison;
   const delays: Record<number, number> = { 0: snapshot.walkDelayTicks ?? 6, 1: 7, 2: 8 };
   const slots = new Map<number, string>();
-  // The marble altar's gem exchange belongs to the next quest.
-  if (room.name === 'TEMPLE' && fn === 1 && hand >= 0 && hand <= 12) return { actions, handled: false };
   const emit = (action: RoomAction) => actions.push(action);
   const duration = () => room.durations[voice] ?? 2000;
   const wait = (ms: number) => {
@@ -192,7 +231,7 @@ export function traceForest(
                 traceForest(room, fn, initialState, snapshot, point, walkable, [
                   ...confirmations,
                   answer,
-                ]).actions,
+                ], mouseState).actions,
             });
             throw paused;
           }
@@ -223,8 +262,33 @@ export function traceForest(
           case 0x13:
             return +(hand === -1);
           case 0x72:
+            return +(poison > 0 && !!(a[0] & 1));
           case 0x7a:
+            return mouseState;
+          case 0x71:
+            return state.birthstones[a[0]] ?? 0;
+          case 0x1f:
+            emit(scatterGem(a[0], a[1], room.id));
             return 0;
+          case 0x6d:
+            emit({ op: 'ambientPosition', index: a[0], x: a[1], y: a[2] });
+            return 0;
+          case 0x6e:
+            poison = 2;
+            emit({ op: 'poison', crossings: poison });
+            return 0;
+          case 0x73: {
+            const shatter = flags.has(133);
+            const practiced = flags.has(134);
+            emit({ op: 'visible', visible: true });
+            actions.push(...heroFrames('flute', indices(0, 8), 2));
+            emit({ op: 'sfx', track: shatter ? 0x63 : practiced ? 0x62 : 0x61 });
+            if (!shatter && !practiced) setFlag(134, true);
+            actions.push(...heroFrames('flute', [...indices(8, 28), 3, 2, 1, 0], shatter ? 9 : 2));
+            emit({ op: 'heroFrame' });
+            if (!shatter) emit(heroLine(practiced ? 'That last note sure was high!' : 'Not very impressive sounding.', practiced ? 1001 : 1000, actor, room.durations));
+            return 0;
+          }
           case 0x58:
             emit({ op: "ambientWait", index: a[0] });
             return 0;
@@ -314,6 +378,12 @@ export function traceForest(
             }
             return 0;
           case 0x51: {
+            if (a[0] === 0) {
+              actor.x = a[1] & ~3;
+              actor.y = a[2] & ~1;
+              emit({ op: 'walk', x: actor.x, y: actor.y });
+              return 0;
+            }
             if (!npcs[a[0]])
               throw new Error("Unsupported forest walking actor");
             const x = a[1] & ~3,
@@ -479,6 +549,9 @@ export function traceForest(
               blocked: id === 10,
             });
             return 0;
+          case 0x97:
+            emit({ op: 'mask', x: a[1], y: a[2], w: a[3] + 1, h: a[4] + 1, blocked: false });
+            return 0;
           case 0x8f:
             emit({ op: "noDrop", x: a[0], y: a[1], w: a[2], h: a[3] });
             return 0;
@@ -584,10 +657,11 @@ export function traceForest(
           case 0x78:
           case 0x79:
           case 0x6f: // No water flasks are available before the scroll.
-          case 0x1f: // Random birthstone placement belongs to the next quest.
           case 0x95:
           case 0x96:
           case 0x98:
+          case 0x9a:
+          case 0x9b:
             return 0;
           case 0x7b: {
             const [x, y, w, h, facing] = a;
@@ -632,6 +706,8 @@ export function traceForest(
 }
 
 export function applyForestState(state: ForestState, action: RoomAction) {
+  if (action.op === 'poison') state.poison = action.crossings;
+  if (action.op === 'scatterGem') (state.scatteredGems[action.room] ??= []).push(action.item);
   if (action.op === "vase") state.vase = action.item;
   if (action.op === "flag") {
     if (action.value) state.flags.add(action.flag);

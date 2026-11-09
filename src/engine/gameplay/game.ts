@@ -33,7 +33,8 @@ import { startWorldGame } from "./world";
 import { exitCursor, portalAtPoint, roomViewPortals } from "./navigation";
 import type { ControlMode, DropAnim, GameConfig, InventoryItemId, RoomRuntimeSnapshot, RoomSnapshot, SceneItem, SceneOverlayState, Vec2, WorldSave } from "../core/types";
 
-const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell']);
+const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell', 'brantalk', 'dodge', 'frozen']);
+const heroOffsets: Record<string, number> = { flute: -12, cure: -11, poison: -31 };
 const behindActors = (clip: string) => clip === 'face' || clip === 'face2' || clip === 'songbird-rest';
 
 export type RoomGame = Awaited<ReturnType<typeof startRoom>>;
@@ -153,6 +154,12 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         if (!scriptRenderers.has(name)) scriptRenderers.set(name,{clip:new IndexedClip(pack,info),renderer:new IndexedRenderer(info,false)});
       }
     }
+    if (config.heroActions) {
+      const pack = await loadScenePack(withBase('assets/forest/hero-actions.kyr.gz'), config.signal);
+      for (const [name, info] of Object.entries(pack.clips)) {
+        scriptRenderers.set(`hero-${name}`, { clip: new IndexedClip(pack, info), renderer: new IndexedRenderer(info, false) });
+      }
+    }
     if (config.onActorInteract && !scriptRenderers.has('note')) {
       const pack = await loadScenePack(withBase('assets/forest/note.kyr.gz'), config.signal), info = pack.clips.note;
       scriptRenderers.set('note', { clip: new IndexedClip(pack, info), renderer: new IndexedRenderer(info, false) });
@@ -160,6 +167,30 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let backgroundName = "room";
     let actorVisible = true;
     let actorShape: number | null = null;
+    let heroPose: { image: HTMLCanvasElement; xOffset: number; yOffset: number } | undefined;
+    let poisoned = config.poisoned ?? false;
+    let poisonAtlas: HTMLCanvasElement | undefined;
+    function actorAtlas() {
+      if (!poisoned) return br;
+      if (!poisonAtlas) {
+        const palette = scriptRenderers.get('hero-poison')?.clip.info.palette;
+        if (!palette) return br;
+        poisonAtlas = document.createElement('canvas');
+        poisonAtlas.width = br.width; poisonAtlas.height = br.height;
+        const context = poisonAtlas.getContext('2d')!;
+        context.drawImage(br, 0, 0);
+        const image = context.getImageData(0, 0, br.width, br.height);
+        const replacements = [0x34, 0x35, 0x37, 0x38, 0x2b].map((target, i) =>
+          [palette.slice((0x99 + i) * 3, (0x9a + i) * 3), palette.slice(target * 3, target * 3 + 3)]);
+        for (let i = 0; i < image.data.length; i += 4) {
+          if (!image.data[i + 3]) continue;
+          const match = replacements.find(([rgb]) => rgb.every((color, j) => color === image.data[i + j]));
+          if (match) image.data.set(match[1], i);
+        }
+        context.putImageData(image, 0, 0);
+      }
+      return poisonAtlas;
+    }
     let speechRemaining = 0;
     let speechAge = 0;
     let sequence: RoomScript | null = null;
@@ -405,10 +436,12 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
 
       const walkFrames = getSequence(state.dir);
-      const talkingFrame = speechRemaining > 0 && speaker === 0 ? frames.findIndex(frame => frame.shapeIndex === 16) : -1;
+      const talkingFrame = !heroPose && speechRemaining > 0 && speaker === 0 ? frames.findIndex(frame => frame.shapeIndex === 16) : -1;
       const frameIndex = state.moving ? walkFrames[state.frame] : talkingFrame >= 0 ? talkingFrame : actorShape !== null ? frames.findIndex(frame => frame.shapeIndex === actorShape) : getIdleFrame(state.dir);
       // A hidden script pose (shape 88) has no sprite, but the rest of the frame still draws.
-      const frame = frames[frameIndex] ?? frames[0];
+      const frame = heroPose ? { x: 0, y: 0, w: heroPose.image.width, h: heroPose.image.height,
+        xOffset: heroPose.xOffset, yOffset: heroPose.yOffset } : frames[frameIndex] ?? frames[0];
+      const atlas = heroPose?.image ?? actorAtlas();
       const scale = actorScaleAt(state.pos.y, scene.actorScale);
       const drawX = state.pos.x + Math.trunc(frame.xOffset * scale);
       const drawY = state.pos.y + Math.trunc(frame.yOffset * scale);
@@ -422,19 +455,19 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           const headW = Math.max(1, Math.trunc(head.w * scale)), headH = Math.max(1, Math.trunc(head.h * scale));
           if (state.dir === "right") {
             ctx.save(); ctx.translate(headX + headW, 0); ctx.scale(-1, 1);
-            ctx.drawImage(br, head.x, head.y, head.w, head.h, 0, drawY, headW, headH); ctx.restore();
-          } else ctx.drawImage(br, head.x, head.y, head.w, head.h, headX, drawY, headW, headH);
+            ctx.drawImage(atlas, head.x, head.y, head.w, head.h, 0, drawY, headW, headH); ctx.restore();
+          } else ctx.drawImage(atlas, head.x, head.y, head.w, head.h, headX, drawY, headW, headH);
         }
       }
 
-      if (actorVisible && state.dir === "right") {
+      if (actorVisible && !heroPose && state.dir === "right") {
         ctx.save();
         ctx.translate(drawX + drawW, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(br, frame.x, frame.y, frame.w, frame.h, 0, drawY, drawW, drawH);
+        ctx.drawImage(atlas, frame.x, frame.y, frame.w, frame.h, 0, drawY, drawW, drawH);
         ctx.restore();
       } else if (actorVisible) {
-        ctx.drawImage(br, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
+        ctx.drawImage(atlas, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
       }
 
       const actorLayer = backgroundName === 'room' && mask ? resolveActorLayer(state.pos, drawLayerTable, mask) : 1;
@@ -622,7 +655,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function availablePortals() {
-      return running && !paused && !sequence && !dead && !inventoryOpen && backgroundName === "room" ? modern ? modernPortals : classicPortals : [];
+      if (!running || paused || sequence || dead || inventoryOpen || backgroundName !== 'room') return [];
+      return modern ? modernPortals : classicPortals;
     }
 
     function setInventoryOpen(value: boolean) {
@@ -676,6 +710,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if ((portal || (!state.itemInHand && point.x >= 104 && point.x < 192 && point.y >= 32 && point.y < 68) ||
           (point.x >= 144 && point.x <= 176 && point.y >= 128 && point.y < scene.uiMaskY)) && talkToTree()) return true;
       if (portal) {
+        const actions = config.onPortalInteract?.(portal, point, getSnapshot());
+        if (actions) { playScript(actions); return true; }
         setTarget(portal.point);
         if (state.target || (Math.abs(state.pos.x - portal.point.x) <= 4 && Math.abs(state.pos.y - portal.point.y) <= 2)) pendingPortal = portal;
         return true;
@@ -820,6 +856,19 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           if (action.flag === YELLOW_JEWEL_FLAG) hasYellowJewel = action.value;
           break;
         case 'ambientWait':if(sceneAnims[action.index]?.play)ambientWait=action.index;break;
+        case 'ambientPosition': {
+          const anim = sceneAnims[action.index];
+          if (anim) { anim.x = action.x; anim.y = action.y; }
+          break;
+        }
+        case 'poison': poisoned = action.crossings > 0; break;
+        case 'heroFrame': {
+          const animation = action.clip && scriptRenderers.get(`hero-${action.clip}`);
+          heroPose = animation && action.index !== undefined && action.clip
+            ? { image: animation.renderer.render(animation.clip.frame(action.index)),
+                xOffset: heroOffsets[action.clip], yOffset: -animation.clip.info.height } : undefined;
+          break;
+        }
         case 'confirm':config.onContinueChange?.(true);break;
         case 'walkDelay':state.walkDelayTicks=Math.max(1,action.ticks);break;
         case 'npc':

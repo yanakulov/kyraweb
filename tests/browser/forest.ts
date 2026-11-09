@@ -2,6 +2,8 @@ import { startGame } from "../../src/engine/gameplay/game";
 import { gemCutScene } from "../../src/engine/scenes/gemCut";
 import { validateWorldSave } from '../../src/engine/gameplay/saveStorage';
 import type { GameConfig } from '../../src/engine/core/types';
+import { getInventorySlotPositions } from '../../src/engine/gameplay/inventory';
+import { itemFromOriginal } from '../../src/engine/gameplay/forest';
 import {
   IndexedClip,
   loadScenePack,
@@ -28,6 +30,7 @@ window.addEventListener("error", (event) => {
 });
 const lines: string[] = [];
 let fireFrame = -1, featherFalling = false;
+let knifeChoice = false;
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   try {
@@ -47,6 +50,7 @@ const config: GameConfig = {
     if (action.op === 'frame' && action.clip === 'balance2') onRope = true;
     if (action.op === 'frame' && action.clip === 'brandyw3') fireFrame = action.index;
     if (action.op === 'ambientRun' && id === 30) featherFalling = true;
+    if (action.op === 'choice' && id === 25) knifeChoice = true;
   },
   onLocationChange: (name, room) => {
     id = room!;
@@ -269,7 +273,96 @@ document.querySelector("#run")!.addEventListener("click", async () => {
     const scrollSave = validateWorldSave(game.getSaveState());
     if (!scrollSave.quest.flags.includes(94)) throw Error('Darm’s scroll did not survive as save data');
     capture('Darm’s magic scroll');
-    results.textContent += 'ALL PASSED — first forest, bridge, Timbermist, yellow jewel, songbird, magic scroll and save restoration';
+    async function putAway() {
+      const slot = getInventorySlotPositions()[game.getSnapshot().inventorySlots.indexOf(null)];
+      if (!slot) throw Error('The test inventory is full');
+      await click(slot.x + 8, slot.y + 8);
+    }
+    await putAway();
+    await click(130, 76);
+    if (!game.getSaveState()?.quest.flags.includes(97)) throw Error('Darm did not explain the birthstones');
+    await route(26, 33, 34, 32, 28);
+    await click(142, 120);
+    held('item-12');
+    await route(32, 34, 33, 29);
+    await click(162, 52);
+    held(null);
+
+    const world = await fetch(config.world!).then(response => response.json()) as {
+      rooms: { id: number; exits: (number | null)[]; portals: { target: number }[] }[]
+    };
+    world.rooms.find(room => room.id === 7)!.exits[3] = 24;
+    world.rooms.find(room => room.id === 5)!.exits[0] = 1;
+    async function visit(target: number) {
+      const paths = [[id]], seen = new Set([id]);
+      for (const path of paths) {
+        const last = path.at(-1)!;
+        if (last === target) { await route(...path.slice(1)); return; }
+        const room = world.rooms.find(room => room.id === last)!;
+        for (const next of [...room.exits, ...room.portals.map(portal => portal.target)]) {
+          if (next === null || seen.has(next) || next === 109) continue;
+          if (!world.rooms.some(room => room.id === next)) continue;
+          seen.add(next); paths.push([...path, next]);
+        }
+      }
+      throw Error(`No route to ${target}`);
+    }
+    for (const gem of scrollSave.quest.birthstones!.slice(1, 3)) {
+      const save = validateWorldSave(game.getSaveState());
+      const item = itemFromOriginal(gem)!;
+      const carried = game.getSnapshot().inventorySlots.indexOf(item);
+      if (carried >= 0) {
+        const slot = getInventorySlotPositions()[carried];
+        await click(slot.x + 8, slot.y + 8);
+      } else {
+        const room = world.rooms.find(({ id }) => save.quest.scatteredGems?.[id]?.includes(gem) ||
+          save.rooms[id]?.sceneItems.some(entry => entry.id === item));
+        if (!room) throw Error(`Birthstone ${gem} is missing`);
+        await visit(room.id);
+        const floor = game.getSnapshot().sceneItems.find(entry => entry.id === item);
+        if (!floor) throw Error(`Birthstone ${gem} did not spawn`);
+        await click(floor.x, floor.y - 4);
+      }
+      held(item);
+      await visit(29);
+      await click(162, 52);
+      held(null);
+    }
+    await route(31, 35);
+    await click(144, 38);
+    if (game.getSaveState()?.quest.poison !== 2) throw Error('The ruby tree did not poison Brandon');
+    await click(144, 38);
+    held('item-6');
+    await putAway();
+    await travel(31);
+    if (game.getSaveState()?.quest.poison !== 1) throw Error('The first poisoned crossing did not warn Brandon');
+    await click(263, 165);
+    if (game.getSaveState()?.quest.poison !== 0) throw Error('The yellow jewel did not cure the poison');
+    const rubySlot = getInventorySlotPositions()[game.getSnapshot().inventorySlots.indexOf('item-6')];
+    await click(rubySlot.x + 8, rubySlot.y + 8);
+    await travel(29);
+    await click(162, 52);
+    await click(162, 52);
+    held('item-55');
+    capture('The golden dish becomes a flute');
+
+    await visit(25);
+    const cave = game.getPortals().find(portal => portal.target === 109);
+    if (!cave) throw Error('Missing Serpent’s Grotto entrance');
+    game.handleClick({ x: cave.rect.x + cave.rect.w / 2, y: cave.rect.y + cave.rect.h / 2 });
+    await until(() => knifeChoice, 'Malcolm’s thrown knife');
+    capture('Malcolm challenges Brandon at the grotto', false);
+    await click(42, 80);
+    const frozen = validateWorldSave(game.getSaveState());
+    if (!frozen.quest.flags.includes(82)) throw Error('Malcolm did not freeze the cave');
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: frozen });
+    const hero = game.getSnapshot().pos;
+    await click(hero.x, hero.y - 16);
+    if (game.getSaveState()?.quest.flags.includes(82)) throw Error('The flute did not shatter the ice');
+    await travel(109);
+    capture('The entrance to Shadowrealm');
+    results.textContent += 'ALL PASSED — forest, Timbermist, birthstones, poison cure, flute, Malcolm and Shadowrealm entrance';
     document.title = "PASS — forest quests";
   } catch (e) {
     results.textContent += `FAIL ${e}`;

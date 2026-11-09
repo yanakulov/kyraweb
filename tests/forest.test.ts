@@ -108,6 +108,27 @@ function quest() {
   return { state, snapshot, run, enter, all };
 }
 
+test('the original grotto script branches at the knife and the flute reopens the cave', () => {
+  const { state, snapshot } = quest();
+  const dragon = data.rooms.DRAGON;
+  const door = { x: 256, y: 90 };
+  const scene = traceForest(dragon, 1, state, snapshot, door, () => true, [], -5);
+  const choice = scene.actions.find(action => action.op === 'choice');
+  assert.ok(choice && scene.handled);
+  assert.ok(choice.resume({ x: 160, y: 94 }).some(action => action.op === 'death'));
+  const survived = choice.resume({ x: 42, y: 80 });
+  assert.ok(!survived.some(action => action.op === 'death'));
+  for (const action of survived) applyForestState(state, action);
+  assert.ok(state.flags.has(71) && state.flags.has(82));
+
+  snapshot.itemInHand = 'item-55';
+  const flute = traceForest({ ...dragon, ...data.flute }, 0, state, snapshot);
+  assert.ok(flute.actions.some(action => action.op === 'heroFrame' && action.clip === 'flute'));
+  assert.ok(flute.actions.some(action => action.op === 'frame' && action.clip === 'shatter' && action.permanent));
+  for (const action of flute.actions) applyForestState(state, action);
+  assert.ok(!state.flags.has(82));
+});
+
 test("original forest quest reaches the amulet and bridge through actual EMC branches", () => {
   const q = quest();
   q.state.flags.add(53);

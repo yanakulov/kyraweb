@@ -38,6 +38,10 @@ export type RoomAction =
       speaker?: number;
     }
   | { op: "flag"; flag: number; value: boolean }
+  | { op: "scatterGem"; item: number; room: number }
+  | { op: "poison"; crossings: number }
+  | { op: "heroFrame"; clip?: string; index?: number }
+  | { op: "ambientPosition"; index: number; x: number; y: number }
   | { op: "sceneFile"; room: number; name: string }
   | {
       op: "npc";

@@ -1,6 +1,6 @@
 # Forest regions
 
-The playable CD quest chain extends from Brandon’s home to Darm’s magic scroll. The repaired bridge opens the road west from CAVEB into the Timbermist Woods. The new region includes Darm’s hut, the songbird’s nest, the Grove of Oaks, Nolby’s tree, and Deadwood Glade. The birthstone quest and Serpent’s Grotto follow the scroll.
+The playable CD quest chain runs from Brandon’s home to the entrance to Shadowrealm. After Darm’s scroll, Timbermist includes the birthstone quest, the ruby tree and the confrontation with Malcolm at Serpent’s Grotto.
 
 | ID | Original resource | Location |
 | --- | --- | --- |
@@ -21,7 +21,8 @@ The playable CD quest chain extends from Brandon’s home to Darm’s magic scro
 | 14 | ZROCK | Southern cliff |
 | 15 | NWCLIFB | Tall cliff |
 | 16 | FGOWEST | Dark forest |
-| 17–24, 26–34, 36 | Timbermist Woods | CAVEB and the paths, huts, clearings, and landmarks beyond it |
+| 17–36 | Timbermist Woods | CAVEB and the paths, huts, clearings, and landmarks beyond it |
+| 109 | ENTER | The mineral pool at the entrance to Shadowrealm |
 
 Click the scene edges, doorways or lift to leave. An exit changes the desktop cursor's direction. Brandon walks to a reachable approach before the scene changes. The first attempt to leave home plays the original tree conversation, including when carrying an item. Returning home preserves its completion state.
 
@@ -47,13 +48,13 @@ Failed transitions keep the current room and inventory and allow another click t
 
 Node tests check approach routes across all room exits, RLE decoding and depth scale. `tests/browser/world.html` drives the actual renderer through all 17 rooms and back, including both lift directions. It checks held items, inventory, picked overlays, dropped items, tree completion, the closed bridge, a deliberately failed transition/retry and cancellation during loading. Its gallery captures the original scenes for visual inspection.
 
-The CI budget for runtime files is 6.6 MB, excluding the optional SoundFont, fallback SFX recording, and audio engine source archive.
+The CI budget for gameplay runtime files is 4.31 MB. The 3D book, speech, fallback effects, and optional audio banks have separate limits.
 
 ## Quest scripts
 
 Run `npm run assets:world -- "C:\path\to\DAT"` followed by `npm run assets:forest -- "C:\path\to\DAT"` to rebuild the original data. The forest importer retains EMC code and strings, WSA frames, DAT sprites and VOC-derived durations. Runtime conditions read the current inventory and flags; playback applies changes at the corresponding action, so inspecting a script cannot prematurely consume an item.
 
-Brynn displays the original NOTEENG bitmap and waits for Continue. The home vase can store and return an item. Insisting on crossing the broken bridge plays the original fatal animation, then the book offers to restore the last autosave. In Timbermist, planting the three seeds awakens the yellow jewel. Clicking the jewel at the bird’s nest runs the original healing script, including the feather drop. Darm’s script accepts that feather and writes the magic scroll.
+Brynn displays the original NOTEENG bitmap and waits for Continue. The home vase can store and return an item. Insisting on crossing the broken bridge plays the original fatal animation, then the book offers to restore the last autosave. In Timbermist, planting the three seeds awakens the yellow jewel. Clicking the jewel at the bird’s nest runs the original healing script, including the feather drop. Darm’s script accepts that feather and writes the magic scroll. The two variable birthstones, scattered stones, and remaining room crossings before poison takes effect are kept in the save. The grotto runs the original knife choice and flute scripts.
 
 `tests/browser/forest.html` traverses the quests with actual input, crosses the bridge in both directions, restores a bridge save from before Timbermist, and plays through the scroll. A separate button tests the warning, retreat and fatal crossing. Node tests cover both quest orders, frame and palette hashes, sampled hotspot and item combinations, DAT loops, and confirmation cancellation.
 

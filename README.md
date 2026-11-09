@@ -15,7 +15,9 @@ KyraWeb is an unofficial web remake of *The Legend of Kyrandia*, the first book 
 - Explore the first forest region and complete the original quest chain through the bridge repair. Visit Brynn, heal the willow, follow Merith, find the amulet, and bring Herman the saw. You can cross the repaired bridge and return.
 - Continue into the Timbermist Woods. Meet Darm, Brandywine, and Nolby, plant the three seeds, and use the amulet to heal the songbird. Bring Darm the feather and collect his magic scroll.
 
-The game has English and Russian text and original English CD voices. The playable story reaches Darm's magic scroll, before the birthstone quest and the Serpent's Grotto.
+- Solve the birthstone puzzle at the marble altar, recover the flute, and confront Malcolm at Serpent's Grotto. The playable route ends inside the entrance to Shadowrealm.
+
+The game has English and Russian text and original English CD voices.
 
 ## Controls and saves
 
