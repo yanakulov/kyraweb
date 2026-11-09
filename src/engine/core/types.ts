@@ -6,6 +6,8 @@ export type ControlMode = 'modern' | 'classic';
 export type GameConfig = {
   inventoryCanvas?: HTMLCanvasElement;
   inventoryTooltipCanvas?: HTMLCanvasElement;
+  statusTextCanvas?: HTMLCanvasElement;
+  locationSign?: HTMLImageElement;
   backdropCanvas?: HTMLCanvasElement;
   scene: SceneConfig;
   controlMode?: ControlMode;
@@ -15,6 +17,7 @@ export type GameConfig = {
   signal?: AbortSignal;
   saveState?: WorldSave;
   paused?: boolean;
+  roomResource?: string;
   backgroundPack?: import("../resources/scenePack").ScenePack;
   entry?: Vec2 & { facing: number };
   resume?: RoomSnapshot;

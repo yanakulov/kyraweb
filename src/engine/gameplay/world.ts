@@ -1,5 +1,5 @@
 import { startRoom, type RoomGame } from "./game";
-import { withBase } from "../core/assets";
+import { loadImage, withBase } from "../core/assets";
 import { IndexedClip, loadScenePack, type ScenePack } from "../resources/scenePack";
 import { isWalkable } from "../scene/masks";
 import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneItem, SceneMeta, Vec2, WorldSave } from "../core/types";
@@ -75,7 +75,10 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   const response = await fetch(config.world!, { signal: config.signal });
   if (!response.ok) throw new Error(`Failed to load world (${response.status})`);
   const { rooms } = await response.json() as { rooms: WorldRoom[] };
-  const forest=await loadForestData(withBase('assets/forest/forest.json.gz'),config.signal);
+  const [forest, locationSign] = await Promise.all([
+    loadForestData(withBase('assets/forest/forest.json.gz'), config.signal),
+    loadImage(withBase('assets/interface/location-sign.png'), config.signal).catch(() => undefined),
+  ]);
   const initialQuest = createForestState();
   const quest=restored ? { ...initialQuest, ...restored.quest, flags: new Set(restored.quest.flags) } : initialQuest;
   if (restored && !restored.quest.vaseInitialized && quest.vase === -1) quest.vase = initialQuest.vase;
@@ -172,6 +175,10 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       for(const action of announce)applyForestState(planned,action);
       entryActions=[...(entryActions??[]),...announce,...traceForest(questRoom,3,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions];
     }
+    if (from && from.id !== 'phase' && meta.title && ![...setupActions, ...(entryActions ?? [])].some(action =>
+      action.op === 'message' && action.text.trim() === meta.title.trim())) {
+      entryActions = [{ op: 'message', text: meta.title }, ...(entryActions ?? [])];
+    }
     if (from && from.id !== 'phase' && quest.poison) {
       entryActions = [...(entryActions ?? []), ...poisonArrival(quest.poison, snapshot.pos, forest.flute.durations)];
     }
@@ -193,7 +200,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       transitionImage.getContext('2d')!.drawImage(canvas, 0, 0);
     }
     const portals = roomPortals(meta, mask, cursorTrack);
-    try { game = await startRoom(canvas, { ...config, world: undefined, saveState: undefined, paused, backgroundPack: pack, transitionImage,
+    try { game = await startRoom(canvas, { ...config, world: undefined, saveState: undefined, paused, locationSign, roomResource: meta.name, backgroundPack: pack, transitionImage,
       scene: { ...config.scene, name: meta.title, indexedBackground: { src, clip: "room" }, maskClip: "mask",
         indexedUi: { src: withBase("assets/packs/kallak-room.kyr.gz"), clip: "hud" }, meta, emc: { sceneAnimShapes: meta.shapes }, actorScale: meta.actorScale,
         opening: id === 0 ? config.scene.opening : undefined, items: id === 0 ? config.scene.items : [],
