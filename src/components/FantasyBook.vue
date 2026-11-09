@@ -5,7 +5,6 @@
     </header>
     <div ref="host" class="book-table" @click="openCover">
       <img v-if="fallback && !isOptions" class="book-fallback" :src="`${base}assets/interface/book-cover.webp`" :alt="t('The original Kyrandia cover embossed into leather')" />
-      <span v-if="!ready && !fallback && !isOptions" class="book-loading" role="status">{{ t('Preparing your story…') }}</span>
     </div>
     <canvas ref="handoff" class="book-handoff" width="320" height="200" aria-hidden="true"></canvas>
     <div ref="pageLayer" class="book-ui">
@@ -501,7 +500,6 @@ onBeforeUnmount(() => {
 .book-table { position: absolute; inset: 0; background: #1b130c; }
 .book-table :deep(canvas) { display: block; width: 100%; height: 100%; touch-action: pan-y; }
 .book-fallback { position: absolute; inset: 8% 0 22%; display: block; height: 70%; max-width: 80%; object-fit: contain; margin: auto; filter: drop-shadow(0 20px 20px #000); transform: rotate(-5deg); }
-.book-loading { position: absolute; inset: 45% 0 auto; text-align: center; color: #d8bb7b; font-size: 13px; }
 .book-handoff { position: absolute; display: block; image-rendering: pixelated; opacity: 0; pointer-events: none; }
 .book-cover-invitation { width: 288px; text-align: center; visibility: hidden; pointer-events: none !important; backface-visibility: hidden; }
 .book-cover-invitation.is-visible { visibility: visible; pointer-events: auto !important; }

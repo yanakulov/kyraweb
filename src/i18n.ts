@@ -198,6 +198,7 @@ export const russian: Record<string, string> = {
   'Fastest': 'Очень быстро',
   'Language': 'Язык',
   'Full screen': 'На весь экран',
+  'Install game': 'Установить игру',
   'Exit full screen': 'Выйти из полного экрана',
   'Turn your device': 'Поверните устройство',
   'Kyrandia plays best in landscape and full screen.': 'В Кирандию удобнее играть в горизонтальном положении и на весь экран.',

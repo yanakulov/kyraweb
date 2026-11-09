@@ -10,22 +10,23 @@
       :focus="bookFocus" :opening-ready="openingFrameReady || !!openingSnapshot || !!gameError" :portrait="mobilePortrait"
       :orientation-only="bookOpened && !bookSnapshot"
       :slots="bookSlots" :dev-scene="activeDevScene" :dev-finished="devFinished"
-      :walk-speed="walkSpeed" :control-mode="controlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen"
+      :walk-speed="walkSpeed" :control-mode="controlMode" :fullscreen-available="fullscreenAvailable && !installed" :is-fullscreen="isFullscreen"
+      :can-install="canInstall" :install-help="installHelp"
       :music="music" :music-state="musicState" @begin="beginOpening" @ready="bookOptionsReady"
       @open="openBook" @prologue="finishPrologue" @continue="continueJourney" @finish-setup="finishSetup"
       @start="startJourney" @resume="resumeBook" @returned="finishBookResume" @save="saveChapter" @load="loadChapter" @delete="deleteChapter"
-      @control="setControlMode" @speed="walkSpeed = $event" @fullscreen="toggleFullscreen"
+      @control="setControlMode" @speed="walkSpeed = $event" @fullscreen="toggleFullscreen" @install="installGame" @close-install="installHelp = false"
       @leave="leaveBook" @dev-run="launchDevScene" @leave-dev="returnToStory" />
     <FantasyBook v-if="!pixelBook && !bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :opening-frame-ready="openingFrameReady || !!openingSnapshot || !!gameError" :snapshot="openingSnapshot ?? undefined" :frame-focus="bookFocus" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="beginOpening" @ready="openingReadingReady = true" @open="openBook">
       <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" :show-story="!prologueSeen" @page-turn="music.bookSound('page')" @continue="finishPrologue">
         <template #audio><MusicSettings v-if="musicState" :player="music" :state="musicState" /></template>
       </BookPrologue>
-      <template #invitation><button v-if="latestSave" class="book-continue" type="button" :disabled="bookBusy" @click.stop="continueJourney">{{ t('Continue journey') }}</button><p v-if="bookBusy || bookMessage" class="book-status" role="status">{{ t(bookBusy ? 'Opening your saved chapter…' : bookMessage) }}</p></template>
+      <template #invitation><button v-if="latestSave" class="book-continue" type="button" :disabled="bookBusy" @click.stop="continueJourney">{{ t('Continue journey') }}</button><img v-if="bookBusy" class="book-status-logo" :src="titleLogo" alt="The Legend of Kyrandia" /><p v-else-if="bookMessage" class="book-status" role="status">{{ t(bookMessage) }}</p></template>
     </FantasyBook>
     <FirstRunLetter v-if="!pixelBook && firstRun && musicState" :player="music" :state="musicState" :mode="controlMode" @finish="finishSetup" />
     <FantasyBook v-if="!pixelBook && bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :frame-focus="bookFocus" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
       <BookPrologue v-if="readingHistory" :ready="bookReady" returning @page-turn="music.bookSound('page')" @continue="readingHistory = false" />
-      <BookMenu v-else :gameplay="!introActive" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookMessage" :slots="bookSlots" :initial-view="bookInitialView" :dev-scene="activeDevScene" :dev-finished="devFinished"
+      <BookMenu v-else :gameplay="!introActive" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookBusy ? '' : bookMessage" :slots="bookSlots" :initial-view="bookInitialView" :dev-scene="activeDevScene" :dev-finished="devFinished"
         v-model:walk-speed="walkSpeed" :control-mode="controlMode" @update:control-mode="setControlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen" :music-player="music" :music-state="musicState"
         @start-journey="startJourney" @page-turn="music.bookSound('page')" @read-prologue="readingHistory = true; music.bookSound('page')" @resume="resumeBook" @save="saveChapter" @load="loadChapter" @fullscreen="toggleFullscreen" @main-menu="leaveBook('menu')" @replay-intro="leaveBook('intro')" @dev-run="launchDevScene" @leave-dev="returnToStory" />
     </FantasyBook>
@@ -44,6 +45,7 @@
         <div v-if="gamePointerVisible && (cursorExit || !heldItem)" class="game-cursor" :style="cursorStyle" aria-hidden="true">
           <img :src="`${baseUrl}assets/cursors/${cursorExit ?? 'pointer'}.svg`" alt="" />
         </div>
+        <img v-if="loading && bookOpened && !bookSnapshot && !gameError" class="scene-loading-logo" :src="titleLogo" alt="The Legend of Kyrandia" />
         <div v-if="noteVisible && locale === 'ru'" class="translated-letter" :style="{ transform: `scale(${subtitleScale}, ${subtitleScaleY})` }"><p>{{ t('Dear Brynn:') }}</p><p>{{ t('Malcolm has broken free. Soon he will come for me. Please help Brandon. Direct him toward the Amulet. Use the lavender rose to key the spells.') }}</p><p>{{ t("Darm and Zanthia should be able to help. Be careful, he'll try to get all of us.") }}</p><p>— {{ t('Kallak') }}</p></div>
         <button v-if="controlMode === 'classic' && !introActive && !endingActive && !gameError && !sequenceActive && !loading" class="hud-options" :style="optionsStyle" type="button" :aria-label="t('Options')" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
         </div>
@@ -70,9 +72,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 const FantasyBook = defineAsyncComponent(() => import('./components/FantasyBook.vue'));
-const PixelBook = defineAsyncComponent(() => import('./components/PixelBook.vue'));
+const titleLogo = `${import.meta.env.BASE_URL}assets/interface/kyrandia-title.webp`;
+const PixelBook = defineAsyncComponent({
+  loader: () => import('./components/PixelBook.vue'),
+  loadingComponent: () => h('img', { class: 'launch-logo', src: titleLogo, alt: 'The Legend of Kyrandia' }),
+  delay: 0,
+});
 const pixelBook = new URLSearchParams(location.search).get('book') !== '3d';
 import BookMenu from './components/BookMenu.vue';
 import BookPrologue from './components/BookPrologue.vue';
@@ -244,6 +251,13 @@ const gameError = ref("");
 const loading = ref(false);
 const fullscreenAvailable = ref(false);
 const isFullscreen = ref(false);
+type InstallPrompt = Event & { prompt(): Promise<unknown>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> };
+const installPrompt = shallowRef<InstallPrompt>();
+const installed = ref(matchMedia('(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)').matches
+  || (navigator as Navigator & { standalone?: boolean }).standalone === true);
+const mobileInput = matchMedia('(pointer: coarse)');
+const canInstall = computed(() => !installed.value && (!!installPrompt.value || mobileInput.matches));
+const installHelp = ref(false);
 const portraitMedia = window.matchMedia('(orientation: portrait) and (pointer: coarse)');
 const mobilePortrait = ref(portraitMedia.matches);
 const rotationDialog = ref<HTMLDialogElement>();
@@ -717,10 +731,35 @@ function updateFullscreen() {
 async function toggleFullscreen() {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
-    else await appRef.value?.requestFullscreen();
+    else {
+      await appRef.value?.requestFullscreen({ navigationUI: 'hide' });
+      const orientation = screen.orientation as ScreenOrientation & { lock?: (mode: 'landscape') => Promise<void> };
+      if (mobileInput.matches) void orientation?.lock?.('landscape').catch(() => {});
+    }
   } catch (error) {
-    console.warn("Full screen is unavailable", error);
-    fullscreenAvailable.value = false;
+    console.warn("The browser refused the fullscreen request", error);
+    if (pixelBook && canInstall.value) installHelp.value = true;
+  }
+}
+
+function offerInstall(event: Event) {
+  event.preventDefault();
+  installPrompt.value = event as InstallPrompt;
+}
+function finishInstall() {
+  installed.value = true;
+  installHelp.value = false;
+  installPrompt.value = undefined;
+}
+async function installGame() {
+  const prompt = installPrompt.value;
+  if (!prompt) { installHelp.value = true; return; }
+  installPrompt.value = undefined;
+  try {
+    await prompt.prompt();
+    if ((await prompt.userChoice).outcome === 'accepted') finishInstall();
+  } catch {
+    installHelp.value = true;
   }
 }
 
@@ -828,8 +867,10 @@ onMounted(() => {
   document.addEventListener('visibilitychange', musicVisibility);
   refreshSaveSlots();
   document.addEventListener('keydown', handlePanelKey);
-  fullscreenAvailable.value = document.fullscreenEnabled;
+  fullscreenAvailable.value = document.fullscreenEnabled && typeof appRef.value?.requestFullscreen === 'function';
   document.addEventListener("fullscreenchange", updateFullscreen);
+  window.addEventListener('beforeinstallprompt', offerInstall);
+  window.addEventListener('appinstalled', finishInstall);
   portraitMedia.addEventListener('change', updateOrientation);
   document.title = 'Fables & Fiends — The Legend of Kyrandia';
   subtitleResizeObserver = new ResizeObserver(updateSubtitleScale);
@@ -850,6 +891,8 @@ onBeforeUnmount(() => {
   game?.stop();
   window.removeEventListener("resize", updateSubtitleScale);
   document.removeEventListener("fullscreenchange", updateFullscreen);
+  window.removeEventListener('beforeinstallprompt', offerInstall);
+  window.removeEventListener('appinstalled', finishInstall);
   portraitMedia.removeEventListener('change', updateOrientation);
 });
 

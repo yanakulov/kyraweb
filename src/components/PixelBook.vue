@@ -32,11 +32,13 @@ const props = defineProps<{
   filmBounds?: Rect;
   slots: Slot[]; devScene: DevScene | null; devFinished: boolean;
   walkSpeed: WalkSpeed; controlMode: ControlMode; fullscreenAvailable: boolean; isFullscreen: boolean;
+  canInstall: boolean; installHelp: boolean;
   music: MusicPlayer; musicState?: MusicState;
 }>();
 const emit = defineEmits<{
   begin: []; ready: []; open: []; resume: []; returned: []; prologue: []; continue: []; finishSetup: [ControlMode];
   start: []; save: [number, string]; load: [number]; delete: [number]; control: [ControlMode]; speed: [WalkSpeed]; fullscreen: [];
+  install: []; closeInstall: [];
   leave: ['intro' | 'menu']; devRun: [DevScene]; leaveDev: [];
 }>();
 
@@ -78,6 +80,8 @@ const touchCursor = { x: WIDTH / 2, y: HEIGHT / 2 };
 let touchDrag: { id: number; x: number; y: number; travel: number } | undefined;
 const pointerArt = new Image();
 pointerArt.src = withBase('assets/cursors/pointer.svg');
+const titleMark = new Image();
+titleMark.src = withBase('assets/interface/kyrandia-title.webp');
 let choosingDevice = false, devicePage = 0, canvasSize: ResizeObserver;
 let view: Rect = { x: 0, y: 0, w: WIDTH, h: HEIGHT };
 let book = SPREAD;
@@ -101,6 +105,7 @@ const mainTitle = () => props.gameOver ? t("It didn't happen that way!") : tr('T
 const names = () => ({ main: mainTitle(), story: tr('The Chronicles', 'Летопись'), save: t('Save your story'),
   load: t('Saved chapters'), settings: t('Settings'), sound: t('Sound settings'), dev: 'Dev Menu', help: t('How to play'), setup: t('Choose your controls') });
 const onScroll = () => props.setup && !props.options;
+const directTouch = () => props.portrait || props.installHelp;
 const pageY = (y: number) => onScroll() ? y : Math.round(book.y + (y - SPREAD.y) * book.h / SPREAD.h);
 const bodyInk = () => onScroll() ? PARCHMENT_INK : INK;
 const smallInk = () => onScroll() ? PARCHMENT_INK : MUTED;
@@ -310,8 +315,16 @@ function settings() {
   select('language', t('Language'), ['en', 'ru'], ['English', 'Русский'], locale.value, 126, setLocale);
   select('speed', t('Walk speed'), speedValues, speedLabels.map(t), props.walkSpeed, 165, value => emit('speed', value));
   select('controls', t('Controls'), ['modern', 'classic'], [t('Modern'), t('Classic')], props.controlMode, 204, value => emit('control', value));
-  if (props.fullscreenAvailable) row('fullscreen', t(props.isFullscreen ? 'Exit full screen' : 'Full screen'), 236,
-    () => emit('fullscreen'), { primary: !props.isFullscreen, compact: true });
+  if (props.fullscreenAvailable) {
+    const label = props.canInstall ? props.isFullscreen ? tr('Exit screen', 'Свернуть') : tr('Full screen', 'Весь экран')
+      : t(props.isFullscreen ? 'Exit full screen' : 'Full screen');
+    row('fullscreen', label, 236, () => emit('fullscreen'),
+      { w: props.canInstall ? 89 : PAGE_W, primary: !props.isFullscreen, compact: true });
+  }
+  if (props.canInstall) {
+    row('install', props.fullscreenAvailable ? tr('Install', 'Установить') : t('Install game'), 236, () => emit('install'),
+      { x: props.fullscreenAvailable ? LEFT + 97 : LEFT, w: props.fullscreenAvailable ? 95 : PAGE_W, compact: true });
+  }
   row('replay-intro', tr('Intro', 'Интро'), 264, () => flip('story', () => {
     chapter = 0;
     readChapter(1);
@@ -690,6 +703,12 @@ function coverButton(id: string, label: string, area: Rect, action: () => void, 
   text(ctx, label, x + w / 2 + 4, y + h / 2, fontSize, props.busy ? MUTED : hot ? '#ffedbe' : FOIL, 'center', menuFont, w - 28);
   if (!props.busy) add(id, label, area, action);
 }
+function loadingLogo(x: number, y: number, w: number) {
+  const image = art?.title ?? titleMark;
+  if (!image.naturalWidth) return;
+  const h = w * image.naturalHeight / image.naturalWidth;
+  pixels(ctx, image, { x: x - w / 2, y: y - h / 2, w, h });
+}
 function cover() {
   closedBook();
   if (!reduced.matches && time % 3800 < 300) sparkle(ctx, 331, 231, 2, '#a9e1a1');
@@ -699,9 +718,8 @@ function cover() {
     coverButton('continue', t('Continue journey'), { x: 327, y: 292, w: 163, h: 27 }, () => emit('continue'));
   }
   text(ctx, t('Original tale © 1992 Westwood Studios'), 320, 331, 10, '#d3af84', 'center', textFont, 335);
-  if (props.message || props.busy) {
-    text(ctx, t(props.message || 'Opening your saved chapter…'), 514, 272, 10, FOIL, 'center', textFont, 220);
-  }
+  if (props.busy) loadingLogo(514, 272, 112);
+  else if (props.message) text(ctx, t(props.message), 514, 272, 10, FOIL, 'center', textFont, 220);
 }
 function openCover(progress: number) {
   if (progress >= 1) {
@@ -808,7 +826,7 @@ function paint(now: number) {
   time = now;
   hits = [];
   paintBook();
-  if (touch && !props.portrait && !pendingEnter && !props.returning && (!props.options || ready) && pointerArt.naturalWidth) {
+  if (touch && !directTouch() && !pendingEnter && !props.returning && (!props.options || ready) && pointerArt.naturalWidth) {
     pixels(ctx, pointerArt, { x: touchCursor.x - 2, y: touchCursor.y - 2, w: 16, h: 20 });
   }
 }
@@ -828,13 +846,23 @@ function setupScroll() {
   ctx.globalAlpha = 1;
   if (progress < 1) hits = [];
 }
-function rotationScroll() {
+function deviceScroll() {
   rotateAt ??= time;
   const progress = reduced.matches ? 1 : ease((time - rotateAt) / 300);
   ctx.fillStyle = '#170d136a';
   ctx.fillRect(view.x - 1, view.y - 1, view.w + 2, view.h + 2);
   unroll(ctx, art!.scroll, ROTATE_SCROLL, progress);
   if (progress < .9) return;
+  if (props.installHelp) {
+    loadingLogo(320, 110, 130);
+    text(ctx, t('Install game'), 320, 156, 30, PARCHMENT_RED, 'center', titleFont, 402, 700, PARCHMENT_SHADOW);
+    const steps = locale.value === 'ru'
+      ? ['Откройте меню браузера.', 'Выберите «Установить приложение»', 'или «Добавить на главный экран».']
+      : ['Open the browser menu.', 'Choose “Install app”', 'or “Add to Home screen”.'];
+    steps.forEach((line, index) => text(ctx, line, 320, 184 + index * 20, 18, PARCHMENT_INK, 'center', textFont, 424, 400, PARCHMENT_SHADOW));
+    coverButton('install-back', tr('Back', 'Назад'), { x: 219, y: 240, w: 202, h: 43 }, () => emit('closeInstall'), true, 14);
+    return;
+  }
   ctx.strokeStyle = PARCHMENT_RED;
   ctx.lineWidth = 3;
   ctx.strokeRect(279.5, 84.5, 24, 43);
@@ -853,23 +881,26 @@ function rotationScroll() {
   description.forEach((line, index) => text(ctx, line, 320, 194 + index * 20, 18, PARCHMENT_INK, 'center', textFont, 424, 400, PARCHMENT_SHADOW));
   if (props.fullscreenAvailable) {
     const label = t(props.isFullscreen ? 'Exit full screen' : 'Full screen');
-    coverButton('rotate-fullscreen', label, { x: 163, y: 231, w: 314, h: 52 }, () => emit('fullscreen'), true, 16);
-  } else {
-    text(ctx, t('Full screen is unavailable in this browser.'), 320, 258, 13, PARCHMENT_INK, 'center', textFont, 398, 400, PARCHMENT_SHADOW);
+    const area = props.canInstall ? { x: 104, y: 231, w: 211, h: 52 } : { x: 163, y: 231, w: 314, h: 52 };
+    coverButton('rotate-fullscreen', label, area, () => emit('fullscreen'), true, props.canInstall ? 13 : 16);
+  }
+  if (props.canInstall) {
+    const area = props.fullscreenAvailable ? { x: 325, y: 231, w: 211, h: 52 } : { x: 163, y: 231, w: 314, h: 52 };
+    coverButton('rotate-install', t('Install game'), area, () => emit('install'), !props.fullscreenAvailable, 13);
   }
 }
 function paintBook() {
   if (!art) {
     if ((props.options || props.orientationOnly) && !loadFailed) return;
     ctx.fillStyle = '#200f11'; ctx.fillRect(view.x - 1, view.y - 1, view.w + 2, view.h + 2);
-    text(ctx, t(loadFailed ? 'Try again' : 'Preparing your story…'), 320, 177, 13, FOIL, 'center');
-    if (loadFailed) add('retry', t('Try again'), { x: 220, y: 151, w: 200, h: 52 }, () => void prepare());
+    loadingLogo(320, 170, 192);
+    if (loadFailed) coverButton('retry', t('Try again'), { x: 220, y: 218, w: 200, h: 34 }, () => void prepare(), true);
     return;
   }
   const motion = reduced.matches ? 0 : time;
   const openProgress = props.options ? 1 : coverAt === null ? 0 : reduced.matches ? 1 : clamp((time - coverAt) / 490);
-  showCredit.value = !props.options && !onScroll() && coverAt === null && !props.portrait;
-  if (props.portrait) {
+  showCredit.value = !props.options && !onScroll() && coverAt === null && !directTouch();
+  if (directTouch()) {
     ctx.clearRect(view.x - 1, view.y - 1, view.w + 2, view.h + 2);
     if (!props.orientationOnly) {
       ctx.save();
@@ -879,7 +910,7 @@ function paintBook() {
       else closedBook();
       ctx.restore();
     }
-    rotationScroll();
+    deviceScroll();
     return;
   }
   rotateAt = undefined;
@@ -896,7 +927,10 @@ function paintBook() {
     if (p < 1) turnLeaf(ctx, outgoing.canvas, left.canvas, ease(p), direction, book, view);
     else turnAt = null;
   }
-  if (openProgress === 1) notice();
+  if (openProgress === 1) {
+    if (props.busy) loadingLogo(RIGHT_CENTER, pageY(266), 108);
+    else notice();
+  }
   if (props.options && !ready && !props.returning) {
     const progress = reduced.matches ? 1 : clamp((time - mountTime) / SCENE_ZOOM_MS);
     scenePosition = 1 - progress;
@@ -905,7 +939,7 @@ function paintBook() {
     else { scenePosition = 0; ready = true; emit('ready'); }
   }
   if (!props.options && pendingEnter && !props.openingReady && openProgress === 1) {
-    text(ctx, t('Preparing your story…'), RIGHT_CENTER, pageY(276), 10, RUBRIC, 'center');
+    loadingLogo(RIGHT_CENTER, pageY(266), 108);
   }
   if (!props.options && openingMenu && props.mainMenu && openProgress === 1 && props.openingReady) {
     hits = [];
@@ -953,8 +987,8 @@ watch(() => props.options, options => {
   ready = true;
   emit('ready');
 });
-watch(() => props.portrait, portrait => {
-  canvasLabel.value = portrait ? t('Turn your device') : onScroll() || coverAt !== null || props.options
+watch([() => props.portrait, () => props.installHelp], ([portrait, installHelp]) => {
+  canvasLabel.value = installHelp ? t('Install game') : portrait ? t('Turn your device') : onScroll() || coverAt !== null || props.options
     ? names()[page] : t('Fables and Fiends, Book One');
 });
 onMounted(() => {
@@ -1032,8 +1066,7 @@ function leave(event: PointerEvent) { if (event.pointerType === 'mouse') hover =
 function press(event: PointerEvent) {
   if (event.button !== 0) return;
   touch = event.pointerType !== 'mouse';
-  if (touch && props.portrait) activate(point(event));
-  else if (touch) {
+  if (touch) {
     if (!event.isPrimary) { cancelPress(); return; }
     touchDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, travel: 0 };
     canvas.value?.setPointerCapture(event.pointerId);
@@ -1051,7 +1084,7 @@ function activate({ x, y }: Vec2, pointerId?: number) {
 }
 function release(event: PointerEvent) {
   if (touchDrag?.id === event.pointerId) {
-    if (touchDrag.travel < 6) activate(touchCursor);
+    if (touchDrag.travel < 6) activate(directTouch() ? point(event) : touchCursor);
     touchDrag = undefined;
   }
   dragging = undefined;
@@ -1073,7 +1106,8 @@ function erase() {
 function paste(event: ClipboardEvent) { if (editing) { event.preventDefault(); insert(event.clipboardData?.getData('text').replace(/[\r\n]+/g, ' ') ?? ''); } }
 function key(event: KeyboardEvent) {
   if (event.key === 'Escape') {
-    if (editing) editing = null;
+    if (props.installHelp) emit('closeInstall');
+    else if (editing) editing = null;
     else if (chapterAction) chapterAction = null;
     else if (confirmLeave) confirmLeave = null;
     else if (choosingDevice) choosingDevice = false;

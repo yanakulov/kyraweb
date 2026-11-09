@@ -4,10 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#100f18" />
-    <title>KyraWeb - Kalak's Place</title>
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="%BASE_URL%assets/interface/app-192.png" />
+    <link rel="apple-touch-icon" href="%BASE_URL%assets/interface/app-192.png" />
+    <title>The Legend of Kyrandia</title>
+    <style>.launch-logo{position:fixed;z-index:19;inset:0;margin:auto;width:min(50vw,384px);height:auto;image-rendering:pixelated}</style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app"><img class="launch-logo" src="%BASE_URL%assets/interface/kyrandia-title.webp" alt="The Legend of Kyrandia" width="256" height="85" /></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

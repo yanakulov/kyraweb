@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>The Legend of Kyrandia</title>
+    <style>
+      body{margin:0;min-height:100svh;display:grid;place-content:center;text-align:center;background:#100f18;color:#eed4a0;font:17px Georgia,serif}
+      img{margin:auto;width:min(70vw,256px);height:auto} a{color:inherit} p{margin:18px 12px}
+    </style>
+  </head>
+  <body>
+    <img src="assets/interface/kyrandia-title.webp" alt="The Legend of Kyrandia" width="256" height="85">
+    <p id="offline-message">Connect to the internet to continue.</p>
+    <a id="retry" href="./">Try again</a>
+    <script>
+      if (navigator.language.toLowerCase().startsWith('ru')) {
+        document.documentElement.lang = 'ru';
+        document.getElementById('offline-message').textContent = 'Подключитесь к интернету, чтобы продолжить.';
+        document.getElementById('retry').textContent = 'Попробовать снова';
+      }
+    </script>
+  </body>
+</html>
