@@ -44,6 +44,7 @@ export type RoomAction =
   | { op: "poison"; crossings: number }
   | { op: "cauldron"; state: number }
   | { op: "crystal"; slot: 0 | 1; item: number }
+  | { op: "foyerItem"; slot: number; item: number }
   | { op: "wisp"; ms: number }
   | { op: "invisibility"; level: number; ms?: number }
   | { op: "heroFrame"; clip?: string; index?: number }
@@ -74,7 +75,7 @@ export type RoomAction =
       y: number;
     }
   | { op: "confirm" }
-  | { op: "choice"; resume: (point: { x: number; y: number }) => RoomAction[] }
+  | { op: "choice"; silent?: boolean; resume: (point: { x: number; y: number }) => RoomAction[] }
   | { op: "vase"; item: number }
   | { op: "exit"; target: number; side?: import("../core/types").RoomPortal["side"]; entry?: { x: number; y: number } }
   | { op: "death" }

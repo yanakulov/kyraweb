@@ -11,7 +11,7 @@ export const ITEMS_SHEET_COLS = 20;
 export const isShadowrealmRoom = (id: number) => id >= 109 && id <= 198 && ![112, 116, 118, 119, 178, 181, 182].includes(id);
 export const isFaeriewoodRoom = (id: number) => id >= 37 && id <= 49 || id >= 52 && id <= 65 || id === 73 || id === 75 || id >= 80 && id <= 108;
 export const isCatacombRoom = (id: number) => id >= 229 && id <= 245;
-export const isCastleRoom = (id: number) => (id >= 199 && id <= 215 && id !== 209 && id !== 210) || isCatacombRoom(id);
+export const isCastleRoom = (id: number) => (id >= 199 && id <= 228 && id !== 210) || isCatacombRoom(id);
 export const isWorldRoomId = (id: number) => Number.isInteger(id) && (id >= 0 && id <= 36 || isFaeriewoodRoom(id) || isShadowrealmRoom(id) || isCastleRoom(id));
 export const YELLOW_JEWEL_FLAG = 86;
 export const YELLOW_JEWEL_POS = { x: 253, y: 159 };

@@ -1,7 +1,7 @@
 import { startGame } from "../../src/engine/gameplay/game";
 import { gemCutScene } from "../../src/engine/scenes/gemCut";
 import { validateWorldSave } from '../../src/engine/gameplay/saveStorage';
-import type { GameConfig } from '../../src/engine/core/types';
+import type { GameConfig, InventoryItemId } from '../../src/engine/core/types';
 import { getInventorySlotPositions } from '../../src/engine/gameplay/inventory';
 import { fireberryBush, itemFromOriginal, originalItem } from '../../src/engine/gameplay/forest';
 import {
@@ -31,6 +31,8 @@ window.addEventListener("error", (event) => {
 const lines: string[] = [];
 let fireFrame = -1, featherFalling = false;
 let knifeChoice = false;
+let bellChoices = 0;
+const royalMovies = new Set<string>();
 let roomBank = '';
 const scores: number[] = [];
 const realFetch = window.fetch.bind(window);
@@ -54,6 +56,9 @@ const config: GameConfig = {
     if (action.op === 'frame' && action.clip === 'brandyw3') fireFrame = action.index;
     if (action.op === 'ambientRun' && id === 30) featherFalling = true;
     if (action.op === 'choice' && id === 25) knifeChoice = true;
+    if (action.op === 'choice' && action.silent) bellChoices++;
+    if (action.op === 'frame' && ['upstairs', 'dnstairs', 'hersaw1', 'hersaw2', 'hersaw3', 'punch1', 'punch2', 'punch3'].includes(action.clip))
+      royalMovies.add(action.clip);
   },
   onLocationChange: (name, room, bank) => {
     roomBank = bank ?? '';
@@ -931,5 +936,139 @@ document.querySelector('#faeriewood')!.addEventListener('click', async () => {
   } catch (error) {
     results.textContent += `FAIL ${error}`;
     document.title = 'FAIL — Enchanted Fountain';
+  }
+});
+
+document.querySelector('#royal')!.addEventListener('click', async () => {
+  lockScenario();
+  try {
+    const start = validateWorldSave(game.getSaveState());
+    start.rooms[0].treeSpoken = true;
+    start.rooms[0].inventorySlots.splice(0, 4, 'item-105', 'item-104', 'item-103', 'item-24');
+    start.quest.flags.push(45, 86, 213, 219, 224, 234, 235, 236);
+    async function reload(save = validateWorldSave(game.getSaveState())) {
+      game.stop();
+      game = await startGame(canvas, { ...config, saveState: save });
+      game.setWalkSpeed('fastest');
+    }
+    const flags = () => game.getSaveState()?.quest.flags ?? [];
+    const equip = async (item: InventoryItemId | null) => {
+      const index = game.getSnapshot().inventorySlots.indexOf(item);
+      const slot = getInventorySlotPositions()[index];
+      if (!slot) throw Error(`No slot for ${item}`);
+      await click(slot.x + 8, slot.y + 8);
+    };
+    const choose = async (x: number, y: number) => {
+      const next = bellChoices + 1;
+      game.handleClick({ x, y });
+      await until(() => bellChoices === next || !playing, 'bell input');
+    };
+
+    await reload(start);
+    game.runSequence([{ op: 'exit', target: 207 }]);
+    await until(() => id === 207 && !loading && !playing, 'library after catacombs');
+    await travel(206);
+    await equip('item-105');
+    await click(140, 53);
+    held(null);
+    await click(140, 53);
+    if (!flags().includes(220) || flags().includes(221) || id !== 206) throw Error('The first key opened both locks');
+    await click(42, 97);
+    await until(() => id === 213 && !loading && !playing, 'Great Hall to west corridor');
+    await route(211, 205, 227);
+    if (!royalMovies.has('upstairs') || !flags().includes(215)) throw Error('The stairs did not play their original scene');
+    capture('Top of the castle stairs');
+
+    await route(217, 219, 225);
+    await click(160, 22);
+    held('item-45');
+    if (!lines.some(line => line.includes("Zanthia's hair"))) throw Error('Zanthia’s hair ring did not trigger the original line');
+    await equip(null);
+    await route(219, 228);
+    capture('The balcony above the Great Hall');
+    await click(250, 35);
+    await until(() => id === 221 && !loading && !playing, 'east balcony doorway');
+    await travel(224);
+    await click(223, 65);
+    capture('Darm’s bedroom');
+    await route(221, 228);
+    await click(70, 35);
+    await until(() => id === 220 && !loading && !playing, 'west balcony doorway');
+    await route(223, 220, 228);
+    await click(43, 33);
+    await until(() => id === 218 && !loading && !playing, 'hallway with Herman');
+
+    await click(42, 92);
+    if (!royalMovies.has('hersaw1') || !flags().includes(255) || !scores.includes(43) ||
+        !lines.some(line => line.includes('sharpened it just for you'))) throw Error('Herman did not warn Brandon');
+    const warned = validateWorldSave(game.getSaveState());
+    capture('Herman threatens Brandon');
+    game.handleClick({ x: 42, y: 92 });
+    await until(() => dead && !playing, 'fatal approach to Herman');
+    if (!royalMovies.has('hersaw2') || game.getSaveState()) throw Error('Herman’s attack failed');
+    dead = false;
+    await reload(warned);
+    await click(266, 158);
+    const sleep = game.getSnapshot().runtime?.sceneAnims[4];
+    if (!flags().includes(256) || !royalMovies.has('hersaw3') || !sleep?.play || !sleep.visible)
+      throw Error('The yellow jewel did not put Herman to sleep');
+    capture('Herman asleep beside the Music Room');
+    await reload();
+    await travel(226);
+    await choose(234, 90);
+    await choose(186, 85);
+    await choose(160, 120);
+    await settle();
+    if (flags().includes(222)) throw Error('An incorrect bell sequence moved the portrait');
+    await choose(234, 90);
+    capture('Brandon at the bells', false);
+    const firstNote = scores.length;
+    for (const [x, y] of [[226, 96], [186, 85], [202, 95], [215, 95]]) await choose(x, y);
+    await settle();
+    if (!flags().includes(222) || scores.slice(firstNote).join(',') !== '35,38,37,36,46,1,39') throw Error('The bell melody or key reveal did not play');
+    capture('The second gold key behind the portrait');
+    await reload();
+    await click(154, 26);
+    held('item-105');
+    if (!flags().includes(223)) throw Error('The second key was not collected');
+    await equip(null);
+    await click(154, 26);
+    held(null);
+    await route(218, 216, 227, 205);
+    if (!royalMovies.has('dnstairs') || !game.getSnapshot().runtime?.actorVisible) throw Error('The stair descent did not finish');
+    await route(211, 213, 206);
+    await equip('item-105');
+    await click(140, 53);
+    held(null);
+    if (!flags().includes(221)) throw Error('The second key did not unlock the royal doors');
+    await click(140, 53);
+    await until(() => id === 209 && !loading && !playing, 'Royal Foyer');
+
+    await equip('item-104');
+    await click(116, 20);
+    await equip('item-24');
+    await click(152, 20);
+    await equip('item-103');
+    await click(188, 20);
+    if (!lines.some(line => line.includes('in the correct order'))) throw Error('The incorrect regalia order was accepted');
+    await reload();
+    await click(152, 20);
+    held('item-24');
+    await equip(null);
+    await click(188, 20);
+    held('item-103');
+    await click(152, 20);
+    await equip('item-24');
+    await click(188, 20);
+    if (!scores.includes(47) || !scores.includes(48) || !['punch1', 'punch2', 'punch3'].every(clip => royalMovies.has(clip)))
+      throw Error('The royal doorway and Malcolm’s cutscene did not play');
+    await reload();
+    const foyer = validateWorldSave(game.getSaveState());
+    if (foyer.quest.foyerItems?.join(',') !== '104,103,24' || !foyer.rooms[209].runtime?.layers.some(layer => layer.clip === 'foyer' && layer.index === 19))
+      throw Error('The royal door did not stay open after loading');
+    capture('The royal chamber opened');
+    results.textContent += 'ALL PASSED — upper castle, Herman, bells, both locks and royal foyer';
+  } catch (error) {
+    results.textContent += `FAIL ${error}`;
   }
 });

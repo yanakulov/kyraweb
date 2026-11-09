@@ -46,6 +46,7 @@ export type ForestState = {
   poison: number;
   cauldron: number;
   crystals: [number, number];
+  foyerItems: number[];
   pendingItems: Record<number, SceneItem[]>;
   merith: { x: number; y: number; facing: number; shape: number; room: number };
   herman: { x: number; y: number; facing: number; shape: number; room: number };
@@ -62,6 +63,7 @@ export function createForestState(): ForestState {
     poison: 0,
     cauldron: 0,
     crystals: [-1, -1],
+    foyerItems: [-1, -1, -1],
     pendingItems: {},
     merith: { x: -16, y: 126, facing: 3, shape: 41, room: -1 },
     herman: { x: 224, y: 94, facing: 5, shape: 88, room: 7 },
@@ -208,6 +210,7 @@ export function traceForest(
     hand = originalItem(snapshot.itemInHand);
   let poison = state.poison, wisp = !!snapshot.wispMs, invisible = !!snapshot.invisibleMs, cauldron = state.cauldron;
   const crystals = [...state.crystals];
+  const foyerItems = [...state.foyerItems];
   const scaleOverrides = new Map<number, number>();
   const delays: Record<number, number> = { 0: snapshot.walkDelayTicks ?? 6, 1: 7, 2: 8 };
   const slots = new Map<number, string>();
@@ -238,6 +241,11 @@ export function traceForest(
     emit({ op: "frame", clip, index, x, y, ms, permanent });
     voiceElapsed += ms;
   };
+  const foyerOpen = () => foyerItems[0] === 104 && foyerItems[1] === 103 && foyerItems[2] === 24;
+  if (room.id === 209 && fn === 1 && foyerOpen() && point.y < 90 &&
+      (point.x >= 112 && point.x < 207 && point.y < 40 || point.x >= 264)) {
+    return { actions, handled: true };
+  }
   const npcAction = () =>
     emit({ op: "npc", character, ...npc, visible: npc.room === room.id && npc.shape !== 88 });
   const animateTalk = (idle: number, speech: number, talking: boolean) => {
@@ -275,7 +283,7 @@ export function traceForest(
             return 0;
           case 0x2d:
             if (room.id === 117 && a[0] === 117 && flags.has(179)) return 0; // The scroll already changed the river in place.
-            const side = room.id === 206 ? (["north", "east", "south", "west"] as const)[a[1] / 2] : undefined;
+            const side = [205, 206, 228].includes(room.id) ? (["north", "east", "south", "west"] as const)[a[1] / 2] : undefined;
             emit({ op: "exit", target: a[0], entry, side });
             return 0;
           case 0x1d:
@@ -312,6 +320,7 @@ export function traceForest(
             }
             emit({
               op: "choice",
+              silent: room.id === 226,
               resume: (answer) =>
                 traceForest(room, fn, initialState, snapshot, point, walkable, [
                   ...confirmations,
@@ -422,6 +431,14 @@ export function traceForest(
               emit({ op: 'crystal', slot: a[0], item: a[1] });
             }
             return a[1];
+          case 0x8d:
+            return foyerItems[a[0]];
+          case 0x8e:
+            foyerItems[a[0]] = a[1];
+            emit({ op: 'foyerItem', slot: a[0], item: a[1] });
+            return a[1];
+          case 0x62:
+            return 0; // The foyer draws these from its saved pedestal table.
           case 0x8c: {
             const scale = actorScaleAt(actor.y, room.actorScale);
             if (a[0] >= actor.x - 12 * scale && a[0] <= actor.x + 12 * scale && a[1] >= actor.y - 48 * scale && a[1] <= actor.y) return 0;
@@ -436,6 +453,7 @@ export function traceForest(
             );
           }
           case 0x0b:
+            if (room.id === 209 && a[0] === 320) return 0; // The chamber beyond this doorway is the next chapter.
             actor.x = a[0] & ~3;
             actor.y = a[1] & ~1;
             emit({ op: "walk", x: actor.x, y: actor.y });
@@ -547,7 +565,7 @@ export function traceForest(
           case 0x29: {
             const clip = text[a[0]].slice(0, -4).toLowerCase();
             slots.set(a[1], clip);
-            if (['pegasus', 'lep_in', 'lepclimb', 'ridge', 'ridge2', 'acidgate', 'slide1'].includes(clip))
+            if (['pegasus', 'lep_in', 'lepclimb', 'ridge', 'ridge2', 'acidgate', 'slide1', 'upstairs', 'dnstairs'].includes(clip))
               emit({ op: 'visible', visible: false });
             return 0;
           }
@@ -568,6 +586,11 @@ export function traceForest(
               ticks: a[2],
             });
             return 0;
+          case 0x2f:
+            for (let index = a[3]; index <= a[4]; index++) {
+              frame(slots.get(a[5])!, index, a[0], a[1], (a[2] * 1000) / 60);
+            }
+            return 0;
           case 0x2c:
           case 0x3f:
             if (fireplacePage && id === 0x3f) {
@@ -584,6 +607,8 @@ export function traceForest(
             );
             return 0;
           case 0x40: {
+            const clip = slots.get(a[5])!;
+            if (clip === 'punch2' && a[0] === 58) emit({ op: 'close', clip: 'punch3' });
             const count = Math.abs(a[1] - a[0]) + 1,
               repeat = Math.max(1, a[6]);
             const time =
@@ -595,7 +620,7 @@ export function traceForest(
             for (let r = 0; r < repeat; r++)
               for (let i = 0; i < count; i++)
                 frame(
-                  slots.get(a[5])!,
+                  clip,
                   a[0] + i * Math.sign(a[1] - a[0]),
                   a[2],
                   a[3],
@@ -667,6 +692,8 @@ export function traceForest(
           case 0x11:
           case 0x25:
           case 0x42:
+            if (room.id === 218 && id === 0x25 && a[0] === 4)
+              emit({ op: 'ambient', index: 4, enabled: true });
             emit({
               op: "ambient",
               index: a[0],
@@ -963,6 +990,13 @@ export function traceForest(
       if (action.clip === 'brandyw2' && nextFrame?.op === 'frame' && nextFrame.clip === 'brandyw3') return false;
       return action.clip !== 'brandyw3';
     }) : actions;
+    if (room.id === 209 && fn === 0) {
+      foyerItems.forEach((item, slot) => emit({ op: 'foyerItem', slot, item }));
+      if (foyerOpen()) {
+        frame('foyer', 19, 264, 8, 0, true);
+        emit({ op: 'shape', shape: 26, x: 227, y: 46, flags: 0 });
+      }
+    }
     return { actions: playback, handled: result.regs[3] !== 0 || playback.some(action => action.op === 'exit'), cursorTrack };
   } catch (error) {
     if (error !== paused) throw error;
@@ -974,6 +1008,7 @@ export function applyForestState(state: ForestState, action: RoomAction) {
   if (action.op === 'poison') state.poison = action.crossings;
   if (action.op === 'cauldron') state.cauldron = action.state;
   if (action.op === 'crystal') state.crystals[action.slot] = action.item;
+  if (action.op === 'foyerItem') state.foyerItems[action.slot] = action.item;
   if (action.op === 'offsceneItem') (state.pendingItems[action.room] ??= []).push(action.item);
   if (action.op === 'scatterGem') (state.scatteredGems[action.room] ??= []).push(action.item);
   if (action.op === "vase") state.vase = action.item;

@@ -34,7 +34,7 @@ import { startWorldGame } from "./world";
 import { exitCursor, portalAtPoint, roomViewPortals } from "./navigation";
 import type { ControlMode, DropAnim, GameConfig, InventoryItemId, RoomRuntimeSnapshot, RoomSnapshot, SceneItem, SceneOverlayState, Vec2, WorldSave } from "../core/types";
 
-const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell', 'brantalk', 'dodge', 'frozen', 'branbrn', 'bonk', 'waken', 'frog']);
+const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell', 'brantalk', 'dodge', 'frozen', 'branbrn', 'bonk', 'waken', 'frog', 'hersaw2', 'punch2', 'punch3']);
 const heroOffsets: Record<string, number> = { flute: -12, cure: -11, poison: -31, wisp: -20, winter: -20, drink: -20, dispel: -32, stone: -20 };
 const jewels = [
   { color: 'yellow', clip: 'yellow-jewel', flag: YELLOW_JEWEL_FLAG, pos: YELLOW_JEWEL_POS, hit: YELLOW_JEWEL_HITBOX },
@@ -124,6 +124,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const permanentLayers = new Map<string, { image: HTMLCanvasElement; index: number; x: number; y: number }>();
     const maskChanges: RoomRuntimeSnapshot["masks"] = [];
     const roomFills: Extract<RoomAction, { op: "fill" }>[] = [];
+    const foyerItems: number[] = [];
     const questShapes: {shape:number;x:number;y:number;flags:number}[] = [];
     const noDropRegions: {x:number;y:number;w:number;h:number}[] = [];
     const npcs = new Map<number,Extract<RoomAction,{op:'npc'}>>();
@@ -440,9 +441,17 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         if (!blackout && backgroundName === 'room' && spriteDefMap) drawSceneAnims(ctx, sceneShapesImage, spriteDefMap,
           sceneAnimOrder.filter(({ drawY }) => (drawY > state.pos.y) === front).map(({ index }) => sceneAnims[index]));
       };
+      const hermanBackdrop = permanentLayers.get('hersaw3');
+      if (hermanBackdrop) ctx.drawImage(hermanBackdrop.image, hermanBackdrop.x, hermanBackdrop.y);
       drawAmbient(false);
-      if (backgroundName === "room" && spriteDefMap) drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, questShapes);
-      for (const layer of permanentLayers.values()) ctx.drawImage(layer.image, layer.x, layer.y);
+      if (backgroundName === "room" && spriteDefMap && config.roomResource !== 'BELROOM') drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, questShapes);
+      for (const [clip, layer] of permanentLayers) if (clip !== 'hersaw3') ctx.drawImage(layer.image, layer.x, layer.y);
+      if (backgroundName === "room" && spriteDefMap && config.roomResource === 'BELROOM') drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, questShapes);
+      if (backgroundName === "room") foyerItems.forEach((item, slot) => {
+        if (item < 0) return;
+        const tile = getTileRect(item);
+        ctx.drawImage(itemsSheet, tile.x, tile.y, tile.w, tile.h, [116, 152, 188][slot], 13, tile.w, tile.h);
+      });
       // FACE movies contain an opaque rectangle of the room, not just the mouth.
       // Composite them behind Brandon while he approaches the speaking tree.
       for (const [name, layer] of scriptLayers) if (behindActors(name)) ctx.drawImage(layer.image, layer.x, layer.y);
@@ -844,6 +853,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         if (itemIndex !== -1) {
           stopWalking();
           const item = state.sceneItems[itemIndex];
+          const picked = !state.itemInHand;
           if (state.itemInHand) {
             const heldItem = state.itemInHand;
             state.itemInHand = item.id;
@@ -853,7 +863,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
             state.sceneItems.splice(itemIndex, 1);
           }
           soundEffect(53);
-          config.onCheckpoint?.();
+          const actions = picked ? config.onSceneItemPicked?.(point, getSnapshot()) : undefined;
+          if (actions?.length) playScript(actions);
+          else config.onCheckpoint?.();
           return true;
         }
       }
@@ -937,7 +949,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (skippingOpening && ['sfx', 'say', 'message'].includes(action.op)) return;
       config.onScriptAction?.(action.op === 'say' && !action.voiceBank && openingBank ? { ...action, voiceBank: openingBank } : action);
       switch (action.op) {
-        case 'choice':state.statusMessage='Click where you want to go.';state.statusMessageUntil=Infinity;break;
+        case 'choice':
+          if (!action.silent) { state.statusMessage='Click where you want to go.';state.statusMessageUntil=Infinity; }
+          break;
         case 'death':dead=true;actorVisible=false;break;
         case 'blackout':blackout=action.active;break;
         case 'shake': shakeUntil = clockMs + action.ms; break;
@@ -1007,7 +1021,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         case 'item':state.sceneItems.push({id:action.item,x:action.x,y:action.y});break;
         case 'shape': {
           const { shape, x, y, flags } = action;
-          const replace = config.roomResource === 'LIBRARY' || config.roomResource === 'CATACOM';
+          const replace = ['LIBRARY', 'CATACOM', 'GRTHALL', 'FOYER'].includes(config.roomResource ?? '');
           const previous = replace ? questShapes.findIndex(existing => existing.x === x && existing.y === y) : -1;
           if (previous >= 0) questShapes[previous] = { shape, x, y, flags };
           else questShapes.push({ shape, x, y, flags });
@@ -1015,6 +1029,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           break;
         }
         case 'fill': roomFills.push(action); break;
+        case 'foyerItem': foyerItems[action.slot] = action.item; break;
         case 'noDrop':noDropRegions.push({ x: action.x, y: action.y, w: action.w, h: action.h });break;
         case 'mask':
           maskChanges.push({ x: action.x, y: action.y, w: action.w, h: action.h, blocked: action.blocked });
@@ -1058,6 +1073,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           if(['tag','tag-0'].includes(action.clip))heldNpcPoses.delete(1);
           if(action.clip==='tag')scriptLayers.delete('tag-0');
           if (action.clip === 'brandyw2') scriptLayers.delete('brandyw3');
+          if (action.clip === 'hersaw3' && action.permanent) permanentLayers.delete('hersaw1');
           if (action.clip === 'song1' && scriptLayers.delete('songbird-rest')) foregroundFrames.clear();
           const animation = scriptRenderers.get(action.clip);
           if (!animation) throw new Error(`Missing script animation ${action.clip}`);
@@ -1149,7 +1165,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     if (config.entry || config.resume?.facing !== undefined) face(config.entry?.facing ?? config.resume!.facing!);
     const restored = config.resume?.runtime;
     if (restored) {
-      for (const action of config.setupActions ?? []) if (action.op === 'fill') applyScript(action);
+      for (const action of config.setupActions ?? []) if (action.op === 'fill' || action.op === 'foyerItem') applyScript(action);
       clockMs = restored.clockMs; sceneTicks = restored.sceneTicks; sceneAccumulatorMs = restored.sceneAccumulatorMs;
       if (restored.sceneAnims.length !== sceneAnims.length) throw new Error("This save does not match the room's animations.");
       restored.sceneAnims.forEach((saved, index) => {

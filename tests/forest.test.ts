@@ -586,3 +586,32 @@ test('the library and catacombs use the original crown, force field and hidden k
   q.run('CATACOM', 1, 208, 63);
   assert.equal(q.snapshot.itemInHand, null);
 });
+
+test('the music room reveals one key and each key opens one royal lock', () => {
+  const q = quest();
+  const begin = q.run('BELROOM', 1, 234, 90).actions;
+  let choice = begin.find(action => action.op === 'choice');
+  const cues: number[] = [];
+  for (const [x, y] of [[226, 96], [186, 85], [202, 95], [215, 95]]) {
+    assert.ok(choice?.silent);
+    const actions = choice.resume({ x, y });
+    for (const action of actions) {
+      if (action.op === 'music') cues.push(action.command);
+      applyForestState(q.state, action);
+    }
+    choice = actions.find(action => action.op === 'choice');
+  }
+  assert.deepEqual(cues, [35, 38, 37, 36, 46, 1, 39]);
+  assert.ok(q.state.flags.has(222));
+  q.run('BELROOM', 1, 154, 26);
+  assert.equal(q.snapshot.itemInHand, 'item-105');
+  q.run('GRTHALL', 1, 140, 53);
+  assert.ok(q.state.flags.has(220));
+  assert.ok(!q.state.flags.has(221));
+  q.run('BELROOM', 1, 154, 26);
+  assert.equal(q.snapshot.itemInHand, null);
+  q.snapshot.itemInHand = 'item-105';
+  q.run('GRTHALL', 1, 140, 53);
+  assert.ok(q.state.flags.has(221));
+  assert.ok(q.run('GRTHALL', 1, 140, 53).actions.some(action => action.op === 'exit' && action.target === 209));
+});

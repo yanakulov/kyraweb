@@ -411,7 +411,9 @@ async function restoreChapter(record: SaveRecord) {
     intro?.stop(); intro = null; game?.stop(); gameLoadController?.abort();
     gameLoadController = controller; game = candidate; committed = true;
     introActive.value = openingScene.value = false; kallakMenu.value = false; noteVisible.value = false;
-    music.stop(); music.restoreRoom(record.state.currentRoom, !!record.state.rooms[record.state.currentRoom].wispMs);
+    const { currentRoom, rooms, quest } = record.state;
+    const hermanAwake = currentRoom === 218 && quest.flags.includes(255) && !quest.flags.includes(256);
+    music.stop(); music.restoreRoom(currentRoom, !!rooms[currentRoom].wispMs, hermanAwake ? 42 : undefined);
     if (restoredVoiceBank) music.prepareVoice(restoredVoiceBank);
     gameError.value = ''; gameOver.value = false; navigationError.value = ''; loading.value = false;
     sequenceActive.value = awaitingContinue.value = false; subtitleLines.value = []; subtitleAlpha.value = 1;
