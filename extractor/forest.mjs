@@ -114,7 +114,7 @@ export async function buildForest(root, out = "public/assets/forest") {
   const noteClip = { width: 194, height: 128, frames: [notePixels], palette: note.palette, transparentIndex: -1 };
   const npcProgram = parseEmc(get('_NPC.EMC')), npcVoices = readPak(get('CHAPTER1.VRM'));
   const flute = { program: npcProgram, durations: Object.fromEntries(
-    [...npcVoices].filter(([name]) => /^(100[01]|2007|201[01]|700[0124]|800[0-6]|902[01]|904[1-9]|9050)\.VOC$/.test(name))
+    [...npcVoices].filter(([name]) => /^(100[01]|2007|201[01]|700[0124]|800[0-6]|901[3-9]|902[0-9]|9030|904[0-9]|9050|9091)\.VOC$/.test(name))
       .map(([name, data]) => [parseInt(name, 10), vocDuration(data)])) };
   function selfActions(item, room = 0, readable = false) {
     const actions = [];

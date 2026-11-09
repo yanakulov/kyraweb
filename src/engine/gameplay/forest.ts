@@ -44,6 +44,8 @@ export type ForestState = {
   birthstones: number[];
   scatteredGems: Record<number, number[]>;
   poison: number;
+  cauldron: number;
+  crystals: [number, number];
   merith: { x: number; y: number; facing: number; shape: number; room: number };
   herman: { x: number; y: number; facing: number; shape: number; room: number };
 };
@@ -57,6 +59,8 @@ export function createForestState(): ForestState {
     birthstones: [12, Math.floor(Math.random() * 4), 7 + Math.floor(Math.random() * 5), 6],
     scatteredGems: {},
     poison: 0,
+    cauldron: 0,
+    crystals: [-1, -1],
     merith: { x: -16, y: 126, facing: 3, shape: 41, room: -1 },
     herman: { x: 224, y: 94, facing: 5, shape: 88, room: 7 },
   };
@@ -66,7 +70,13 @@ export function createForestState(): ForestState {
 }
 export const groveGems = [0, 3, 5, 7, 9, 10, 11, 2];
 // The original generic placement only uses eligible, connected rooms in the region.
-const gemRooms = [[9, 10, 11, 12, 13, 14, 15], [17, 18, 19, 20, 21, 22, 23, 24, 28, 30, 32, 33, 34]];
+const gemRooms = [
+  [9, 10, 11, 12, 13, 14, 15],
+  [17, 18, 19, 20, 21, 22, 23, 24, 28, 30, 32, 33, 34],
+  [],
+  [43, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 73, 75,
+    ...Array.from({ length: 28 }, (_, index) => 81 + index)],
+];
 export const canScatterGemsIn = (room: number) => gemRooms.some(region => region.includes(room));
 export function scatterGem(item: number, region: number, currentRoom: number): Extract<RoomAction, { op: 'scatterGem' }> {
   const rooms = (gemRooms[region] ?? gemRooms[0]).filter(id => id !== currentRoom);
@@ -183,7 +193,8 @@ export function traceForest(
     voiceMs = 0,
     voiceElapsed = 0,
     hand = originalItem(snapshot.itemInHand);
-  let poison = state.poison, wisp = !!snapshot.wispMs;
+  let poison = state.poison, wisp = !!snapshot.wispMs, cauldron = state.cauldron;
+  const crystals = [...state.crystals];
   const delays: Record<number, number> = { 0: snapshot.walkDelayTicks ?? 6, 1: 7, 2: 8 };
   const slots = new Map<number, string>();
   const emit = (action: RoomAction) => actions.push(action);
@@ -252,6 +263,9 @@ export function traceForest(
             return 0;
           case 0x1d:
             return a[0] === room.id ? room.exits[a[1] / 2] ?? -1 : -1;
+          case 0x27:
+            if (poison) actions.push(...poisonArrival(1, actor, room.durations));
+            return 0;
           case 0x5f:
             emit({ op: "death" });
             return 0;
@@ -378,7 +392,19 @@ export function traceForest(
           case 0x7f:
             return +(a[0] === room.id && snapshot.sceneItems.some(item => originalItem(item.id) === a[1]));
           case 0x80:
-            return 0; // The cauldron still contains the original neutral mixture in this chapter.
+            return cauldron;
+          case 0x81:
+            cauldron = a[0];
+            emit({ op: 'cauldron', state: cauldron });
+            return cauldron;
+          case 0x82:
+            return crystals[a[0]] ?? -1;
+          case 0x83:
+            if (a[0] === 0 || a[0] === 1) {
+              crystals[a[0]] = a[1];
+              emit({ op: 'crystal', slot: a[0], item: a[1] });
+            }
+            return a[1];
           case 0x8c: {
             const scale = actorScaleAt(actor.y, room.actorScale);
             if (a[0] >= actor.x - 12 * scale && a[0] <= actor.x + 12 * scale && a[1] >= actor.y - 48 * scale && a[1] <= actor.y) return 0;
@@ -707,19 +733,25 @@ export function traceForest(
             emit({ op: 'close', clip: jewel.name });
             return 0;
           }
-          case 0x60:
+          case 0x60: {
             if (wisp) {
               wisp = false;
               actions.push(...transformWisp(room.id, false));
             }
             emit({ op: 'face', facing: 5, shape: 7 });
-            emit({ op: 'palette', start: 254, colors: [84, 164, 252], ms: 0 });
+            const tint = ({
+              60: [63, 6, 6], 61: [63, 6, 6], 62: [0, 0, 67], 63: [0, 0, 67],
+              64: [84, 78, 14], 65: [84, 78, 14], 66: [0, 48, 0], 67: [100, 48, 23],
+              68: [73, 0, 89], 69: [73, 73, 86],
+            } as Record<number, number[]>)[a[0]] ?? [33, 66, 100];
+            emit({ op: 'palette', start: 254, colors: tint.map(value => Math.floor(value * 63 / 100) * 4), ms: 0 });
             actions.push(...heroFrames('drink', indices(0, 9), 5));
             emit({ op: 'sfx', track: 0x34 });
             actions.push(...heroFrames('drink', [7, 8, 7, 8], 7));
             emit({ op: 'palette', start: 254, colors: [120, 120, 120], ms: 0 });
             actions.push(...heroFrames('drink', indices(0, 9).reverse(), 5), { op: 'heroFrame' });
             return 0;
+          }
           case 0x6a:
             actions.push(...dispelMagic(room.id, wisp));
             wisp = false;
@@ -847,7 +879,7 @@ export function traceForest(
       if (action.clip === 'brandyw2' && nextFrame?.op === 'frame' && nextFrame.clip === 'brandyw3') return false;
       return action.clip !== 'brandyw3';
     }) : actions;
-    return { actions: playback, handled: result.regs[3] !== 0, cursorTrack };
+    return { actions: playback, handled: result.regs[3] !== 0 || playback.some(action => action.op === 'exit'), cursorTrack };
   } catch (error) {
     if (error !== paused) throw error;
     return { actions, handled: true };
@@ -856,6 +888,8 @@ export function traceForest(
 
 export function applyForestState(state: ForestState, action: RoomAction) {
   if (action.op === 'poison') state.poison = action.crossings;
+  if (action.op === 'cauldron') state.cauldron = action.state;
+  if (action.op === 'crystal') state.crystals[action.slot] = action.item;
   if (action.op === 'scatterGem') (state.scatteredGems[action.room] ??= []).push(action.item);
   if (action.op === "vase") state.vase = action.item;
   if (action.op === "flag") {

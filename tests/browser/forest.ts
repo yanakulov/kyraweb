@@ -677,7 +677,90 @@ document.querySelector('#faeriewood')!.addEventListener('click', async () => {
     game.stop();
     game = await startGame(canvas, { ...config, saveState: ending });
     if (game.getSaveState()?.quest.files[42] !== 'FOUNTN') throw Error('The repaired fountain did not survive a reload');
-    results.textContent += 'ALL PASSED — branch, Zanthia, Malcolm, frozen tree, restored fountain, magic water and blue jewel';
+    const supplies = validateWorldSave(game.getSaveState());
+    const slots = supplies.rooms[45].inventorySlots;
+    // Gems and tulip collected in the earlier chapters.
+    for (const item of ['item-8', 'item-6', 'item-4', 'item-17'] as const) slots[slots.indexOf(null)] = item;
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: supplies });
+    game.setWalkSpeed('fastest');
+    const equip = (item: Parameters<typeof slots.indexOf>[0]) => slot(game.getSnapshot().inventorySlots.indexOf(item));
+    const brew = () => click(188, 76);
+    async function spareFlask() {
+      const find = () => game.getSnapshot().sceneItems.find(item => item.id === 'item-78');
+      if (!find()) await route(44, 45);
+      const flask = find();
+      if (!flask) throw Error('Zanthia did not leave a spare flask');
+      await click(flask.x, flask.y - 4);
+      held('item-78');
+    }
+
+    await route(44, 43, 42, 53, 39, 55, 46, 64, 63, 62, 59, 58, 57, 54, 40);
+    await click(248, 60);
+    held('item-40');
+    if (!game.getSaveState()?.quest.flags.includes(189)) throw Error('The fresh blueberry did not advance the quest');
+    await route(54, 57, 58, 59, 62, 63, 64, 46, 55, 42, 43, 44, 45);
+    expectScore(22);
+    await brew();
+    held(null);
+    await equip('item-8');
+    await brew();
+    held(null);
+    await equip('item-78');
+    await brew();
+    held('item-62');
+    await putAway();
+    await click(236, 112);
+    if (!game.getSaveState()?.quest.flags.includes(194)) throw Error('The rug did not reveal the trapdoor');
+    await click(252, 114);
+    await until(() => id === 80 && !loading && !playing, 'the stump trapdoor');
+    expectScore(21);
+    await route(86, 81, 82, 83, 84, 52);
+    await click(80, 100);
+    held('item-18');
+    capture('Orchids at the tropical lagoon');
+    await putAway();
+    await route(84, 83, 82, 81, 86, 80);
+    await click(184, 108);
+    await until(() => id === 45 && !loading && !playing, 'return to the lab');
+    expectScore(22);
+    await equip('item-18');
+    await brew();
+    await equip('item-6');
+    await brew();
+    await spareFlask();
+    await brew();
+    held('item-60');
+    await putAway();
+    await equip('item-17');
+    await brew();
+    await equip('item-4');
+    await brew();
+    await spareFlask();
+    await brew();
+    held('item-64');
+    await putAway();
+    capture('The cauldron after brewing');
+
+    await click(252, 114);
+    await until(() => id === 80 && !loading && !playing, 'return to the woods');
+    await route(94, 97, 98, 102, 106, 105, 49);
+    await equip('item-60');
+    await click(146, 80);
+    held(null);
+    const halfMixed = validateWorldSave(game.getSaveState());
+    if (halfMixed.quest.crystals?.[0] !== 60 || halfMixed.quest.cauldron !== 9) throw Error('The saved alchemy state is incomplete');
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: halfMixed });
+    await equip('item-62');
+    await click(180, 80);
+    held('item-68');
+    const mixed = validateWorldSave(game.getSaveState());
+    if (mixed.quest.crystals?.some(potion => potion !== -1) || mixed.rooms[49].runtime!.shapes.length)
+      throw Error('The mixed crystals did not reset');
+    capture('Purple potion from the Crystals of Alchemy');
+
+    results.textContent += 'ALL PASSED — fountain, blueberries, trapdoor, potion recipes and alchemy save/reload';
     document.title = 'PASS — Enchanted Fountain';
   } catch (error) {
     results.textContent += `FAIL ${error}`;

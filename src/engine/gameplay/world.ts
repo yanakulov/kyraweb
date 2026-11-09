@@ -199,7 +199,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       for(const action of announce)applyForestState(planned,action);
       entryActions=[...(entryActions??[]),...announce,...traceForest(questRoom,3,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions];
     }
-    if (id === 45 && previous === 39 && !planned.flags.has(161)) {
+    if (from?.id === 'script' && ((id === 80 && previous === 45) || (id === 45 && previous === 80)) ||
+        id === 45 && previous === 39 && !planned.flags.has(161)) {
       setupActions.push({ op: 'visible', visible: false });
     }
     if (from && from.id !== 'phase' && meta.title && ![...setupActions, ...(entryActions ?? [])].some(action =>
@@ -289,13 +290,15 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       },
       onActorInteract: snapshot => {
         const { itemInHand, pos } = snapshot;
-        if (itemInHand === 'item-55' || (id === 41 || id === 117) && itemInHand === 'item-80' ||
-            itemInHand === 'item-76' || itemInHand === 'item-77') {
+        const item = originalItem(itemInHand);
+        if (item === 40 || item === 55 || item === 80 && (id === 41 || id === 117) ||
+            item >= 60 && item <= 66 || item === 67 && id !== 52 ||
+            item >= 70 && item <= 79) {
           return traceForest({ ...meta, clipFrames: questRoom?.clipFrames ?? {}, npcFrames: {}, ...forest.flute },
-            0, quest, snapshot).actions;
+            0, quest, snapshot).actions.map(action => action.op === 'say' ? { ...action, voiceBank: 'CHAPTER1' } : action);
         }
         const actions = itemInHand === 'letter' ? forest.letter[quest.flags.has(129) ? 'readable' : 'sealed']
-          : id === 24 && !itemInHand ? forest.caveSelf : forest.self?.[originalItem(itemInHand)];
+          : id === 24 && !itemInHand ? forest.caveSelf : forest.self?.[item];
         return actions?.map(action => action.op === 'say' ? { ...action, voiceBank: 'CHAPTER1', x: pos.x, y: pos.y - 56 } : action) ?? null;
       },
       onInteract: questRoom?(point,snapshot)=>{
