@@ -9,7 +9,7 @@ export type SaveSlot = { index: number; save: SaveRecord | null; error: string |
 const SLOT_COUNT = 3, MAX_RECORD_LENGTH = 1_000_000, MAX_THUMBNAIL_LENGTH = 400_000;
 export const AUTOSAVE_SLOT = SLOT_COUNT;
 const AUTOSAVE_KEY = 'kyrandia.autosave';
-const forestFiles = new Set('GEMCUT HEALER SICKWIL ALTAR BROKEN BRIDGE SORROW TRUNK FNORTH FGOWEST WILLOW FORESTB FORESTA XEDGE XEDGEC CAVEB NWCLIFB'.split(' '));
+const forestFiles = new Set('GEMCUT HEALER SICKWIL ALTAR BROKEN BRIDGE SORROW TRUNK FNORTH FGOWEST WILLOW FORESTB FORESTA XEDGE XEDGEC CAVEB NWCLIFB ALGAE FOUNTN'.split(' '));
 const itemNames = new Set('letter ruby saw apple appleEaten rose silverRose marble teardrop'.split(' '));
 const slotKey = (index: number) => `kyrandia.save.${index + 1}`;
 

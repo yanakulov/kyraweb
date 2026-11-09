@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { MusicPlayer } from '../src/engine/audio/music';
 import { loadAdlib } from '../src/engine/audio/adlib';
+import { wanderCue } from '../src/engine/audio/cues';
 
 /** Controller-only tests: the actual WASM output has a separate integration check. */
 function environment(saved: string | null, delayed = false, host = 'localhost', voices = false, renderer: string | null = host === 'localhost' ? 'mt32' : null) {
@@ -175,13 +176,13 @@ test('missing saved Roland ROMs fall back to AdLib without overriding a saved mu
   } finally { player.dispose(); env.restore(); }
 });
 
-test('the real AdLib WASM plays the title, forest and Timbermist score changes', async () => {
+test('the real AdLib WASM plays the title and the original forest, Timbermist and Faeriewood scores', async () => {
   const synth = await loadAdlib(Uint8Array.from(readFileSync('public/assets/audio/adlib.wasm')).buffer, 48000);
   const left = new Float32Array(48000), right = new Float32Array(48000);
-  function signal(file: string, track: number) {
+  function signal(file: string, track: number, seconds = 4) {
     const bank = Uint8Array.from(gunzipSync(readFileSync(`public/assets/music/${file.toLowerCase()}.adl.gz`))).buffer;
     synth.play(bank, file, track);
-    for (let i = 0; i < 4; i++) synth.render(left, right);
+    for (let i = 0; i < seconds; i++) synth.render(left, right);
     return Math.sqrt(left.reduce((sum, sample) => sum + sample * sample, 0) / left.length);
   }
   const title = signal('INTRO', 2), forest = signal('KYRA1A', 3);
@@ -190,5 +191,9 @@ test('the real AdLib WASM plays the title, forest and Timbermist score changes',
   assert.ok(timbermist.every(rms => rms > .002), 'the forest, Darm, songbird and Malcolm cues all reach the synth');
   assert.equal(new Set(timbermist.slice(0, -1)).size, 5, 'each command changes the audible score');
   assert.equal(timbermist.at(-1), timbermist[0], 'returning to the forest restarts its theme');
+  for (const command of [21, 22, 23, 24, 25, 26, 32, 55]) {
+    const cue = wanderCue(command)!;
+    assert.ok(signal(cue.file, cue.track, 1) > .001, `Faeriewood score ${command} is audible`);
+  }
   assert.equal(signal('KYRA1B', 0), 0, 'the stop command renders silence');
 });

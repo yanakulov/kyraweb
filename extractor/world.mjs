@@ -6,6 +6,7 @@ import { readGameResources, decodeCps, decodeFrame4, decodeWsa } from './indexed
 import { encodeScenePack } from './scene_pack.mjs';
 import { parseEmc, runEmc } from './emc.mjs';
 import { shadowrealm } from './shadowrealm.mjs';
+import { faeriewood } from './faeriewood.mjs';
 
 // DOS room IDs and N/E/S/W connections, ScummVM devtools/create_kyradat/resources/lok_dos.h.
 // BROKEN's west exit (24) is deliberately unavailable while the bridge is broken.
@@ -30,7 +31,7 @@ export const REGION = [
   ['WELL', 30, 28, 18, 34], ['SQUARE', 26, 30, 34, 29],
   ['WISE', 33, 32, 21, 17], ['RUBY', null, null, 31, null], ['DEAD', 18, 19, null, null]
 ];
-Object.assign(REGION, shadowrealm);
+Object.assign(REGION, shadowrealm, faeriewood);
 
 // ScummVM copyBackgroundBlock: restore the interleaved forest backdrop columns.
 export function restoreBackgroundColumns(pixels, blocks, height=128) {

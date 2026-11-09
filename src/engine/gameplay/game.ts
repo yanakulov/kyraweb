@@ -1,6 +1,6 @@
 import { sceneShuffle } from './sceneShuffle';
 import { locale, t, translateGameText } from '../../i18n';
-import { DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_HITBOX, PURPLE_JEWEL_POS, ROOM_ART, TICK_MS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from "../core/constants";
+import { BLUE_JEWEL_FLAG, BLUE_JEWEL_HITBOX, BLUE_JEWEL_POS, DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_HITBOX, PURPLE_JEWEL_POS, ROOM_ART, TICK_MS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from "../core/constants";
 import { loadImage, loadMask, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
 import {
@@ -34,11 +34,12 @@ import { startWorldGame } from "./world";
 import { exitCursor, portalAtPoint, roomViewPortals } from "./navigation";
 import type { ControlMode, DropAnim, GameConfig, InventoryItemId, RoomRuntimeSnapshot, RoomSnapshot, SceneItem, SceneOverlayState, Vec2, WorldSave } from "../core/types";
 
-const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell', 'brantalk', 'dodge', 'frozen', 'branbrn']);
-const heroOffsets: Record<string, number> = { flute: -12, cure: -11, poison: -31, wisp: -20, winter: -20 };
+const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell', 'brantalk', 'dodge', 'frozen', 'branbrn', 'bonk', 'waken', 'frog']);
+const heroOffsets: Record<string, number> = { flute: -12, cure: -11, poison: -31, wisp: -20, winter: -20, drink: -20, dispel: -32 };
 const jewels = [
   { color: 'yellow', clip: 'yellow-jewel', flag: YELLOW_JEWEL_FLAG, pos: YELLOW_JEWEL_POS, hit: YELLOW_JEWEL_HITBOX },
   { color: 'purple', clip: 'purple-jewel', flag: PURPLE_JEWEL_FLAG, pos: PURPLE_JEWEL_POS, hit: PURPLE_JEWEL_HITBOX },
+  { color: 'blue', clip: 'blue-jewel', flag: BLUE_JEWEL_FLAG, pos: BLUE_JEWEL_POS, hit: BLUE_JEWEL_HITBOX },
 ] as const;
 const behindActors = (clip: string) => clip === 'face' || clip === 'face2' || clip === 'songbird-rest';
 const STATUS_MESSAGE_MS = 2400;
@@ -130,6 +131,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const activeJewels = new Set<number>();
     if (config.yellowJewel) activeJewels.add(YELLOW_JEWEL_FLAG);
     if (config.purpleJewel) activeJewels.add(PURPLE_JEWEL_FLAG);
+    if (config.blueJewel) activeJewels.add(BLUE_JEWEL_FLAG);
     let shakeUntil = 0;
     const reduceMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
     let dead=false;
@@ -895,6 +897,12 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         case 'shake': shakeUntil = clockMs + action.ms; break;
         case 'exit':config.onExit?.({id:'script',target:action.target,side:'north',entry:action.entry,rect:{x:0,y:0,w:0,h:0},point:state.pos});break;
         case 'palette':if(roomPalette){const to=roomPalette.slice();to.splice(action.start*3,action.colors.length,...action.colors);paletteFade={from:roomPalette.slice(),to,ms:action.ms,age:0,step:-1};updatePalette(0);}break;
+        case 'fadeIn':
+          if (roomPalette) {
+            paletteFade = { from: Array(roomPalette.length).fill(0), to: roomPalette.slice(), ms: action.ms, age: 0, step: -1 };
+            updatePalette(0);
+          }
+          break;
         case 'flag':
           if (action.flag === 45) {
             hasAmulet = action.value;
@@ -992,6 +1000,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         }
         case "close":
           if (action.clip === 'note') config.onNoteChange?.(false);
+          if (action.clip === 'bonk') break; // Keep Brandon unconscious until the scene fades out.
           // Closing the movie releases its decoder, not its last screen pixels.
           // TAG-0 is the resting boy while Brandon walks to the next TAG movie.
           if(action.clip!=='tag-0')scriptLayers.delete(action.clip);
