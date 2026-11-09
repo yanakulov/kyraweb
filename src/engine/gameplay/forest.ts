@@ -4,10 +4,10 @@ import { findWalkPath, pathDirection } from "./pathfinding";
 import specialPalettes from "../resources/specialPalettes.json";
 import { runEmc, type EmcProgram } from "../../../extractor/emc.mjs";
 import type { RoomAction } from "./roomScript";
-import type { RoomSnapshot, Vec2, InventoryItemId } from "../core/types";
+import type { RoomSnapshot, Vec2, InventoryItemId, SceneItem } from "../core/types";
 import type { CursorTrack, WorldRoom } from "./world";
 import { actorScaleAt } from '../characters/brandonFrames';
-import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, isShadowrealmRoom, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
+import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, isWorldRoomId, isShadowrealmRoom, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 
 export type ForestRoom = WorldRoom & {
   program: EmcProgram;
@@ -46,6 +46,7 @@ export type ForestState = {
   poison: number;
   cauldron: number;
   crystals: [number, number];
+  pendingItems: Record<number, SceneItem[]>;
   merith: { x: number; y: number; facing: number; shape: number; room: number };
   herman: { x: number; y: number; facing: number; shape: number; room: number };
 };
@@ -61,6 +62,7 @@ export function createForestState(): ForestState {
     poison: 0,
     cauldron: 0,
     crystals: [-1, -1],
+    pendingItems: {},
     merith: { x: -16, y: 126, facing: 3, shape: 41, room: -1 },
     herman: { x: 224, y: 94, facing: 5, shape: 88, room: 7 },
   };
@@ -167,6 +169,7 @@ export function traceForest(
   walkable: (p: Vec2) => boolean = () => true,
   confirmations: Vec2[] = [],
   mouseState = originalItem(snapshot.itemInHand),
+  jewel = 1,
 ): { actions: RoomAction[]; handled: boolean; cursorTrack?: CursorTrack } {
   const initialState = {
     ...state,
@@ -195,6 +198,7 @@ export function traceForest(
     hand = originalItem(snapshot.itemInHand);
   let poison = state.poison, wisp = !!snapshot.wispMs, cauldron = state.cauldron;
   const crystals = [...state.crystals];
+  const scaleOverrides = new Map<number, number>();
   const delays: Record<number, number> = { 0: snapshot.walkDelayTicks ?? 6, 1: 7, 2: 8 };
   const slots = new Map<number, string>();
   const emit = (action: RoomAction) => actions.push(action);
@@ -224,8 +228,8 @@ export function traceForest(
   };
   const npcAction = () =>
     emit({ op: "npc", character, ...npc, visible: npc.room === room.id && npc.shape !== 88 });
-  const animateDarm = (talking: boolean) => {
-    for (const [index, enabled] of [[5, !talking], [6, talking]] as const) {
+  const animateTalk = (idle: number, speech: number, talking: boolean) => {
+    for (const [index, enabled] of [[idle, !talking], [speech, talking]] as const) {
       emit({ op: "ambient", index, enabled, internal: false });
       emit({ op: "ambient", index, enabled, internal: true });
     }
@@ -299,7 +303,7 @@ export function traceForest(
                 traceForest(room, fn, initialState, snapshot, point, walkable, [
                   ...confirmations,
                   answer,
-                ], mouseState).actions,
+                ], mouseState, jewel).actions,
             });
             throw paused;
           }
@@ -426,6 +430,7 @@ export function traceForest(
           case 0x30:
             actor = { x: a[0] & ~3, y: a[1] & ~1, facing: a[2] };
             emit({ op: "actor", ...actor, visible: true });
+            if (scaleOverrides.has(actor.y)) emit({ op: 'heroScale', value: scaleOverrides.get(actor.y)! / 256 });
             return 0;
           case 0x3a:
             if (a[0] > 0) {
@@ -526,9 +531,12 @@ export function traceForest(
             }
             return 0;
           }
-          case 0x29:
-            slots.set(a[1], text[a[0]].slice(0, -4).toLowerCase());
+          case 0x29: {
+            const clip = text[a[0]].slice(0, -4).toLowerCase();
+            slots.set(a[1], clip);
+            if (clip === 'pegasus' || clip === 'lep_in' || clip === 'lepclimb') emit({ op: 'visible', visible: false });
             return 0;
+          }
           case 0x2a:
             if (slots.has(a[0])) {
               const clip = slots.get(a[0])!;
@@ -586,16 +594,19 @@ export function traceForest(
             // SPELL's shared WSA uses different anchors for Darm and Brandywine.
             const speaker = custom ? (room.name === 'SPELL' ? (a[3] === 36 ? 8 : 'brandywine') : undefined) : a[2];
             const darm = room.name === 'SPELL' && speaker === 8;
+            const faun = room.name === 'LEPHOLE' && speaker === 10;
             const partner = typeof speaker === 'number' ? npcs[speaker] : undefined;
             const anchor = custom ? { x: a[2], y: a[3] }
               : partner ? { x: partner.x, y: partner.y - 56 }
               : darm ? { x: 140, y: 36 }
+              : faun ? { x: 66, y: 62 }
               : speaker === 5 ? { x: 44, y: 44 }
               : { x: actor.x, y: actor.y - 56 };
             if (darm && !custom) {
               emit({ op: "waitVoice" });
-              animateDarm(true);
+              animateTalk(5, 6, true);
             }
+            if (faun) animateTalk(6, 7, true);
             emit({
               op: "say",
               text: text[a[1]],
@@ -605,7 +616,7 @@ export function traceForest(
               ...anchor,
               color: custom
                 ? a[4]
-                : darm ? 85 : speaker === 2
+                : darm ? 85 : faun ? 0x3a : speaker === 2
                   ? 201
                   : speaker === 1
                     ? 144
@@ -616,7 +627,8 @@ export function traceForest(
             });
             if (!custom) {
               voiceElapsed = voiceMs;
-              if (darm) animateDarm(false);
+              if (darm) animateTalk(5, 6, false);
+              if (faun) animateTalk(6, 7, false);
             }
             return 0;
           }
@@ -683,7 +695,10 @@ export function traceForest(
           case 0x0c:
           case 0x7c:
           case 0x47:
-            if (id === 0x47 && a[3] !== room.id) return 0;
+            if (id === 0x47 && a[3] !== room.id) {
+              if (isWorldRoomId(a[3])) emit({ op: 'offsceneItem', room: a[3], item: { id: itemFromOriginal(a[0])!, x: a[1], y: a[2] } });
+              return 0;
+            }
             emit({
               op: "item",
               item: itemFromOriginal(a[0])!,
@@ -803,6 +818,24 @@ export function traceForest(
             emit({ op: "sceneFile", room: a[0], name });
             return 0;
           }
+          case 0x85:
+          case 0x86: {
+            const normal = Math.round(actorScaleAt(actor.y, room.actorScale) * 256);
+            const half = normal >> 1;
+            const direction = id === 0x85 ? -1 : 1;
+            for (let scale = direction < 0 ? normal : half; scale >= half && scale <= normal; scale += direction) {
+              emit({ op: 'heroScale', value: scale / 256 });
+              wait(1000 / 60);
+            }
+            if (id === 0x85) wait(a[0] * 1000 / 60);
+            emit({ op: 'heroScale' });
+            return 0;
+          }
+          case 0x89:
+            return scaleOverrides.get(a[0]) ?? Math.round(actorScaleAt(a[0], room.actorScale) * 256);
+          case 0x8a:
+            scaleOverrides.set(a[0], a[1]);
+            return a[1];
           case 0x8b:
             emit({ op: "message", text: text[a[1]] });
             return 0;
@@ -869,7 +902,7 @@ export function traceForest(
             );
         }
       },
-      { 0: room.id, 1: point.x | 0, 2: point.y | 0, 3: 0, 4: hand, 6: fn === 4 ? 1 : 0, 7: 0 },
+      { 0: room.id, 1: point.x | 0, 2: point.y | 0, 3: 0, 4: hand, 6: fn === 4 ? jewel : 0, 7: 0 },
     );
     // The fire movie covers only part of the conversation frame. Closing the
     // WSA leaves its pixels in place until the next movie draws over them.
@@ -890,6 +923,7 @@ export function applyForestState(state: ForestState, action: RoomAction) {
   if (action.op === 'poison') state.poison = action.crossings;
   if (action.op === 'cauldron') state.cauldron = action.state;
   if (action.op === 'crystal') state.crystals[action.slot] = action.item;
+  if (action.op === 'offsceneItem') (state.pendingItems[action.room] ??= []).push(action.item);
   if (action.op === 'scatterGem') (state.scatteredGems[action.room] ??= []).push(action.item);
   if (action.op === "vase") state.vase = action.item;
   if (action.op === "flag") {

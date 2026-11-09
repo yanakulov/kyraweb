@@ -45,6 +45,8 @@ export type RoomAction =
   | { op: "crystal"; slot: 0 | 1; item: number }
   | { op: "wisp"; ms: number }
   | { op: "heroFrame"; clip?: string; index?: number }
+  | { op: "heroScale"; value?: number }
+  | { op: "offsceneItem"; room: number; item: import("../core/types").SceneItem }
   | { op: "ambientPosition"; index: number; x: number; y: number }
   | { op: "sceneFile"; room: number; name: string }
   | {

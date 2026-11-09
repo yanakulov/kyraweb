@@ -680,7 +680,7 @@ document.querySelector('#faeriewood')!.addEventListener('click', async () => {
     const supplies = validateWorldSave(game.getSaveState());
     const slots = supplies.rooms[45].inventorySlots;
     // Gems and tulip collected in the earlier chapters.
-    for (const item of ['item-8', 'item-6', 'item-4', 'item-17'] as const) slots[slots.indexOf(null)] = item;
+    for (const item of ['item-8', 'item-6', 'item-4', 'item-17', 'apple'] as const) slots[slots.indexOf(null)] = item;
     game.stop();
     game = await startGame(canvas, { ...config, saveState: supplies });
     game.setWalkSpeed('fastest');
@@ -732,6 +732,10 @@ document.querySelector('#faeriewood')!.addEventListener('click', async () => {
     await brew();
     held('item-60');
     await putAway();
+    await spareFlask();
+    await brew();
+    held('item-60');
+    await putAway();
     await equip('item-17');
     await brew();
     await equip('item-4');
@@ -760,8 +764,75 @@ document.querySelector('#faeriewood')!.addEventListener('click', async () => {
       throw Error('The mixed crystals did not reset');
     capture('Purple potion from the Crystals of Alchemy');
 
-    results.textContent += 'ALL PASSED — fountain, blueberries, trapdoor, potion recipes and alchemy save/reload';
-    document.title = 'PASS — Enchanted Fountain';
+    await putAway();
+    await equip('item-60');
+    await click(146, 80);
+    await equip('item-64');
+    await click(180, 80);
+    held('item-67');
+    await putAway();
+
+    await route(105, 106, 102, 98, 97, 94, 80);
+    await click(184, 108);
+    await until(() => id === 45 && !playing && !loading, 'back from the crystals');
+    await route(44, 43, 42, 47, 46);
+    expectScore(29);
+    await click(143, 49);
+    if (!lines.some(line => line.includes("It's stuck"))) throw Error('The floating chalice did not react');
+    await click(286, 177);
+    if (!game.getSaveState()?.quest.flags.includes(188) || !lines.some(line => line.includes('Bring that back')))
+      throw Error('The blue jewel did not free the chalice for the Faun to steal');
+    await travel(47);
+    await equip('item-68');
+    await useOnBrandon();
+    await until(() => id === 48 && !playing && !loading, 'inside the Faun’s house');
+    expectScore(27);
+    held('item-79');
+    await putAway();
+    const faunSave = validateWorldSave(game.getSaveState());
+    if (!faunSave.quest.pendingItems?.[102]?.some(item => item.id === 'apple') ||
+        !lines.some(line => line.includes('very safe place')))
+      throw Error('The Faun did not hide the chalice and spawn the spare apple');
+    capture('The Faun inside his home');
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: faunSave });
+    await equip('apple');
+    await click(75, 99);
+    held(null);
+    const traded = validateWorldSave(game.getSaveState());
+    if (!traded.quest.pendingItems?.[47]?.some(item => item.id === 'item-24'))
+      throw Error('The Faun did not leave the chalice outside');
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: traded });
+    await travel(47);
+    expectScore(21);
+    const cup = game.getSnapshot().sceneItems.find(item => item.id === 'item-24');
+    if (!cup) throw Error('The royal chalice is missing after returning outside');
+    await click(cup.x, cup.y - 4);
+    held('item-24');
+    await putAway();
+    await route(42, 43, 44, 45);
+    await click(252, 114);
+    await until(() => id === 80 && !playing && !loading, 'towards the lagoon');
+    await route(86, 81, 82, 83, 84, 52);
+    await equip('item-67');
+    const hero = game.getSnapshot().pos;
+    game.handleClick({ x: hero.x, y: hero.y - 12 });
+    await until(() => scores.at(-1) === 34, 'Pegasus takeoff score');
+    advance(2500);
+    capture('Pegasus transformation at the lagoon');
+    await until(() => id === 199 && !playing && !loading, 'arrival on Castle Kyrandia’s island');
+    expectScore(31);
+    held(null);
+    if (!game.getSnapshot().inventorySlots.includes('item-24') || !lines.some(line => line.includes('That was wild')))
+      throw Error('The landing sequence did not finish with the chalice');
+    capture('Brandon on the castle island');
+    const arrived = validateWorldSave(game.getSaveState());
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: arrived });
+    if (game.getSaveState()?.currentRoom !== 199) throw Error('The island checkpoint did not restore');
+    results.textContent += 'ALL PASSED — Faeriewood, chalice, Faun, Pegasus and the castle island';
+    document.title = 'PASS — Faeriewood to Castle Kyrandia';
   } catch (error) {
     results.textContent += `FAIL ${error}`;
     document.title = 'FAIL — Enchanted Fountain';

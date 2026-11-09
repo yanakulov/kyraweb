@@ -76,7 +76,7 @@ export type WorldSave = {
   currentRoom: number;
   rooms: Record<number, RoomSnapshot>;
   quest: { flags: number[]; files: Record<number, string>; phasing: boolean; vase: number; vaseInitialized?: boolean; merith: SavedNpc; herman: SavedNpc;
-    birthstones?: number[]; scatteredGems?: Record<number, number[]>; poison?: number; cauldron?: number; crystals?: [number, number] };
+    birthstones?: number[]; scatteredGems?: Record<number, number[]>; poison?: number; cauldron?: number; crystals?: [number, number]; pendingItems?: Record<number, SceneItem[]> };
   settings: { atmosphere: boolean; walkSpeed: "slowest" | "slow" | "fast" | "fastest"; animStepInterval: number };
 };
 

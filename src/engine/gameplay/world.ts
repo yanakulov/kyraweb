@@ -50,6 +50,8 @@ export function roomPortals(room: WorldRoom, mask: MaskData, track = room.cursor
   if (room.id === 5) portals.unshift({ id: "lift", target: 1, side: "north", rect: { x: 235, y: 8, w: 66, h: 107 }, point: nearestFloor(mask, { x: 264, y: 108 }) });
   if (room.id === 1) portals.unshift({ id: "lift", target: 5, side: "south", rect: { x: 232, y: 96, w: 40, h: 40 }, point: nearestFloor(mask, { x: 216, y: 106 }) });
   // EMC describes the visible entrance separately from the strip Brandon has to cross.
+  if (room.id === 48 && track) portals.unshift({ ...track, id: 'faun-door', target: 47,
+    point: nearestFloor(mask, { x: 274, y: 100 }) });
   const tracked = track && portals.find(portal => portal.side === track.side);
   if (tracked) portals.unshift({ ...tracked, rect: track.rect });
   return portals.filter(p => isWorldRoomId(p.target));
@@ -121,7 +123,10 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     return pending;
   }
   function prepareNeighbours(portals: RoomPortal[]) {
-    for (const id of new Set(portals.map(portal => portal.target))) {
+    const destinations = new Set(portals.map(portal => portal.target));
+    if (currentId === 47) destinations.add(48);
+    if (currentId === 52) destinations.add(199);
+    for (const id of destinations) {
       const { meta, src } = roomSource(id);
       // A failed speculative request is retried by the real entrance, with its normal error UI.
       if (meta) void prepare(src).catch(() => {});
@@ -156,7 +161,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     const snapshot={...resume, inventorySlots: ageBerries ? carried.inventorySlots.map(ageFireberry) : carried.inventorySlots,
       itemInHand: ageBerries ? ageFireberry(carried.itemInHand) : carried.itemInHand,
       wispMs: carried.wispMs,
-      sceneItems: resume.sceneItems.map(item => ({ ...item })), pos:arrival,facing,walkDelayTicks:({slowest:11,slow:9,fast:6,fastest:3})[settings.walkSpeed]};
+      sceneItems: [...resume.sceneItems, ...(quest.pendingItems[id] ?? [])].map(item => ({ ...item })), pos:arrival,facing,walkDelayTicks:({slowest:11,slow:9,fast:6,fastest:3})[settings.walkSpeed]};
     let cursorTrack = meta.cursorTrack;
     if (questRoom) {
       const setup = traceForest(questRoom, 0, planned, snapshot);
@@ -199,8 +204,10 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       for(const action of announce)applyForestState(planned,action);
       entryActions=[...(entryActions??[]),...announce,...traceForest(questRoom,3,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions];
     }
-    if (from?.id === 'script' && ((id === 80 && previous === 45) || (id === 45 && previous === 80)) ||
-        id === 45 && previous === 39 && !planned.flags.has(161)) {
+    const scriptedArrival = from?.id === 'script' && (
+      id === 80 && previous === 45 || id === 45 && previous === 80 ||
+      id === 48 && previous === 47 || id === 47 && previous === 48 || id === 199 && previous === 52);
+    if (scriptedArrival || id === 45 && previous === 39 && !planned.flags.has(161)) {
       setupActions.push({ op: 'visible', visible: false });
     }
     if (from && from.id !== 'phase' && meta.title && ![...setupActions, ...(entryActions ?? [])].some(action =>
@@ -247,7 +254,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
         const closingGate = id === 115 && !quest.flags.has(116) && !quest.flags.has(117);
         const chasm = id === 114 && (portal.target === 120 && !quest.flags.has(113) || portal.target === 121 && quest.flags.has(113));
         const lava = id === 117 && portal.target === 198 && !quest.flags.has(179);
-        if (!grotto && !closingGate && !chasm && !lava) return null;
+        if (!grotto && !closingGate && !chasm && !lava && portal.id !== 'faun-door') return null;
         const trigger = closingGate ? { x: 165, y: 100 } : chasm ? { x: 180, y: portal.target === 120 ? 52 : 108 } : lava ? { x: 8, y: 8 } : point;
         return traceForest(questRoom, 1, quest, snapshot, trigger,
           p => isWalkable(p, { uiMaskY: 136 } as GameConfig['scene'], mask), [], grotto ? -5 : originalItem(snapshot.itemInHand)).actions;
@@ -259,8 +266,13 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
         if (snapshot.itemInHand) return [say("Maybe I'd better put this down first.", 2000, 2019)];
         if (jewel === 'blue') {
           if (!quest.flags.has(BLUE_JEWEL_FLAG)) return [say("It's a jewel, but why is it black?", 2002, 2234)];
-          return [{ op: 'sfx', track: 0x45 }, { op: 'frame', clip: 'blue-jewel', index: 11, ...BLUE_JEWEL_POS, ms: 100 },
-            { op: 'close', clip: 'blue-jewel' }, ...dispelMagic(id, !!snapshot.wispMs), say('That felt strange.', 2007, forest.flute.durations[2007] ?? 1900)];
+          const pressed: RoomAction[] = [{ op: 'sfx', track: 0x45 },
+            { op: 'frame', clip: 'blue-jewel', index: 11, ...BLUE_JEWEL_POS, ms: 100 },
+            { op: 'close', clip: 'blue-jewel' }];
+          const spell = id === 46 && questRoom ? traceForest(questRoom, 4, quest, snapshot, snapshot.pos,
+            p => isWalkable(p, { uiMaskY: 136 } as GameConfig['scene'], mask), [], -1, 4) : undefined;
+          return [...pressed, ...(spell?.handled ? spell.actions : [...dispelMagic(id, !!snapshot.wispMs),
+            say('That felt strange.', 2007, forest.flute.durations[2007] ?? 1900)])];
         }
         if (jewel === 'purple') {
           if (!quest.flags.has(PURPLE_JEWEL_FLAG)) return [say("It's a jewel, but why is it black?", 2002, 2234)];
@@ -292,7 +304,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
         const { itemInHand, pos } = snapshot;
         const item = originalItem(itemInHand);
         if (item === 40 || item === 55 || item === 80 && (id === 41 || id === 117) ||
-            item >= 60 && item <= 66 || item === 67 && id !== 52 ||
+            item >= 60 && item <= 68 ||
             item >= 70 && item <= 79) {
           return traceForest({ ...meta, clipFrames: questRoom?.clipFrames ?? {}, npcFrames: {}, ...forest.flute },
             0, quest, snapshot).actions.map(action => action.op === 'say' ? { ...action, voiceBank: 'CHAPTER1' } : action);
@@ -324,6 +336,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     if (active) for (const action of setupMusic) config.onScriptAction?.(action);
     game.setAtmosphere(settings.atmosphere); game.setWalkSpeed(settings.walkSpeed);
     game.setAnimStepInterval(settings.interval); game.setDebug(settings.debug);
+    delete quest.pendingItems[id];
     if (unplaced.length) quest.scatteredGems[id] = unplaced;
     else if (additions.length) delete quest.scatteredGems[id];
     return { game, meta, portals };
