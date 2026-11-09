@@ -12,7 +12,7 @@
       :walk-speed="walkSpeed" :control-mode="controlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen"
       :music="music" :music-state="musicState" @begin="beginOpening" @ready="bookOptionsReady"
       @open="openBook" @prologue="finishPrologue" @continue="continueJourney" @finish-setup="finishSetup"
-      @start="startJourney" @resume="resumeBook" @returned="finishBookResume" @save="saveChapter" @load="loadChapter"
+      @start="startJourney" @resume="resumeBook" @returned="finishBookResume" @save="saveChapter" @load="loadChapter" @delete="deleteChapter"
       @control="setControlMode" @speed="walkSpeed = $event" @fullscreen="toggleFullscreen"
       @leave="leaveBook" @dev-run="launchDevScene" @leave-dev="returnToStory" />
     <FantasyBook v-if="!pixelBook && !bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :opening-frame-ready="openingFrameReady || !!openingSnapshot || !!gameError" :snapshot="openingSnapshot ?? undefined" :frame-focus="bookFocus" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="beginOpening" @ready="openingReadingReady = true" @open="openBook">
@@ -98,7 +98,8 @@ function menuClick(event: MouseEvent) {
   const control = menuControl(event.target);
   if (control && (!control.matches('label') || event.target instanceof HTMLInputElement)) music.bookSound('click');
 }
-import { AUTOSAVE_SLOT, readAutosave, readSaveSlots, writeAutosave, writeSaveSlot, type SaveRecord, type SaveSlot } from './engine/gameplay/saveStorage';
+import { AUTOSAVE_SLOT, readAutosave, readSaveSlots, writeAutosave, writeSaveSlot, deleteSaveSlot, type SaveRecord, type SaveSlot } from './engine/gameplay/saveStorage';
+import { roomFrameFocus } from './components/bookTransition';
 import type { DevRoom, DevRoomScene, DevScene } from './engine/gameplay/devScenes';
 const activeDevScene = shallowRef<DevScene | null>(null);
 const devFinished = ref(false);
@@ -351,7 +352,7 @@ function captureBookFrame() {
   const copy = document.createElement('canvas');
   copy.width = w; copy.height = h;
   copy.getContext('2d')!.drawImage(source, x, y, w, h, 0, 0, w, h);
-  if (actor) bookFocus.value = { x: (actor.x - x) / w, y: 1 - (actor.y - y - 20) / h };
+  if (actor) bookFocus.value = roomFrameFocus(actor);
   else if (kallakMenu.value) bookFocus.value = { x: .72, y: .61 };
   return copy;
 }
@@ -413,6 +414,13 @@ function saveChapter(index: number, name: string) {
     writeSaveSlot(index, { name, location: locationName.value, thumbnail: captureFrame().toDataURL('image/webp', .8), state });
     refreshSaveSlots(); bookMessage.value = `“${name}” saved.`;
   } catch (error) { bookMessage.value = error instanceof Error ? error.message : 'The chapter could not be saved.'; }
+}
+function deleteChapter(index: number) {
+  if (bookBusy.value) return;
+  try {
+    deleteSaveSlot(index);
+    if (refreshSaveSlots()) bookMessage.value = 'Chapter deleted.';
+  } catch (error) { bookMessage.value = error instanceof Error ? error.message : 'The chapter could not be deleted.'; }
 }
 async function restoreChapter(record?: StoryCheckpoint, devRoom?: DevRoom) {
   if (!canvasRef.value) throw new Error('The game is not ready.');

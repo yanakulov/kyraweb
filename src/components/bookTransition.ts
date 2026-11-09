@@ -1,3 +1,6 @@
+import { ROOM_ART } from '../engine/core/constants';
+import type { Vec2 } from '../engine/core/types';
+
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
 export const BOOK_READING_MS = 3000;
@@ -16,6 +19,11 @@ export function bookTransition(ms: number, reading = false) {
 }
 
 export function bookHandoff(zoom: number) { return smooth((zoom - .86) / .14); }
+
+export function roomFrameFocus(position: Vec2): Vec2 {
+  const { x, y, w, h } = ROOM_ART;
+  return { x: (position.x - x) / w, y: 1 - (position.y - y - 20) / h };
+}
 
 export function pageCameraDistance(viewportHeight: number, gameHeight: number, fov: number) {
   return 1.625 * viewportHeight / (gameHeight * 2 * Math.tan(fov * Math.PI / 360));
