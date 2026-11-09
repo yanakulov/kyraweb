@@ -549,3 +549,40 @@ test('a fractional voice remainder cannot trap the room script between lines', (
   script.update(0.3);
   assert.deepEqual(lines, ['first', 'second']);
 });
+
+test('the library and catacombs use the original crown, force field and hidden key scripts', () => {
+  const q = quest();
+  for (const [x, y] of [[286, 76], [13, 20], [10, 82]]) {
+    q.run('LIBRARY', 1, x, y);
+    assert.equal(q.snapshot.itemInHand, null);
+  }
+  const turn = q.run('LIBRARY', 1, 30, 77).actions;
+  assert.ok(turn.some(action => action.op === 'frame' && action.clip === 'fireplce' && action.shapes?.some(shape => shape.shape === 9)));
+  assert.equal(q.snapshot.itemInHand, 'item-103');
+  q.snapshot.itemInHand = null;
+  const ride = q.run('LIBRARY', 1, 149, 81).actions;
+  const actorFrame = ride.findIndex(action => action.op === 'frame' && action.shapes?.some(shape => shape.shape === 0));
+  assert.ok(actorFrame >= 0);
+  assert.ok(ride.slice(0, actorFrame).some(action => action.op === 'visible' && !action.visible));
+  assert.ok(ride.some(action => action.op === 'exit' && action.target === 245));
+
+  const field = { ...data.rooms.CATACOM, id: 232, exits: [230, null, null, 231] };
+  assert.ok(traceForest(field, 0, q.state, q.snapshot).actions.some(action => action.op === 'mask' && action.blocked));
+  const dispel = traceForest(field, 4, q.state, q.snapshot, q.snapshot.pos, () => true, [], -1, 4).actions;
+  assert.ok(dispel.some(action => action.op === 'heroFrame' && action.clip === 'dispel'));
+  for (const action of dispel) applyForestState(q.state, action);
+  assert.ok(q.state.flags.has(234));
+  assert.ok(!traceForest(field, 0, q.state, q.snapshot).actions.some(action => action.op === 'mask' && action.blocked));
+
+  q.snapshot.wispMs = 1000;
+  const before = q.run('CATACOM', 0).actions;
+  assert.ok(before.some(action => action.op === 'palette' && action.start === 234));
+  q.run('CATACOM', 1, 208, 63);
+  assert.ok(q.state.flags.has(235));
+  assert.equal(q.snapshot.itemInHand, null);
+  q.run('CATACOM', 1, 208, 63);
+  assert.equal(q.snapshot.itemInHand, 'item-105');
+  q.snapshot.itemInHand = null;
+  q.run('CATACOM', 1, 208, 63);
+  assert.equal(q.snapshot.itemInHand, null);
+});

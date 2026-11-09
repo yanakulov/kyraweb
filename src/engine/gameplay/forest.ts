@@ -7,7 +7,7 @@ import type { RoomAction } from "./roomScript";
 import type { RoomSnapshot, Vec2, InventoryItemId, SceneItem } from "../core/types";
 import type { CursorTrack, WorldRoom } from "./world";
 import { actorScaleAt } from '../characters/brandonFrames';
-import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, INVISIBILITY_MS, isCastleRoom, isWorldRoomId, isShadowrealmRoom, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, RED_JEWEL_FLAG, RED_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
+import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, INVISIBILITY_MS, isCatacombRoom, isCastleRoom, isWorldRoomId, isShadowrealmRoom, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, RED_JEWEL_FLAG, RED_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 
 export type ForestRoom = WorldRoom & {
   program: EmcProgram;
@@ -144,6 +144,7 @@ export function transformWisp(room: number, active: boolean): RoomAction[] {
   actions.push({ op: 'heroFrame' }, { op: 'face', shape: 7, facing: 5 });
   if (active) actions.push({ op: 'wisp', ms: cave ? 300_000 : 120_000 }, { op: 'flag', flag: 158, value: true });
   if (room >= 118 && room <= 186) actions.push({ op: 'palette', start: 228, colors: specialPalettes[14].slice(0, 45), ms: 1200 });
+  if (isCatacombRoom(room)) actions.push({ op: 'palette', start: 234, colors: specialPalettes[active ? 30 : 31].slice(0, 39), ms: 1200 });
   if (active && cave) actions.push({ op: 'music', command: 17, restart: false });
   return actions;
 }
@@ -210,6 +211,8 @@ export function traceForest(
   const scaleOverrides = new Map<number, number>();
   const delays: Record<number, number> = { 0: snapshot.walkDelayTicks ?? 6, 1: 7, 2: 8 };
   const slots = new Map<number, string>();
+  let fireplaceFrame: Extract<RoomAction, { op: 'frame' }> | undefined;
+  let fireplacePage = false;
   const emit = (action: RoomAction) => actions.push(action);
   const wait = (ms: number) => {
     if (ms > 0) {
@@ -272,7 +275,8 @@ export function traceForest(
             return 0;
           case 0x2d:
             if (room.id === 117 && a[0] === 117 && flags.has(179)) return 0; // The scroll already changed the river in place.
-            emit({ op: "exit", target: a[0], entry });
+            const side = room.id === 206 ? (["north", "east", "south", "west"] as const)[a[1] / 2] : undefined;
+            emit({ op: "exit", target: a[0], entry, side });
             return 0;
           case 0x1d:
             return a[0] === room.id ? room.exits[a[1] / 2] ?? -1 : -1;
@@ -566,6 +570,10 @@ export function traceForest(
             return 0;
           case 0x2c:
           case 0x3f:
+            if (fireplacePage && id === 0x3f) {
+              fireplaceFrame = { op: 'frame', clip: slots.get(a[4])!, index: a[0], x: a[1], y: a[2], ms: 0, shapes: [] };
+              return 0;
+            }
             frame(
               slots.get(a[4])!,
               a[0],
@@ -668,7 +676,9 @@ export function traceForest(
             return 0;
           case 3:
           case 0x0d:
-            emit({ op: "shape", shape: a[0], x: a[1], y: a[2], flags: a[3] });
+            const shape = { shape: a[0], x: a[1], y: a[2], flags: a[3] };
+            if (fireplaceFrame) fireplaceFrame.shapes!.push(shape);
+            else emit({ op: "shape", ...shape });
             return 0;
           case 9:
           case 10:
@@ -778,6 +788,7 @@ export function traceForest(
             actions.push(...heroFrames('drink', indices(0, 9).reverse(), 5), { op: 'heroFrame' });
             return 0;
           }
+          case 0x5c:
           case 0x6a:
             actions.push(...dispelMagic(room.id, wisp));
             wisp = false;
@@ -877,14 +888,29 @@ export function traceForest(
           case 0x28:
             if (room.id === 203 && fn === 1 && a[1] === a[3]) emit({ op: 'heroScale', value: a[1] / 256 });
             return 0;
+          case 0x0f:
+            if (room.id === 207) fireplacePage = true;
+            return 0;
+          case 0x33:
+            fireplacePage = false;
+            return 0;
+          case 0x3b:
+            if (fireplaceFrame) {
+              if (fn === 1 && fireplaceFrame.shapes?.some(shape => shape.shape === 0)) {
+                emit({ op: 'visible', visible: false });
+              }
+              emit(fireplaceFrame);
+              fireplaceFrame = undefined;
+            }
+            return 0;
+          case 0x99:
+            emit({ op: 'fill', x: a[1], y: a[2], w: a[3] - a[1] + 1, h: a[4] - a[2] + 1, color: a[5] });
+            return 0;
           // Engine configuration. Audio follows the original EMC calls.
           case 8:
-          case 0x0f:
           case 0x31:
-          case 0x33:
           case 0x36:
           case 0x37:
-          case 0x3b:
           case 0x44:
           case 0x46:
           case 0x54:

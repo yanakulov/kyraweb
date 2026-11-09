@@ -1,6 +1,6 @@
 # Forest regions
 
-The playable CD quest chain runs from Brandon’s home through Shadowrealm and Faeriewood to the first encounter with Malcolm inside Castle Kyrandia.
+The playable CD quest chain runs from Brandon’s home through Shadowrealm and Faeriewood to the first gold key in the catacombs of Castle Kyrandia.
 
 | ID | Original resource | Location |
 | --- | --- | --- |
@@ -27,6 +27,8 @@ The playable CD quest chain runs from Brandon’s home through Shadowrealm and F
 | 39–48, 53–65, 73 | Faeriewood | The falling branch, Zanthia’s laboratory, the Enchanted Fountain, the flaming tree, the blueberry waterfall and the Faun’s home |
 | 49, 52, 75, 80–108 | Deeper Faeriewood | The woods behind the laboratory, the tropical lagoon and the Crystals of Alchemy |
 | 199–205 | Castle island and entrance | The landing, misty grave, woods, bluff, gargoyle gate and entry hall |
+| 206–208, 211–215 | Castle ground floor | Great Hall, library, kitchen and connecting corridors |
+| 229–245 | CATACOM | Catacombs, magical barrier and the hidden gold key |
 
 Click the scene edges, doorways or lift to leave. An exit changes the desktop cursor's direction. Brandon walks to a reachable approach before the scene changes. The first attempt to leave home plays the original tree conversation, including when carrying an item. Returning home preserves its completion state.
 
@@ -52,7 +54,7 @@ Failed transitions keep the current room and inventory and allow another click t
 
 Node tests check approach routes across all room exits, RLE decoding and depth scale. `tests/browser/world.html` drives the actual renderer through all 17 rooms and back, including both lift directions. It checks held items, inventory, picked overlays, dropped items, tree completion, the closed bridge, a deliberately failed transition/retry and cancellation during loading. Its gallery captures the original scenes for visual inspection.
 
-The CI budget for gameplay runtime files is 5.42 MB. The 3D book, speech, fallback effects, and optional audio banks have separate limits.
+The CI budget for gameplay runtime files is 6.41 MB. The 3D book, speech, fallback effects, and optional audio banks have separate limits.
 
 ## Quest scripts
 
@@ -65,6 +67,8 @@ Brynn displays the original NOTEENG bitmap and waits for Continue. The home vase
 In Shadowrealm, the original room scripts use the brightest carried or dropped fireberry to choose the cave palette. Carried berries lose a stage at room transitions, and dropped berries keep their stage. The Shadowrealm browser scenario starts at a chapter checkpoint, collects the five rocks and coin, opens the grate, exchanges the coin at the well, awakens the purple jewel, freezes the river, retrieves the gold key and reaches the plateau. It also checks the dark-cave death and reloading the wisp form.
 
 In Faeriewood, the fountain's original EMC switches room 42 between the FOUNTN and ALGAE resources. The browser scenario follows the falling branch and both conversations with Zanthia. It also checks Malcolm’s music cues, both fountain resources, and the blue jewel. The same route continues through alchemy, the Faun’s trade, and the Pegasus flight to the island. Off-scene quest items survive a save before Brandon enters the room that receives them.
+
+In the castle library, the original EMC runs the four-book puzzle and the two directions of the fireplace ride. The browser route continues through the kitchen and Great Hall, restores a save mid-puzzle, then tests the blue jewel, wisp lighting, the hidden key and the return to the library.
 
 ## Pointer and touch controls
 
