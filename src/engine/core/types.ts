@@ -26,6 +26,7 @@ export type GameConfig = {
   setupActions?: import("../gameplay/roomScript").RoomAction[];
   onInteract?: (point: Vec2, snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[] | null;
   onActorInteract?: (snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[] | null;
+  onSceneItemPicked?: (point: Vec2, snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[];
   onScriptAction?: (action: import("../gameplay/roomScript").RoomAction) => void;
   onVoice?: (bank: string, id: number) => Promise<void> | undefined;
   onDeath?:()=>void;
@@ -78,7 +79,7 @@ export type WorldSave = {
   currentRoom: number;
   rooms: Record<number, RoomSnapshot>;
   quest: { flags: number[]; files: Record<number, string>; phasing: boolean; vase: number; vaseInitialized?: boolean; merith: SavedNpc; herman: SavedNpc;
-    birthstones?: number[]; scatteredGems?: Record<number, number[]>; poison?: number; cauldron?: number; crystals?: [number, number]; pendingItems?: Record<number, SceneItem[]> };
+    birthstones?: number[]; scatteredGems?: Record<number, number[]>; poison?: number; cauldron?: number; crystals?: [number, number]; foyerItems?: number[]; pendingItems?: Record<number, SceneItem[]> };
   settings: { atmosphere: boolean; walkSpeed: "slowest" | "slow" | "fast" | "fastest"; animStepInterval: number };
 };
 
