@@ -30,6 +30,8 @@ On desktop, point and click to move or interact. On a touchscreen, swipe to guid
 
 **Options** pauses the game and pulls the camera back to the book. Use it to resume, change language or walk speed, replay the intro, or save and load. Three manual slots and one autosave stay in the current browser. The autosave updates at safe points such as room arrivals and completed scenes. After a fatal mistake, the book lets you continue from the last autosave.
 
+Open **Settings → Dev Menu** to test any room, a room variant, an intro scene, or a story checkpoint. Test sessions use separate game state and leave your saves intact.
+
 ## Music and sound effects
 
 After opening the book, choose **Sound settings** to adjust music, effects, and voices independently before the intro. In-game, the same controls are under **Settings**. Voice recordings load by scene and follow the subtitle skip control.

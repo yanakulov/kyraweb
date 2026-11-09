@@ -17,11 +17,25 @@ import {
 import { RoomScript, type RoomAction } from "../src/engine/gameplay/roomScript";
 import { shufflePixels } from "../src/engine/gameplay/sceneShuffle";
 import { createFinalBattle, reflectsSpell } from "../src/engine/gameplay/finale";
+import { devHighlights, devIntroScenes, devVariants } from "../src/engine/gameplay/devScenes";
+import { buildIntroSteps } from "../src/engine/intro/steps";
 import type { RoomSnapshot, SceneAnimDef } from "../src/engine/core/types";
 
 const data = JSON.parse(
   gunzipSync(readFileSync("public/assets/forest/forest.json.gz")).toString(),
 ) as ForestData;
+test('Dev Menu covers every intro step and alternate room resource', () => {
+  const { rooms } = JSON.parse(readFileSync('public/assets/world/world.json', 'utf8')) as {
+    rooms: { id: number; name: string }[];
+  };
+  const ordinary = new Set(rooms.map(room => room.name));
+  const variants = Object.values(data.rooms).filter(room => !ordinary.has(room.name)).map(room => room.name).sort();
+  assert.deepEqual(devVariants.map(scene => scene.room.resource).sort(), variants);
+  assert.deepEqual(devIntroScenes.map(scene => scene.intro), buildIntroSteps().map(step => step.id));
+  for (const scene of [...devHighlights, ...devVariants]) {
+    assert.ok(rooms.some(room => room.id === scene.room.room), scene.label);
+  }
+});
 test('a falling Sorrow drop holds its last visible position until the splash frame', () => {
   const anims = buildSceneAnimStates(data.rooms.SORROW.anims.slice(0, 1));
   const [drop] = anims;

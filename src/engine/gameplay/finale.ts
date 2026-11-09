@@ -52,6 +52,15 @@ function flight(from: Vec2, to: Vec2) {
   return actions;
 }
 
+const credits: RoomAction = { op: 'ending', stage: 'credits' };
+const reunionEnding = (reunion: RoomAction[]): RoomAction[] => [frame('end-home', 0, 0, 0), ...reunion, credits];
+
+export function finalePreview(stage: 'reunion' | 'credits', reunion: RoomAction[]): RoomAction[] {
+  return stage === 'credits' ? [credits] : [
+    { op: 'ending', stage: 'film' }, { op: 'shade', opacity: 1, ms: 0 }, ...reunionEnding(reunion),
+  ];
+}
+
 function ending(from: Vec2, reunion: RoomAction[]): RoomAction[] {
   const mirror = { x: 290, y: 40 };
   return [
@@ -66,8 +75,7 @@ function ending(from: Vec2, reunion: RoomAction[]): RoomAction[] {
     ...frames('end-finald', 0, 22, 8, 8, 8).flatMap((action, i) =>
       i === 4 ? [sfx(62), action] : i === 20 ? [sfx(14), action] : [action]),
     wait(300), { op: 'shade', opacity: 1, ms: 500 },
-    close('end-heal'), close('end-finald'), frame('end-home', 0, 0, 0), ...reunion,
-    { op: 'ending', stage: 'credits' }
+    close('end-heal'), close('end-finald'), ...reunionEnding(reunion),
   ];
 }
 
