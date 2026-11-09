@@ -15,12 +15,13 @@
             <button :class="{ 'journey-choice': !canLoadAutosave }" type="button" @click="$emit('mainMenu')"><span>{{ t('Start a new journey') }}</span></button>
           </template>
           <button v-else-if="mainMenu" class="journey-choice" type="button" @click="$emit('startJourney')"><span>{{ t('Start Journey') }}</span></button>
-          <template v-else>
+          <template v-else-if="!devFinished">
             <button class="journey-choice" type="button" @click="$emit('resume')"><span>{{ t('Resume') }}</span></button>
             <button type="button" @click="go('save')" :disabled="!canSave"><span>{{ t('Save game') }}</span></button>
           </template>
           <button type="button" @click="go('load')" :disabled="!slots.some(slot => slot.savedAt || slot.error)"><span>{{ t('Load game') }}</span></button>
           <button type="button" @click="go('settings')"><span>{{ t('Settings') }}</span></button>
+          <button v-if="devScene" type="button" @click="$emit('leaveDev')"><span>{{ t('Return to the story') }}</span></button>
           <button type="button" @click="go('help')"><span>{{ t('How to play') }}</span></button>
         </nav>
         <template v-else-if="view === 'save' || view === 'load'">
@@ -40,6 +41,7 @@
           <div class="folio-tabs" role="group" :aria-label="t('Settings')">
             <button type="button" :aria-pressed="settingsPage === 'game'" @click="settingsPage = 'game'">{{ t('Game') }}</button>
             <button type="button" :aria-pressed="settingsPage === 'audio'" @click="settingsPage = 'audio'">{{ t('Sound') }}</button>
+            <button type="button" :aria-pressed="settingsPage === 'dev'" @click="settingsPage = 'dev'">Dev Menu</button>
           </div>
           <template v-if="settingsPage === 'game'">
             <div class="folio-settings-grid">
@@ -53,7 +55,24 @@
             <div v-if="confirmAction" class="folio-confirm"><p>{{ t('Leave this adventure? Unsaved progress will be lost.') }}</p><div class="folio-inline"><button type="button" @click="leave">{{ t('Continue') }}</button><button type="button" @click="cancelLeave">{{ t('Stay here') }}</button></div></div>
             <p class="folio-credits">{{ t('Original tale © 1992 Westwood Studios') }}<br /><a href="https://github.com/yanakulov/kyraweb" target="_blank" rel="noopener noreferrer">{{ t('Reimagined by AkulaFlow · Yan Akulov') }}</a></p>
           </template>
-          <MusicSettings v-else-if="musicPlayer && musicState" :player="musicPlayer" :state="musicState" />
+          <MusicSettings v-else-if="settingsPage === 'audio' && musicPlayer && musicState" :player="musicPlayer" :state="musicState" />
+          <section v-else-if="settingsPage === 'dev'" class="folio-dev">
+            <p class="folio-note">{{ t('Test scenes run separately from your saved journey.') }}</p>
+            <div v-if="devScene" class="folio-inline">
+              <button type="button" @click="$emit('devRun', devScene)">{{ t('Replay test scene') }}</button>
+              <button type="button" @click="$emit('leaveDev')">{{ t('Return to the story') }}</button>
+            </div>
+            <label class="folio-field">{{ t('Find a scene') }}<input v-model="sceneQuery" type="search" :placeholder="t('Name, room number or asset')" /></label>
+            <p v-if="roomStatus === 'loading'" class="folio-note" role="status">{{ t('Loading scene list…') }}</p>
+            <button v-else-if="roomStatus === 'error'" type="button" @click="loadRooms">{{ t('Retry scene list') }}</button>
+            <p v-if="!sceneGroups.length && roomStatus === 'ready'" class="folio-note" role="status">{{ t('No matching scenes.') }}</p>
+            <section v-for="group in sceneGroups" :key="group.label" class="folio-dev-group">
+              <h3>{{ t(group.label) }}</h3>
+              <button v-for="scene in group.scenes" :key="`${scene.label}:${scene.detail ?? ''}`" type="button" @click="$emit('devRun', scene)">
+                <span>{{ t(scene.label) }}</span><small v-if="scene.detail">{{ scene.detail }}</small>
+              </button>
+            </section>
+          </section>
         </div>
         <div v-else class="folio-help"><p><strong>{{ t('Explore.') }}</strong> {{ t('Click to walk. Move the cursor to an exit to reveal its arrow.') }}</p><p><strong>{{ t('Discover.') }}</strong> {{ t('Click people to talk or objects to take them. Choose an inventory item, then click where to use it.') }}</p><p><strong>{{ t('Touch.') }}</strong> {{ t('Swipe to guide the cursor. Tap to interact. During dialogue, tap to skip the current line.') }}</p><p v-if="controlMode === 'modern'">{{ t('Right-click or press I to open the inventory. On touch screens, press and hold. Menu opens the book.') }}</p><p v-else>{{ t('Options returns you to this book and pauses the adventure.') }}</p></div>
       </fieldset>
@@ -71,35 +90,68 @@ import type { MusicPlayer, MusicState } from '../engine/audio/music';
 import { AUTOSAVE_SLOT } from '../engine/gameplay/saveStorage';
 import { locale, setLocale, t } from '../i18n';
 import type { ControlMode } from '../engine/core/types';
+import { withBase } from '../engine/core/assets';
+import { devHighlights, devIntroScenes, devVariants, type DevScene } from '../engine/gameplay/devScenes';
 type WalkSpeed = 'slowest' | 'slow' | 'fast' | 'fastest';
 type View = 'main' | 'save' | 'load' | 'settings' | 'help';
 const props = withDefaults(defineProps<{
   gameplay: boolean; canSave: boolean; busy: boolean; message: string; mainMenu?: boolean; gameOver?: boolean;
   slots: { index: number; name?: string; location?: string; savedAt?: string; thumbnail?: string; error?: string | null }[];
   walkSpeed: WalkSpeed; controlMode: ControlMode; fullscreenAvailable: boolean; isFullscreen: boolean;
-  initialView?: 'main' | 'load';
+  initialView?: 'main' | 'load' | 'dev';
+  devScene?: DevScene | null;
+  devFinished?: boolean;
   musicPlayer?: MusicPlayer; musicState?: MusicState;
 }>(), { initialView: 'main', mainMenu: false });
 const emit = defineEmits<{
   resume: []; save: [index: number, name: string]; load: [index: number]; startJourney: []; readPrologue: []; pageTurn: [];
   mainMenu: []; replayIntro: []; fullscreen: [];
+  devRun: [scene: DevScene]; leaveDev: [];
   'update:walkSpeed': [value: WalkSpeed];
   'update:controlMode': [value: ControlMode];
 }>();
 const languages = [{ value: 'en', label: 'English' }, { value: 'ru', label: 'Русский' }];
 const speeds = computed(() => ['slowest', 'slow', 'fast', 'fastest'].map((value, index) => ({ value, label: t(['Slowest', 'Slow', 'Fast', 'Fastest'][index]) })));
 const controls = computed(() => [{ value: 'modern', label: t('Modern') }, { value: 'classic', label: t('Classic') }]);
-const view = ref<View>(props.initialView), heading = ref<HTMLHeadingElement | null>(null);
+const view = ref<View>(props.initialView === 'dev' ? 'settings' : props.initialView), heading = ref<HTMLHeadingElement | null>(null);
 const menu = ref<HTMLElement | null>(null);
-const content = ref<HTMLElement | null>(null), settingsPage = ref<'game' | 'audio'>('game');
+const content = ref<HTMLElement | null>(null), settingsPage = ref<'game' | 'audio' | 'dev'>(props.initialView === 'dev' ? 'dev' : 'game');
 const saveName = ref(''), overwrite = ref<number | null>(null), confirmAction = ref<'menu' | 'intro' | null>(null);
 const canLoadAutosave = computed(() => props.slots.some(slot => slot.index === AUTOSAVE_SLOT && slot.savedAt));
 const shownSlots = computed(() => props.slots.filter(slot => slot.index !== AUTOSAVE_SLOT || view.value === 'load' && (slot.savedAt || slot.error)));
-const title = computed(() => t(({ main: props.gameOver ? "It didn't happen that way!" : props.mainMenu ? 'The Legend of Kyrandia' : 'Options', save: 'Save your story', load: 'Saved chapters', settings: 'Settings', help: 'How to play' })[view.value]));
+const title = computed(() => view.value === 'settings' && settingsPage.value === 'dev' ? 'Dev Menu' :
+  t(({ main: props.gameOver ? "It didn't happen that way!" : props.mainMenu ? 'The Legend of Kyrandia' : 'Options', save: 'Save your story', load: 'Saved chapters', settings: 'Settings', help: 'How to play' })[view.value]));
+type RoomEntry = { id: number; name: string; title: string };
+type SceneEntry = DevScene & { detail?: string };
+const rooms = ref<RoomEntry[]>([]), sceneQuery = ref('');
+const roomStatus = ref<'idle' | 'loading' | 'ready' | 'error'>('idle');
+async function loadRooms() {
+  roomStatus.value = 'loading';
+  try {
+    const response = await fetch(withBase('assets/world/world.json'));
+    if (!response.ok) throw new Error('Scene list unavailable');
+    rooms.value = (await response.json()).rooms;
+    roomStatus.value = 'ready';
+  } catch { roomStatus.value = 'error'; }
+}
+const sceneGroups = computed(() => {
+  const query = sceneQuery.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const groups: { label: string; scenes: SceneEntry[] }[] = [
+    { label: 'Test checkpoints', scenes: devHighlights.map(scene => ({ ...scene, detail: `#${scene.room.room}` })) },
+    { label: 'Intro scenes', scenes: devIntroScenes },
+    { label: 'Room variants', scenes: devVariants.map(scene => ({ ...scene, detail: `#${scene.room.room} · ${scene.room.resource}` })) },
+    { label: 'All rooms', scenes: rooms.value.map(room => ({ label: room.title, detail: `#${room.id} · ${room.name}`, room: { room: room.id } })) },
+  ];
+  return groups.map(group => ({ ...group, scenes: group.scenes.filter(scene => {
+    const text = `${t(scene.label)} ${scene.label} ${scene.detail ?? ''}`.toLocaleLowerCase();
+    return query.every(word => text.includes(word));
+  }) })).filter(group => group.scenes.length);
+});
 watch(settingsPage, () => {
   confirmAction.value = null;
   content.value?.scrollTo(0, 0);
-});
+  if (settingsPage.value === 'dev' && roomStatus.value === 'idle') void loadRooms();
+}, { immediate: true });
 async function go(next: View) {
   emit('pageTurn');
   view.value = next;
@@ -241,7 +293,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .folio-field input::placeholder { color: #57381f; }
 .folio-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
   margin-bottom: 10px;
 }
@@ -250,6 +302,9 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .folio-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding-bottom: 6px; }
 .folio-navigation button { font-size: 14px; }
 .folio-note { font-size: 14px; margin: 4px 0 12px; }
+.folio-dev-group h3 { margin: 12px 0 2px; font-size: 13px; color: var(--rubric); }
+.folio-dev-group button { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; }
+.folio-dev-group small { flex: none; font: 11px monospace; }
 .folio-saves { list-style: none; margin: 0; padding: 0; }
 .folio-saves li { border-bottom: 1px solid var(--rule); padding: 9px 0 4px; }
 .folio-saves li > button { border-bottom: 0; }

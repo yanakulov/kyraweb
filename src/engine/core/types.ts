@@ -32,6 +32,7 @@ export type GameConfig = {
   onDeath?:()=>void;
   onEnding?: () => void;
   reunion?: import("../gameplay/roomScript").RoomAction[];
+  devRoom?: import("../gameplay/devScenes").DevRoom;
   onCheckpoint?: () => void;
   onContinueChange?: (waiting: boolean) => void;
   onNoteChange?: (visible: boolean) => void;

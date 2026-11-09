@@ -3,13 +3,16 @@ import { loadImage, withBase } from "../core/assets";
 import { IndexedClip, loadScenePack, type ScenePack } from "../resources/scenePack";
 import { isWalkable } from "../scene/masks";
 import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneItem, SceneMeta, Vec2, WorldSave } from "../core/types";
-import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, isWorldRoomId, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, RED_JEWEL_FLAG, RED_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
+import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, isShadowrealmRoom, isWorldRoomId, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, RED_JEWEL_FLAG, RED_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 import { roomMusicCommand } from '../audio/cues';
 import type { RoomAction } from "./roomScript";
 import { createForestState, traceForest, applyForestState, loadForestData, originalItem, itemFromOriginal,
   ageFireberry, canScatterGemsIn, changeInvisibility, curePoison, dispelMagic, poisonArrival, scatterGem, groveGems, transformWisp } from './forest';
 import { validateWorldSave } from './saveStorage';
 import { findSpawnDestination } from './drops';
+import { devRoomFlags } from './devScenes';
+import { finalePreview } from './finale';
+import { initInventory } from './inventory';
 
 export const SIDES = ["north", "east", "south", "west"] as const;
 const scatteredGemIds = new Set([...groveGems, 1, 8]);
@@ -99,6 +102,12 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     loadImage(withBase('assets/interface/location-sign.png'), config.signal).catch(() => undefined),
   ]);
   const initialQuest = createForestState();
+  const dev = restored ? undefined : config.devRoom;
+  if (dev) {
+    if (!rooms.some(room => room.id === dev.room)) throw new Error('This test scene is unavailable.');
+    for (const flag of devRoomFlags(dev)) initialQuest.flags.add(flag);
+    if (dev.resource) initialQuest.files[dev.room] = dev.resource;
+  }
   const quest=restored ? { ...initialQuest, ...restored.quest, flags: new Set(restored.quest.flags) } : initialQuest;
   if (restored && !restored.quest.vaseInitialized && quest.vase === -1) quest.vase = initialQuest.vase;
   if (restored && !restored.quest.birthstones) {
@@ -107,7 +116,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   }
   // Saves from before Timbermist have not initialized the four unpicked acorns.
   if (restored && !restored.rooms[31]) for (const flag of [72, 73, 74, 75]) quest.flags.add(flag);
-  let active = true, busy = false, paused = config.paused ?? false, currentId = restored?.currentRoom ?? 0, current: RoomGame;
+  let active = true, busy = false, paused = config.paused ?? false, currentId = restored?.currentRoom ?? dev?.room ?? 0, current: RoomGame;
   let pointer: Vec2 | null = null;
   let tokenCounter = 0, callbackOwner = 0;
   const saved = new Map<number, RoomSnapshot>(restored ? Object.entries(restored.rooms).map(([id, room]) => [Number(id), room]) : []);
@@ -158,7 +167,11 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     const opposite = from ? SIDES[(SIDES.indexOf(from.side) + 2) % 4] : "south";
     let arrival = nearestFloor(mask, from?.entry ?? meta.entrances[opposite]);
     const state = saved.get(id), shared = current?.getSnapshot();
-    const resume = state ?? { pos: arrival, inventorySlots: [], itemInHand: null, sceneItems: startingItems[id] ?? [], overlays: [], treeSpoken: false };
+    const testEntry = current ? undefined : dev;
+    const testItems = testEntry?.items ?? (testEntry && isShadowrealmRoom(id) ? ['item-29' as const] : []);
+    const resume: RoomSnapshot = state ?? { pos: arrival, inventorySlots: testEntry ? initInventory().map((item, slot) => testItems[slot] ?? item) : [],
+      itemInHand: null, sceneItems: (id === 0 && testEntry ? config.scene.items : startingItems[id]) ?? [],
+      overlays: [], treeSpoken: !!testEntry && id !== 0 };
     const additions = quest.scatteredGems[id] ?? [];
     if (restoring && !state?.runtime) throw new Error("This saved room is incomplete. Choose another saved game.");
     if (restoring) for (const change of state!.runtime!.masks) changeMask(change);
@@ -232,6 +245,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     if (from && from.id !== 'phase' && quest.poison) {
       entryActions = [...(entryActions ?? []), ...poisonArrival(quest.poison, snapshot.pos, forest.flute.durations)];
     }
+    if (testEntry?.ending) entryActions = [{ op: 'music', command: 51, restart: true }, ...finalePreview(testEntry.ending, forest.reunion)];
     // A room without its own cue returns to its area's score after special scenes.
     if (from && from.id !== 'phase' && previous !== undefined &&
         ![...setupActions, ...(entryActions ?? [])].some(action => action.op === 'music' && action.command !== 1)) {
@@ -254,8 +268,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
         indexedUi: { src: withBase("assets/packs/kallak-room.kyr.gz"), clip: "hud" }, meta, emc: { sceneAnimShapes: meta.shapes }, actorScale: meta.actorScale,
         opening: id === 0 ? config.scene.opening : undefined, items: id === 0 ? config.scene.items : [],
         overlays: id === 0 && !questRoom ? config.scene.overlays : [], sceneMetaSrc: undefined, sceneEmcSrc: undefined, maskSrc: undefined },
-      resume: state || shared || additions.length ? { ...snapshot, runtime: restoring ? snapshot.runtime : undefined } : undefined,
-      entry: from || restoring ? { ...arrival, facing } : undefined,
+      resume: state || shared || additions.length || testEntry ? { ...snapshot, runtime: restoring ? snapshot.runtime : undefined } : undefined,
+      entry: from || restoring || testEntry && !testEntry.opening ? { ...arrival, facing } : undefined,
       playOpening: !restoring && !from && config.playOpening !== false, entryActions, setupActions, amulet:quest.flags.has(45), npcFrames:questRoom?.npcFrames, portals,
       yellowJewel: quest.flags.has(YELLOW_JEWEL_FLAG),
       purpleJewel: quest.flags.has(PURPLE_JEWEL_FLAG),
@@ -415,7 +429,9 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     }
     else void navigate(portal);
   }
-  const first = await load(currentId, undefined, undefined, !!restored); current = first.game;
+  const entry = dev?.via && { id: 'script', target: currentId, side: dev.via[1],
+    rect: { x: 0, y: 0, w: 0, h: 0 }, point: { x: 0, y: 0 } };
+  const first = await load(currentId, entry, dev?.via?.[0], !!restored); current = first.game;
   config.onLocationChange?.(first.meta.title, currentId, first.meta.name);
   prepareNeighbours(first.portals);
   return {
