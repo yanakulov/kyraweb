@@ -16,7 +16,8 @@ export type ForestRoom = WorldRoom & {
   npcFrames: Record<number, { xOffset: number; yOffset: number }>;
 };
 export type ForestData = { rooms: Record<string, ForestRoom>; letter: { sealed: RoomAction[]; readable: RoomAction[] };
-  self: Record<number, RoomAction[]>; caveSelf: RoomAction[]; flute: Pick<ForestRoom, 'program' | 'durations'> };
+  self: Record<number, RoomAction[]>; caveSelf: RoomAction[]; flute: Pick<ForestRoom, 'program' | 'durations'>;
+  reunion: RoomAction[] };
 export async function loadForestData(
   src: string,
   signal?: AbortSignal,
@@ -163,6 +164,7 @@ export function changeInvisibility(active: boolean): RoomAction[] {
 export function dispelMagic(room: number, activeWisp: boolean): RoomAction[] {
   return [
     ...(activeWisp ? transformWisp(room, false) : []),
+    ...(room === 210 ? [{ op: 'finalBattle', command: 'dispel' } as const] : []),
     { op: 'flag', flag: 238, value: true },
     { op: 'sfx', track: 0x15 },
     ...heroFrames('dispel', [0, 1, 2, 3, 4], 8), waitTicks(120),
@@ -453,7 +455,11 @@ export function traceForest(
             );
           }
           case 0x0b:
-            if (room.id === 209 && a[0] === 320) return 0; // The chamber beyond this doorway is the next chapter.
+            if (room.id === 209 && a[0] === 320) {
+              emit({ op: 'walk', x: 304, y: a[1] });
+              emit({ op: 'exit', target: 210, side: 'east' });
+              return 0;
+            }
             actor.x = a[0] & ~3;
             actor.y = a[1] & ~1;
             emit({ op: "walk", x: actor.x, y: actor.y });
@@ -906,6 +912,9 @@ export function traceForest(
             return 0;
           case 0x91:
             return 1; // ScummVM's original passive-protection check is a constant.
+          case 0x90:
+            emit({ op: 'finalBattle', command: 'summon' });
+            return 0;
           case 0x93:
             actions.push(...heroFrames('stone', indices(0, 14), 8));
             return 0;

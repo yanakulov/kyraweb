@@ -33,6 +33,8 @@ let fireFrame = -1, featherFalling = false;
 let knifeChoice = false;
 let bellChoices = 0;
 const royalMovies = new Set<string>();
+const endingVoices: number[] = [];
+let credits = false, ended = false;
 let roomBank = '';
 const scores: number[] = [];
 const realFetch = window.fetch.bind(window);
@@ -50,6 +52,8 @@ const config: GameConfig = {
   onDeath: () => {
     dead = true;
   },
+  onEnding: () => { ended = true; },
+  onVoice: (bank, id) => { if (bank === 'REUNION') endingVoices.push(id); },
   onScriptAction: action => {
     if (action.op === 'music') scores.push(action.command);
     if (action.op === 'frame' && action.clip === 'balance2') onRope = true;
@@ -57,8 +61,9 @@ const config: GameConfig = {
     if (action.op === 'ambientRun' && id === 30) featherFalling = true;
     if (action.op === 'choice' && id === 25) knifeChoice = true;
     if (action.op === 'choice' && action.silent) bellChoices++;
-    if (action.op === 'frame' && ['upstairs', 'dnstairs', 'hersaw1', 'hersaw2', 'hersaw3', 'punch1', 'punch2', 'punch3'].includes(action.clip))
+    if (action.op === 'frame' && ['upstairs', 'dnstairs', 'hersaw1', 'hersaw2', 'hersaw3', 'punch1', 'punch2', 'punch3', 'finalb', 'finalc', 'end-finald', 'end-reunion'].includes(action.clip))
       royalMovies.add(action.clip);
+    if (action.op === 'ending' && action.stage === 'credits') credits = true;
   },
   onLocationChange: (name, room, bank) => {
     roomBank = bank ?? '';
@@ -945,7 +950,7 @@ document.querySelector('#royal')!.addEventListener('click', async () => {
     const start = validateWorldSave(game.getSaveState());
     start.rooms[0].treeSpoken = true;
     start.rooms[0].inventorySlots.splice(0, 4, 'item-105', 'item-104', 'item-103', 'item-24');
-    start.quest.flags.push(45, 86, 213, 219, 224, 234, 235, 236);
+    start.quest.flags.push(45, 86, 87, 89, 213, 219, 224, 234, 235, 236);
     async function reload(save = validateWorldSave(game.getSaveState())) {
       game.stop();
       game = await startGame(canvas, { ...config, saveState: save });
@@ -1062,12 +1067,48 @@ document.querySelector('#royal')!.addEventListener('click', async () => {
     await click(188, 20);
     if (!scores.includes(47) || !scores.includes(48) || !['punch1', 'punch2', 'punch3'].every(clip => royalMovies.has(clip)))
       throw Error('The royal doorway and Malcolm’s cutscene did not play');
-    await reload();
+    await until(() => id === 210 && !loading && !playing, 'entry into the Kyragem chamber');
     const foyer = validateWorldSave(game.getSaveState());
     if (foyer.quest.foyerItems?.join(',') !== '104,103,24' || !foyer.rooms[209].runtime?.layers.some(layer => layer.clip === 'foyer' && layer.index === 19))
       throw Error('The royal door did not stay open after loading');
+    delete foyer.rooms[210];
+    await reload({ ...foyer, currentRoom: 209 });
     capture('The royal chamber opened');
-    results.textContent += 'ALL PASSED — upper castle, Herman, bells, both locks and royal foyer';
+    await travel(210);
+    expectScore(50);
+    const beforeFight = validateWorldSave(game.getSaveState());
+    if (game.getSnapshot().inventorySlots.some(Boolean)) throw Error('The original chamber entry did not clear carried items');
+    capture('Chamber of the Kyragem');
+    game.handleClick({ x: 35, y: 56 });
+    await until(() => dead && !playing, 'Malcolm turns Brandon to stone');
+    if (!scores.includes(52) || game.getSaveState()) throw Error('The spell did not play the original defeat');
+    capture('Malcolm’s spell petrifies Brandon', false);
+
+    dead = false;
+    await reload(beforeFight);
+    await click(35, 56);
+    advance(2500);
+    const mirror = { x: 270, y: 96 };
+    if (!game.handleClick(mirror)) game.setTarget(mirror);
+    await until(() => game.getSnapshot().pos.x >= 266 && !playing, 'walking in front of the mirror during the fight');
+    await click(241, 177);
+    if (!game.getSnapshot().invisibleMs) throw Error('Brandon did not turn invisible at the mirror');
+    await until(() => royalMovies.has('finalb'), 'the spell strikes the mirror');
+    capture('The mirror reflects Malcolm’s spell', false);
+    await until(() => royalMovies.has('end-finald'), 'the Kyragem heals');
+    capture('The restored Kyragem');
+    await until(() => endingVoices.includes(32), 'Brandon and Kallak reunite');
+    capture('Brandon reunites with Kallak', false);
+    await until(() => credits && !playing, 'original CD credits');
+    if (dead || !scores.includes(51) || !royalMovies.has('finalc') ||
+        endingVoices.join() !== Array.from({ length: 14 }, (_, index) => index + 29).join())
+      throw Error('Victory skipped an original scene, cue or voice');
+    advance(7300);
+    capture('Original scrolling CD credits', false);
+    game.setControlMode('modern');
+    capture('Original scrolling CD credits in modern mode', false);
+    if (!game.skipOpening() || !ended) throw Error('The original credits cannot be dismissed');
+    results.textContent += 'ALL PASSED — upper castle, both locks, mirror battle, reunion and credits';
   } catch (error) {
     results.textContent += `FAIL ${error}`;
   }

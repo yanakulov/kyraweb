@@ -16,6 +16,7 @@ import {
 } from "../src/engine/scene/sceneAnims";
 import { RoomScript, type RoomAction } from "../src/engine/gameplay/roomScript";
 import { shufflePixels } from "../src/engine/gameplay/sceneShuffle";
+import { createFinalBattle, reflectsSpell } from "../src/engine/gameplay/finale";
 import type { RoomSnapshot, SceneAnimDef } from "../src/engine/core/types";
 
 const data = JSON.parse(
@@ -614,4 +615,35 @@ test('the music room reveals one key and each key opens one royal lock', () => {
   q.run('GRTHALL', 1, 140, 53);
   assert.ok(q.state.flags.has(221));
   assert.ok(q.run('GRTHALL', 1, 140, 53).actions.some(action => action.op === 'exit' && action.target === 209));
+});
+
+test('the finale keeps the spell live until Brandon can act, then uses the original mirror bounds', () => {
+  const mirror = { x: 270, y: 96 };
+  assert.ok(reflectsSpell(mirror, true));
+  assert.ok(!reflectsSpell(mirror, false));
+  assert.ok(!reflectsSpell({ x: 233, y: 96 }, true));
+  assert.ok(!reflectsSpell({ x: 270, y: 105 }, true));
+  const win = createFinalBattle(data.reunion);
+  assert.equal(win.update(21_000, mirror, false, false, false), undefined);
+  assert.ok(win.bead);
+  const ending = win.update(0, mirror, true, false, true)!;
+  assert.ok(ending.some(action => action.op === 'frame' && action.clip === 'finalb'));
+  assert.ok(ending.some(action => action.op === 'music' && action.command === 51));
+  assert.equal(ending.filter(action => action.op === 'say').length, 14);
+  assert.deepEqual(ending.at(-1), { op: 'ending', stage: 'credits' });
+  assert.equal(win.update(1000, mirror, true, false, true), undefined);
+
+  const loss = createFinalBattle(data.reunion);
+  const defeat = loss.update(21_000, { x: 160, y: 120 }, true, false, true)!;
+  assert.ok(defeat.some(action => action.op === 'music' && action.command === 52));
+  assert.ok(defeat.some(action => action.op === 'heroFrame' && action.clip === 'stone'));
+  assert.deepEqual(defeat.at(-1), { op: 'death' });
+
+  const retry = createFinalBattle(data.reunion);
+  retry.update(18_500, mirror, false, false, false);
+  retry.dispel();
+  assert.equal(retry.bead, null);
+  assert.equal(retry.update(0, mirror, false, false, true)?.[0].op, 'say');
+  assert.equal(retry.update(3000, mirror, true, false, true), undefined);
+  assert.ok(retry.update(9000, mirror, true, false, true)?.some(action => action.op === 'ending'));
 });

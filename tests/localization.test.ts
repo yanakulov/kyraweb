@@ -10,12 +10,13 @@ import { locale, russian, setLocale, t, translateGameText } from '../src/i18n';
 import { buildInventoryItems, getItemStatusName } from '../src/engine/gameplay/inventory';
 
 test('Russian covers the complete imported intro, home, forest and item dialogue corpus', () => {
-  const forest = JSON.parse(gunzipSync(readFileSync('public/assets/forest/forest.json.gz')).toString()) as { rooms: Record<string, { program: { strings: string[] } }> };
+  const forest = JSON.parse(gunzipSync(readFileSync('public/assets/forest/forest.json.gz')).toString()) as import('../src/engine/gameplay/forest').ForestData;
   const texts = [
     ...Object.values(intro).flatMap(Object.values),
     ...opening.opening.map(action => 'text' in action ? action.text : ''),
     ...opening.tree.map(action => 'text' in action ? action.text : ''),
     ...Object.values(forest.rooms).flatMap(room => room.program.strings),
+    ...forest.reunion.flatMap(action => action.op === 'say' ? [action.text] : []),
     ...npc.strings, ...world.rooms.map(room => room.title),
   ].filter((text): text is string => !!text && /[a-z]/i.test(text) && !/^[-A-Z0-9_]+(?:\.(?:WSA|CPS|EMC|VRM|DAT|COL|TMP))?$/.test(text));
   const unique = [...new Set(texts.map(text => text.replace(/\s+/g, ' ').trim()))];

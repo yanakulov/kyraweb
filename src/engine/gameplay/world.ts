@@ -49,6 +49,8 @@ export function roomPortals(room: WorldRoom, mask: MaskData, track = room.cursor
   }
   if (room.id === 5) portals.unshift({ id: "lift", target: 1, side: "north", rect: { x: 235, y: 8, w: 66, h: 107 }, point: nearestFloor(mask, { x: 264, y: 108 }) });
   if (room.id === 1) portals.unshift({ id: "lift", target: 5, side: "south", rect: { x: 232, y: 96, w: 40, h: 40 }, point: nearestFloor(mask, { x: 216, y: 106 }) });
+  if (room.id === 209) portals.unshift({ id: 'kyra-vault', target: 210, side: 'east',
+    rect: { x: 264, y: 8, w: 48, h: 116 }, point: nearestFloor(mask, { x: 280, y: 88 }) });
   // EMC describes the visible entrance separately from the strip Brandon has to cross.
   if (room.id === 48 && track) portals.unshift({ ...track, id: 'faun-door', target: 47,
     point: nearestFloor(mask, { x: 274, y: 100 }) });
@@ -170,8 +172,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     if (restoring) arrival = { ...state!.pos };
     const carried = shared ?? resume;
     const ageBerries = from && from.id !== 'phase' && previous !== id;
-    const snapshot={...resume, inventorySlots: ageBerries ? carried.inventorySlots.map(ageFireberry) : carried.inventorySlots,
-      itemInHand: ageBerries ? ageFireberry(carried.itemInHand) : carried.itemInHand,
+    const snapshot={...resume, inventorySlots: id === 210 ? Array(10).fill(null) : ageBerries ? carried.inventorySlots.map(ageFireberry) : carried.inventorySlots,
+      itemInHand: id === 210 ? null : ageBerries ? ageFireberry(carried.itemInHand) : carried.itemInHand,
       wispMs: carried.wispMs,
       invisibleMs: carried.invisibleMs,
       sceneItems: [...resume.sceneItems, ...(quest.pendingItems[id] ?? [])].map(item => ({ ...item })), pos:arrival,facing,walkDelayTicks:({slowest:11,slow:9,fast:6,fastest:3})[settings.walkSpeed]};
@@ -262,7 +264,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       onInvisibilityExpire: () => changeInvisibility(false),
       onWispExpire: () => transformWisp(id, false),
       poisoned: quest.poison > 0,
-      heroActions: quest.poison > 0 || quest.flags.has(PURPLE_JEWEL_FLAG) || [25, 29, 35, 41, 42, 45, 111, 117, 200].includes(id) || snapshot.itemInHand === 'item-55' ||
+      reunion: id === 210 ? forest.reunion : undefined,
+      heroActions: quest.poison > 0 || quest.flags.has(PURPLE_JEWEL_FLAG) || [25, 29, 35, 41, 42, 45, 111, 117, 200, 210].includes(id) || snapshot.itemInHand === 'item-55' ||
         snapshot.inventorySlots.includes('item-55') || snapshot.sceneItems.some(item => item.id === 'item-55'),
       onPortalInteract: questRoom ? (portal, point, snapshot) => {
         const grotto = id === 25 && portal.target === 109 && (!quest.flags.has(71) || quest.flags.has(82));
@@ -278,7 +281,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
           p => isWalkable(p, { uiMaskY: 136 } as GameConfig['scene'], mask), [], stairs ? -6 : herman ? -3 : grotto || portal.id === 'castle-path' ? -5 : originalItem(snapshot.itemInHand)).actions;
       } : undefined,
       portalOpen: id === 204 ? portal => portal.target !== 205 || quest.flags.has(219)
-        : id === 115 ? portal => portal.target !== 197 || !quest.flags.has(116) || quest.flags.has(117) : undefined,
+        : id === 115 ? portal => portal.target !== 197 || !quest.flags.has(116) || quest.flags.has(117)
+        : id === 209 ? portal => portal.target !== 210 || quest.foyerItems.join() === '104,103,24' : undefined,
       onAmuletInteract: (snapshot, jewel) => {
         const say = (text: string, voiceId: number, ms: number): RoomAction => ({ op: 'say', text, voiceId, voiceBank: 'CHAPTER1', ms,
           x: snapshot.pos.x, y: snapshot.pos.y - 56, speaker: 0, color: 15, blocking: true });

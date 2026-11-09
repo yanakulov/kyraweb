@@ -30,6 +30,8 @@ export type GameConfig = {
   onScriptAction?: (action: import("../gameplay/roomScript").RoomAction) => void;
   onVoice?: (bank: string, id: number) => Promise<void> | undefined;
   onDeath?:()=>void;
+  onEnding?: () => void;
+  reunion?: import("../gameplay/roomScript").RoomAction[];
   onCheckpoint?: () => void;
   onContinueChange?: (waiting: boolean) => void;
   onNoteChange?: (visible: boolean) => void;

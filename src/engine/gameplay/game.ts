@@ -1,4 +1,5 @@
 import { sceneShuffle } from './sceneShuffle';
+import { createFinalBattle, kyragemColors } from './finale';
 import { locale, t, translateGameText } from '../../i18n';
 import { BLUE_JEWEL_FLAG, BLUE_JEWEL_HITBOX, BLUE_JEWEL_POS, DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_HITBOX, PURPLE_JEWEL_POS, RED_JEWEL_FLAG, RED_JEWEL_HITBOX, RED_JEWEL_POS, ROOM_ART, TICK_MS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from "../core/constants";
 import { loadImage, loadMask, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
@@ -140,6 +141,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let shakeUntil = 0;
     const reduceMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
     let dead=false;
+    const battle = config.reunion && createFinalBattle(config.reunion);
+    let endingStage: 'film' | 'credits' | 'done' | undefined;
+    let creditsAge = 0, gemStep = -1;
+    let shade = { from: 0, to: 0, start: 0, ms: 0 };
+    const shadeOpacity = () => shade.ms ? shade.from + (shade.to - shade.from) * Math.min(1, (clockMs - shade.start) / shade.ms) : shade.to;
     const roomPalette=packedBackground?.clip.info.palette.slice();
     let paletteFade:{from:number[];to:number[];ms:number;age:number;step:number}|null=null;
     const backdrop = config.backdropCanvas?.getContext('2d');
@@ -156,7 +162,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       backdropDirty = true;
       if(sceneShapesCanvas){const next=buildSceneShapesCanvas({width:320,height:200,palette:roomPalette,rawBase64:''},packedBackground.clip.frame(0));const context=sceneShapesCanvas.getContext('2d')!;context.clearRect(0,0,320,200);context.drawImage(next,0,0);}
       foregroundFrames.clear();
-      for(const [name,animation] of scriptRenderers){animation.renderer.setPalette(roomPalette);if(scriptLayers.has(name))animation.renderer.render(animation.clip.pixels);}
+      for(const [name,animation] of scriptRenderers) if (!name.startsWith('end-')) {
+        animation.renderer.setPalette(roomPalette);
+        if(scriptLayers.has(name))animation.renderer.render(animation.clip.pixels);
+      }
       if(fade.age>=fade.ms)paletteFade=null;
     }
     let ambientWait: number | null = null;
@@ -295,9 +304,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
     const coastSky = packedBackground && config.roomResource === 'NWCLIFB' ? createCoastSky(packedBackground.clip) : null;
 
-    const transition = config.transitionImage ? sceneShuffle(config.transitionImage) : null;
+    let transition = config.transitionImage ? sceneShuffle(config.transitionImage) : null;
     function update(dt: number, nowMs: number) {
       if (transition?.active) { transition.update(dt * 1000); return; }
+      if (endingStage === 'credits') { creditsAge += dt * 1000; return; }
+      if (endingStage === 'done') return;
       if (wispMs > 0 && !sequence && !dead) {
         wispMs = Math.max(0, wispMs - dt * 1000);
         if (!wispMs && config.onWispExpire) playScript(config.onWispExpire());
@@ -366,6 +377,15 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         const done = sequenceDone; sequenceDone = null; done?.();
         if (!dead) config.onCheckpoint?.();
       }
+      if (battle && !endingStage && !dead) {
+        const step = Math.floor(clockMs / (4 * TICK_MS));
+        if (step !== gemStep) {
+          gemStep = step;
+          applyScript({ op: 'palette', start: 228, colors: kyragemColors(step), ms: 0 });
+        }
+        const actions = battle.update(dt * 1000, state.pos, invisibilityLevel === 256, wispMs > 0, !sequence);
+        if (actions) playScript(actions);
+      }
     }
 
     function stopWalking() {
@@ -414,14 +434,38 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function render() {
       ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-      const outside = scriptRenderers.get(backgroundName);
+      if (endingStage === 'credits' || endingStage === 'done') {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+        if (endingStage === 'done') return;
+        const top = modern ? 8 : 32;
+        const chalet = scriptRenderers.get('end-chalet')!, credits = scriptRenderers.get('end-credits')!;
+        ctx.save();
+        ctx.beginPath(); ctx.rect(0, top, 320, 128); ctx.clip();
+        const image = chalet.renderer.render(chalet.clip.frame(0));
+        ctx.drawImage(image, 0, top - 32);
+        if (backdrop && backdropScene !== 'end-chalet') {
+          backdrop.drawImage(image, 8, 32, 304, 128, 0, 0, 304, 128);
+          backdropScene = 'end-chalet';
+        }
+        const offset = Math.min(credits.clip.info.height + 15, Math.floor(creditsAge / (5 * TICK_MS)));
+        ctx.drawImage(credits.renderer.render(credits.clip.frame(0)), 0, top - 32 + 200 - offset);
+        ctx.restore();
+        ctx.fillStyle = `rgba(0,0,0,${Math.max(0, 1 - creditsAge / (90 * TICK_MS))})`;
+        ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+        return;
+      }
+      const source = endingStage === 'film'
+        ? scriptLayers.has('end-home') ? 'end-home' : scriptLayers.has('end-heal') ? 'end-heal' : backgroundName
+        : backgroundName;
+      const outside = scriptRenderers.get(source);
       const background = outside ? outside.renderer.render(outside.clip.frame(0)) : packedBackground ? packedBackground.render(0) : bg;
       ctx.drawImage(background, 0, 0);
-      if (modern && backdrop && (backdropDirty || backdropScene !== backgroundName)) {
+      if (modern && backdrop && (backdropDirty || backdropScene !== source)) {
         const { x, y, w, h } = ROOM_ART;
         backdrop.drawImage(background, x, y, w, h, 0, 0, w, h);
         backdropDirty = false;
-        backdropScene = backgroundName;
+        backdropScene = source;
       }
       ctx.save();
       ctx.beginPath(); ctx.rect(8, 8, 304, scene.uiMaskY - 8); ctx.clip();
@@ -551,6 +595,14 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       drawAmbient(true);
       if (!blackout) drawNpcs(true);
       if (!blackout && backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, drawLayerTable, state.pos.y, "front");
+      if (battle && battle.malcolm >= 0 && !scriptLayers.has('finala')) {
+        const malcolm = scriptRenderers.get('finala')!;
+        ctx.drawImage(malcolm.renderer.render(malcolm.clip.frame(battle.malcolm)), 8, 46);
+      }
+      if (battle?.bead) {
+        const bead = scriptRenderers.get('bead')!;
+        ctx.drawImage(bead.renderer.render(bead.clip.frame(battle.bead.index)), battle.bead.x, battle.bead.y);
+      }
       for (const [name, layer] of scriptLayers) if (!behindActors(name)) {
         ctx.drawImage(layer.image, layer.x, layer.y);
         if (layer.shapes && spriteDefMap) drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, layer.shapes);
@@ -558,6 +610,16 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
       if (scene.opening && packedBackground && movingAtmosphere) drawKallakAtmosphere(ctx, clockMs);
       ctx.restore();
+      if (endingStage === 'film') {
+        const opacity = shadeOpacity();
+        if (opacity > 0) {
+          ctx.fillStyle = `rgba(0,0,0,${opacity})`;
+          ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+        }
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, scene.uiMaskY, LOGICAL_WIDTH, LOGICAL_HEIGHT - scene.uiMaskY);
+        return;
+      }
 
       const amulet = scriptLayers.get('amulet');
       const showRadial = modern && (inventoryOpen || !!sequence && (amuletMovieActive || jewels.some(jewel => scriptLayers.has(jewel.clip))));
@@ -708,7 +770,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let animationFrame = 0;
 
     function setTarget(point: Vec2) {
-      if (paused || !running || transition?.active || dead || sequence || inventoryOpen || point.y >= scene.uiMaskY || state.drops.length) return;
+      if (paused || !running || transition?.active || dead || sequence || endingStage || inventoryOpen || point.y >= scene.uiMaskY || state.drops.length) return;
       pendingPortal = null;
       actorShape = null;
       const path = findClickPath(state.pos, point, p => isWalkable(p, scene, mask));
@@ -766,7 +828,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function setInventoryOpen(value: boolean) {
-      if (value === inventoryOpen || value && (!modern || paused || !running || dead || sequence || transition?.active || state.drops.length)) return false;
+      if (value === inventoryOpen || value && (!modern || paused || !running || dead || sequence || endingStage || transition?.active || state.drops.length)) return false;
       inventoryOpen = value;
       if (value) {
         openRadialAt(state.pointer);
@@ -786,6 +848,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function handleClick(point: Vec2) {
       if (paused || !running) return true;
+      if (endingStage === 'credits') { finishEnding(); return true; }
+      if (endingStage) return true;
       if (transition?.active) return true;
       if (sequence?.awaiting) {
         if (state.statusMessageUntil === Infinity) state.statusMessage = null;
@@ -952,7 +1016,21 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         case 'choice':
           if (!action.silent) { state.statusMessage='Click where you want to go.';state.statusMessageUntil=Infinity; }
           break;
-        case 'death':dead=true;actorVisible=false;break;
+        case 'death': dead = true; if (!battle) actorVisible = false; break;
+        case 'finalBattle': battle?.[action.command](); break;
+        case 'ending':
+          endingStage = action.stage;
+          for (const surface of [config.statusTextCanvas, radialCanvas, config.inventoryTooltipCanvas])
+            if (surface) surface.hidden = true;
+          break;
+        case 'shade': shade = { from: shadeOpacity(), to: action.opacity, start: clockMs, ms: action.ms }; break;
+        case 'shuffle': {
+          const previous = document.createElement('canvas');
+          previous.width = LOGICAL_WIDTH; previous.height = LOGICAL_HEIGHT;
+          previous.getContext('2d')!.drawImage(canvas, 0, 0);
+          transition = sceneShuffle(previous);
+          break;
+        }
         case 'blackout':blackout=action.active;break;
         case 'shake': shakeUntil = clockMs + action.ms; break;
         case 'exit':config.onExit?.({id:'script',target:action.target,side:action.side ?? 'north',entry:action.entry,rect:{x:0,y:0,w:0,h:0},point:state.pos});break;
@@ -1095,7 +1173,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           break;
         case "say": {
           speaker=action.speaker??0;
-          const palette = packedBackground?.clip.info.palette;
+          const palette = endingStage === 'film' ? scriptRenderers.get('end-home')?.clip.info.palette : packedBackground?.clip.info.palette;
           const color = palette ? `rgb(${palette.slice(action.color * 3, action.color * 3 + 3).join(",")})` : "#f2f2f2";
           config.onSubtitleChange?.(action.text.trim()?[{ startMs: 0, endMs: action.ms, text: action.text, x: action.x, y: action.y,
             type: "talk", align: "center", maxWidth: 220, color }]:[]);
@@ -1125,14 +1203,19 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         startVoice: line => {
           const bank = line.voiceBank ?? (scene.opening && (backgroundName === 'trunk' || backgroundName === 'gem')
             ? backgroundName.toUpperCase() : config.roomResource);
-          if (bank && !skippingOpening) return config.onVoice?.(bank, line.voiceId);
+          if (bank && !skippingOpening && line.voiceId >= 0) return config.onVoice?.(bank, line.voiceId);
         },
         movementTempo: () => state.walkDelayTicks / 6,
         frames: name => scriptRenderers.get(name)?.clip.info.frames.length ?? 0 });
       if (!paused && startImmediately) sequence.update(0);
     }
 
+    function finishEnding() {
+      endingStage = 'done';
+      config.onEnding?.();
+    }
     function skipOpening() {
+      if (!paused && endingStage === 'credits') { finishEnding(); return true; }
       if (paused || !sequence || sequence !== openingSequence) return false;
       applyScript({ op: 'clearText', stopVoice: true });
       skippingOpening = true;
@@ -1207,7 +1290,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         ...(roomPalette ? { palette: roomPalette } : {}) }
     }); }
     function getSaveSnapshot() {
-      return running && !dead && !sequence && !transition?.active && !state.drops.length && !paletteFade && ambientWait === null && backgroundName === 'room' && actorVisible ? getSnapshot() : null;
+      return running && !dead && !sequence && !endingStage && !battle?.started && !transition?.active && !state.drops.length && !paletteFade && ambientWait === null && backgroundName === 'room' && actorVisible ? getSnapshot() : null;
     }
     function setPaused(value: boolean) {
       if (!running || paused === value || dead && !value) return;

@@ -13,12 +13,14 @@ const forest = JSON.parse(gunzipSync(await readFile('public/assets/forest/forest
 const names = new Set(['INTRO', 'CHAPTER1', ...world.rooms.map(room => room.name), ...Object.keys(forest.rooms)]);
 const archives = await readGameResources(gameDir, [...names].map(name => `${name}.VRM`));
 const introIds = new Set([...Array.from({ length: 16 }, (_, id) => id), 19, 20, 21, 22, 23, 25, 27, 28, 43, 44, 45, 46]);
+const reunionIds = new Set(forest.reunion.filter(action => action.op === 'say').map(action => action.voiceId));
+names.add('REUNION');
 const out = 'public/assets/voices';
 await mkdir(out, { recursive: true });
 let count = 0, total = 0;
 const exported = [];
 for (const name of [...names].sort()) {
-  const archive = archives.get(`${name}.VRM`);
+  const archive = archives.get(name === 'REUNION' ? 'INTRO.VRM' : `${name}.VRM`);
   if (!archive) continue;
   const index = {}, clips = [];
   let offset = 0;
@@ -26,6 +28,7 @@ for (const name of [...names].sort()) {
     if (!/^\d+\.VOC$/.test(file) || !vocDuration(voc)) continue;
     const id = parseInt(file, 10);
     if (name === 'INTRO' && !introIds.has(id)) continue;
+    if (name === 'REUNION' && !reunionIds.has(id)) continue;
     const result = spawnSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-f', 'voc', '-i', 'pipe:0', '-ac', '1', '-ar', '16000',
       '-c:a', 'libmp3lame', '-b:a', '24k', '-write_xing', '0', '-id3v2_version', '0', '-f', 'mp3', 'pipe:1'], { input: voc, windowsHide: true });
     if (result.error || result.status !== 0 || !result.stdout.length) throw result.error ?? new Error(`${name}/${file}: ${result.stderr}`);
