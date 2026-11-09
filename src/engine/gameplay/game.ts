@@ -448,8 +448,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
       };
       if (!blackout) drawNpcs(false);
-      const actorLayerPre = mask ? resolveActorLayer(state.pos, drawLayerTable, mask) : 1;
-      if (!blackout && backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayerPre, "behind");
+      if (!blackout && backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, drawLayerTable, state.pos.y, "behind");
       if (!blackout && state.drops.length) {
         drawDropAnims(ctx, itemsSheet, inventoryItems, state.drops);
       }
@@ -497,7 +496,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (drawBrandon) restoreForeground(state.pos, drawX, drawY, drawW, drawH);
       drawAmbient(true);
       if (!blackout) drawNpcs(true);
-      if (!blackout && backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
+      if (!blackout && backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, drawLayerTable, state.pos.y, "front");
       for (const [name, layer] of scriptLayers) if (!behindActors(name)) ctx.drawImage(layer.image, layer.x, layer.y);
 
       if (scene.opening && packedBackground && movingAtmosphere) drawKallakAtmosphere(ctx, clockMs);
@@ -809,7 +808,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (state.itemInHand) {
         stopWalking();
         if(noDropRegions.some(r=>point.x>=r.x&&point.x<r.x+r.w&&point.y>=r.y&&point.y<r.y+r.h)){soundEffect(54);return true;}
-        if (dropItemAt(point, state.itemInHand, state.drops, state.sceneItems, scene, mask)) {
+        if (dropItemAt(point, state.itemInHand, state.drops, state.sceneItems, scene, mask, noDropRegions)) {
           state.itemInHand = null;
         } else soundEffect(54);
         // A failed drop keeps the item in hand and must not trigger walking/pickup.

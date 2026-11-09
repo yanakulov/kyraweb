@@ -6,12 +6,13 @@ import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneItem, SceneMe
 import { isShadowrealmRoom, isWorldRoomId, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 import type { RoomAction } from "./roomScript";
 import { createForestState, traceForest, applyForestState, loadForestData, originalItem, itemFromOriginal,
-  ageFireberry, curePoison, poisonArrival, scatterGem, groveGems, transformWisp } from './forest';
+  ageFireberry, canScatterGemsIn, curePoison, poisonArrival, scatterGem, groveGems, transformWisp } from './forest';
 import { validateWorldSave } from './saveStorage';
-import { findDropDestination } from './drops';
+import { findSpawnDestination } from './drops';
 
 export const SIDES = ["north", "east", "south", "west"] as const;
 const EXIT_FACING = { north: 0, east: 2, south: 4, west: 6 };
+const scatteredGemIds = new Set([...groveGems, 1, 8]);
 export type CursorTrack = Pick<RoomPortal, "side" | "rect">;
 export type WorldRoom = SceneMeta & { id: number; name: string; title: string; exits: (number | null)[];
   entryMusic?: Extract<RoomAction, { op: 'music' }>[];
@@ -169,10 +170,22 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       arrival=nearestFloor(mask,from?.entry??meta.entrances[opposite]);snapshot.pos=arrival;
       setupActions.unshift({op:'npc',character:2,...quest.herman,visible:quest.herman.room===id},{op:'npc',character:1,...quest.merith,visible:quest.merith.room===id});
     }
+    const noDrop = restoring ? snapshot.runtime!.noDrop : setupActions.filter(action => action.op === 'noDrop');
+    if (state && !state.gemPlacementChecked && canScatterGemsIn(id)) {
+      // Older saves can contain gems placed by the walking-mask fallback.
+      for (const [index, item] of snapshot.sceneItems.entries()) {
+        if (!scatteredGemIds.has(originalItem(item.id))) continue;
+        const others = snapshot.sceneItems.filter((_, slot) => slot !== index);
+        const floor = findSpawnDestination(item, config.scene, mask, others, noDrop, meta.northHeight);
+        if (floor) snapshot.sceneItems[index] = { id: item.id, ...floor };
+      }
+    }
+    const unplaced: number[] = [];
     for (const [index, gem] of additions.entries()) {
       const preferred = { x: 46 + (id * 29 + gem * 37 + index * 17) % 222, y: Math.max(meta.northHeight, 94 + gem % 4 * 6) };
-      const floor = findDropDestination(preferred, config.scene, mask, snapshot.sceneItems) ?? nearestFloor(mask, preferred);
-      snapshot.sceneItems.push({ id: itemFromOriginal(gem)!, ...floor });
+      const floor = findSpawnDestination(preferred, config.scene, mask, snapshot.sceneItems, noDrop, meta.northHeight);
+      if (floor) snapshot.sceneItems.push({ id: itemFromOriginal(gem)!, ...floor });
+      else unplaced.push(gem);
     }
     let entryActions: RoomAction[] | undefined;
     if (!restoring && previous === 1 && id === 5) entryActions = [...lift("dropdown", 232, 8, 6), { op: "actor", x: 280, y: 116, facing: 3, visible: true }];
@@ -288,14 +301,15 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     }); } catch (error) { callbackOwner = oldOwner; throw error; }
     game.setAtmosphere(settings.atmosphere); game.setWalkSpeed(settings.walkSpeed);
     game.setAnimStepInterval(settings.interval); game.setDebug(settings.debug);
-    if (additions.length) delete quest.scatteredGems[id];
+    if (unplaced.length) quest.scatteredGems[id] = unplaced;
+    else if (additions.length) delete quest.scatteredGems[id];
     return { game, meta, portals };
   }
 
   async function navigate(portal: RoomPortal) {
     try {
       config.onLoadingChange?.(true);
-      saved.set(currentId, current.getSnapshot());
+      saved.set(currentId, { ...current.getSnapshot(), gemPlacementChecked: true });
       const next = await load(portal.target, portal, currentId);
       if (!active) { next.game.stop(); return; }
       current.stop(); current = next.game; currentId = portal.target;
@@ -340,7 +354,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       const room = active && !busy ? current.getSaveSnapshot() : null;
       if (!room) return null;
       return structuredClone({ version: 1, currentRoom: currentId,
-        rooms: { ...Object.fromEntries(saved), [currentId]: room },
+        rooms: { ...Object.fromEntries(saved), [currentId]: { ...room, gemPlacementChecked: true } },
         quest: { ...quest, flags: [...quest.flags], vaseInitialized: true },
         settings: { atmosphere: settings.atmosphere, walkSpeed: settings.walkSpeed, animStepInterval: settings.interval } });
     },

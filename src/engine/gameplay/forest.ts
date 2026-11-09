@@ -67,6 +67,7 @@ export function createForestState(): ForestState {
 export const groveGems = [0, 3, 5, 7, 9, 10, 11, 2];
 // The original generic placement only uses eligible, connected rooms in the region.
 const gemRooms = [[9, 10, 11, 12, 13, 14, 15], [17, 18, 19, 20, 21, 22, 23, 24, 28, 30, 32, 33, 34]];
+export const canScatterGemsIn = (room: number) => gemRooms.some(region => region.includes(room));
 export function scatterGem(item: number, region: number, currentRoom: number): Extract<RoomAction, { op: 'scatterGem' }> {
   const rooms = (gemRooms[region] ?? gemRooms[0]).filter(id => id !== currentRoom);
   return { op: 'scatterGem', item, room: rooms[Math.floor(Math.random() * rooms.length)] };

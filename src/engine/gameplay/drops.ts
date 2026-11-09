@@ -2,9 +2,11 @@
 // Falling/bounce trajectory follows ScummVM engines/kyra/engine/items_lok.cpp.
 // Copyright ScummVM contributors. See LICENSES/GPL-3.0.txt.
 import { LOGICAL_WIDTH, TICK_MS } from "../core/constants";
-import { getDrawLayer, getMaskValue, isWalkable } from "../scene/masks";
+import { getMaskValue, isWalkable } from "../scene/masks";
 import { findSceneItemAt, getTileRect } from "./inventory";
 import type { DropAnim, InventoryItem, InventoryItemId, MaskData, SceneConfig, SceneItem, Vec2 } from "../core/types";
+
+type DropRegion = Vec2 & { w: number; h: number };
 
 export function buildDropPath(from: Vec2, dest: Vec2): Vec2[] {
   const path = [{ ...from }];
@@ -39,11 +41,12 @@ export function dropItemAt(
   drops: DropAnim[],
   items: SceneItem[],
   scene: SceneConfig,
-  mask: MaskData | null
+  mask: MaskData | null,
+  noDrop: DropRegion[] = [],
 ) {
   if (!itemInHand || point.y < 0 || point.y >= scene.uiMaskY || point.x < 0 || point.x >= LOGICAL_WIDTH) return false;
   if (items.length + drops.length >= 12) return false;
-  const dest = findDropDestination(point, scene, mask, [...items, ...drops.map(d => ({ id: d.id, x: d.destX, y: d.destY }))]);
+  const dest = findDropDestination(point, scene, mask, [...items, ...drops.map(d => ({ id: d.id, x: d.destX, y: d.destY }))], noDrop);
   if (!dest) return false;
   const from = { x: Math.floor(point.x), y: Math.floor(point.y) };
   drops.push({ id: itemInHand, ...from, destX: dest.x, destY: dest.y, path: buildDropPath(from, dest), elapsedMs: 0 });
@@ -83,32 +86,59 @@ export function drawDropAnims(
   }
 }
 
-function canDropAt(point: Vec2, scene: SceneConfig, mask: MaskData | null) {
+function canDropAt(point: Vec2, scene: SceneConfig, mask: MaskData | null, noDrop: DropRegion[], maxLayer: number) {
   if (point.x < 16 || point.x > 304 || point.y < 1 || point.y >= scene.uiMaskY) return false;
+  if (noDrop.some(region => point.x + 8 > region.x && point.x - 8 < region.x + region.w &&
+      point.y > region.y && point.y - 16 < region.y + region.h)) return false;
   if (!mask) return isWalkable(point, scene, null);
   if (point.x + 7 >= mask.width || point.y >= mask.height) return false;
   for (let x = point.x - 8; x < point.x + 8; x++) {
-    if ((getMaskValue(mask, x, point.y - 1) & 0x80) !== 0) return false;
-    // Keep the 16px icon out of fully occluding foreground.
-    for (let y = Math.max(0, point.y - 17); y < point.y - 1; y++) {
-      if ((getMaskValue(mask, x, y) & 7) >= 7) return false;
+    if ((getMaskValue(mask, x, point.y - 1) & 0x87) > 1) return false;
+    for (let y = Math.max(0, point.y - 16); y < point.y - 1; y++) {
+      if ((getMaskValue(mask, x, y) & 7) > maxLayer) return false;
     }
   }
-  return getDrawLayer(mask, point.x, point.y) <= 1;
+  return true;
 }
 
-export function findDropDestination(point: Vec2, scene: SceneConfig, mask: MaskData | null, items: SceneItem[]): Vec2 | null {
+function findPlaceOnRow(x: number, y: number, step: number, valid: (point: Vec2) => boolean) {
+  for (let distance = 0; distance <= 288; distance += step) {
+    const left = { x: x - distance, y };
+    if (left.x >= 16 && valid(left)) return left;
+    const right = { x: x + distance, y };
+    if (distance && right.x <= 304 && valid(right)) return right;
+  }
+  return null;
+}
+
+export function findDropDestination(point: Vec2, scene: SceneConfig, mask: MaskData | null, items: SceneItem[], noDrop: DropRegion[] = []): Vec2 | null {
   const x = Math.max(16, Math.min(304, Math.floor(point.x)));
   const firstY = Math.max(1, Math.floor(point.y));
   // Search down in 2px rows, then outwards on a valid floor row.
   for (let y = firstY; y < scene.uiMaskY; y += 2) {
-    if (!canDropAt({ x, y }, scene, mask)) continue;
-    for (let distance = 0; distance <= 288; distance += 2) {
-      for (const candidateX of distance === 0 ? [x] : [x - distance, x + distance]) {
-        const candidate = { x: candidateX, y };
-        if (canDropAt(candidate, scene, mask) && findSceneItemAt(candidate, items) === -1) return candidate;
-      }
-    }
+    if (!canDropAt({ x, y }, scene, mask, noDrop, 6)) continue;
+    const destination = findPlaceOnRow(x, y, 2, candidate =>
+      canDropAt(candidate, scene, mask, noDrop, 6) && findSceneItemAt(candidate, items) === -1);
+    if (destination) return destination;
+  }
+  return null;
+}
+
+export function findSpawnDestination(point: Vec2, scene: SceneConfig, mask: MaskData, items: SceneItem[],
+  noDrop: DropRegion[], northHeight: number): Vec2 | null {
+  if (items.length >= 12) return null;
+  const x = Math.max(16, Math.min(304, Math.floor(point.x)));
+  const valid = (candidate: Vec2) => canDropAt(candidate, scene, mask, noDrop, 1) &&
+    !items.some(item => Math.abs(item.x - candidate.x) < 16 && Math.abs(item.y - candidate.y) < 16);
+  const first = Math.min(scene.uiMaskY - 1, Math.max(northHeight, Math.floor(point.y)));
+  // Retry across the floor if the preferred column has no clear landing.
+  for (let y = first; y < scene.uiMaskY; y++) {
+    const destination = findPlaceOnRow(x, y, 1, valid);
+    if (destination) return destination;
+  }
+  for (let y = first - 1; y >= northHeight; y--) {
+    const destination = findPlaceOnRow(x, y, 1, valid);
+    if (destination) return destination;
   }
   return null;
 }

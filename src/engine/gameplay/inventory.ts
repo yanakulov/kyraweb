@@ -1,5 +1,5 @@
 import { INVENTORY_ICON_SIZE, ITEMS_SHEET_COLS } from "../core/constants";
-import { getDrawLayer } from "../scene/masks";
+import { getMaskValue, resolveActorLayer } from "../scene/masks";
 import type { InventoryItem, InventoryItemId, InventorySlot, MaskData, SceneItem, Vec2 } from "../core/types";
 // Entries follow the DOS CD item order (ScummVM's k1ItemNamesDOSEnglish table).
 import itemNames from '../../locales/item-names.json';
@@ -90,27 +90,35 @@ export function drawSceneItems(
   inventoryItems: Map<InventoryItemId, InventoryItem>,
   items: SceneItem[],
   mask: MaskData | null,
-  actorLayer: number,
+  drawLayerTable: number[] | null,
+  actorY: number,
   phase: "behind" | "front"
 ) {
-  for (const item of items) {
+  const visible = items.filter(item => (item.y > actorY) === (phase === "front"));
+  visible.sort((a, b) => a.y - b.y);
+  for (const item of visible) {
     const def = inventoryItems.get(item.id);
     if (!def) continue;
-    const itemLayer = mask ? getDrawLayer(mask, item.x, item.y) : 1;
-    const isFront = itemLayer > actorLayer;
-    if ((phase === "front") !== isFront) continue;
     const rect = getTileRect(def.tileIndex);
-    ctx.drawImage(
-      itemsSheet,
-      rect.x,
-      rect.y,
-      rect.w,
-      rect.h,
-      Math.round(item.x - 8),
-      Math.round(item.y - 16),
-      rect.w,
-      rect.h
-    );
+    const x = Math.round(item.x - 8), y = Math.round(item.y - 16);
+    if (mask) {
+      // Clip the sprite itself so foreground pixels never erase another sprite.
+      const priority = resolveActorLayer(item, drawLayerTable, mask);
+      ctx.save();
+      ctx.beginPath();
+      for (let row = y; row < y + rect.h; row++) {
+        let start = x;
+        for (let column = x; column < x + rect.w; column++) {
+          if ((getMaskValue(mask, column, row) & 7) <= priority) continue;
+          if (column > start) ctx.rect(start, row, column - start, 1);
+          start = column + 1;
+        }
+        if (start < x + rect.w) ctx.rect(start, row, x + rect.w - start, 1);
+      }
+      ctx.clip();
+    }
+    ctx.drawImage(itemsSheet, rect.x, rect.y, rect.w, rect.h, x, y, rect.w, rect.h);
+    if (mask) ctx.restore();
   }
 }
 
