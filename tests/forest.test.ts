@@ -108,6 +108,53 @@ function quest() {
   return { state, snapshot, run, enter, all };
 }
 
+test('Darm and Brandywine use separate dialogue anchors and the original Darm talk animation', () => {
+  const q = quest();
+  q.enter('SPELL');
+  const first = q.run('SPELL', 1, 130, 76).actions;
+  const lines = first.flatMap(action => action.op === 'say' ? [[action.voiceId, action.speaker, action.x, action.y]] : []);
+  assert.deepEqual(lines[0].slice(0, 2), [42, 0]);
+  assert.deepEqual(lines.slice(1, 3), [[43, 'brandywine', 140, 52], [44, 8, 140, 36]]);
+  assert.ok(first.some(action => action.op === 'frame' && action.clip === 'brandyw3' && action.index === 19));
+  const repeat = q.run('SPELL', 1, 130, 76).actions;
+  const delivered: RoomAction[] = [];
+  const script = new RoomScript(repeat, { apply: action => delivered.push(action), walking: () => false, frames: () => 0 });
+  while (!delivered.some(action => action.op === 'say') && !script.done) script.update(50);
+  const line = delivered.find(action => action.op === 'say')!;
+  assert.equal(line.voiceId, 71);
+  assert.equal(line.speaker, 8);
+  assert.deepEqual([line.x, line.y, line.color], [140, 36, 85]);
+  const visible = (index: number) => delivered.filter(action => action.op === 'ambient' && action.internal && action.index === index)
+    .map(action => action.op === 'ambient' && action.enabled);
+  assert.deepEqual(visible(5), [false]);
+  assert.deepEqual(visible(6), [true]);
+  assert.equal(script.skipLine(), true);
+  script.update(0);
+  assert.deepEqual(visible(5).slice(0, 2), [false, true]);
+  assert.deepEqual(visible(6).slice(0, 2), [true, false]);
+});
+
+test('the original grotto script branches at the knife and the flute reopens the cave', () => {
+  const { state, snapshot } = quest();
+  const dragon = data.rooms.DRAGON;
+  const door = { x: 256, y: 90 };
+  const scene = traceForest(dragon, 1, state, snapshot, door, () => true, [], -5);
+  const choice = scene.actions.find(action => action.op === 'choice');
+  assert.ok(choice && scene.handled);
+  assert.ok(choice.resume({ x: 160, y: 94 }).some(action => action.op === 'death'));
+  const survived = choice.resume({ x: 42, y: 80 });
+  assert.ok(!survived.some(action => action.op === 'death'));
+  for (const action of survived) applyForestState(state, action);
+  assert.ok(state.flags.has(71) && state.flags.has(82));
+
+  snapshot.itemInHand = 'item-55';
+  const flute = traceForest({ ...dragon, ...data.flute }, 0, state, snapshot);
+  assert.ok(flute.actions.some(action => action.op === 'heroFrame' && action.clip === 'flute'));
+  assert.ok(flute.actions.some(action => action.op === 'frame' && action.clip === 'shatter' && action.permanent));
+  for (const action of flute.actions) applyForestState(state, action);
+  assert.ok(!state.flags.has(82));
+});
+
 test("original forest quest reaches the amulet and bridge through actual EMC branches", () => {
   const q = quest();
   q.state.flags.add(53);

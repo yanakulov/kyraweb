@@ -110,9 +110,21 @@ export function validateWorldSave(value: unknown): WorldSave {
     runtime(room.runtime, `rooms.${key}.runtime`);
   }
   if (!Object.prototype.hasOwnProperty.call(rooms, String(data.currentRoom))) invalid('current room snapshot');
-  const quest = object(data.quest, 'quest', 'flags files phasing vase vaseInitialized merith herman');
+  const quest = object(data.quest, 'quest', 'flags files phasing vase vaseInitialized merith herman birthstones scatteredGems poison');
   if (quest.vaseInitialized !== undefined) boolean(quest.vaseInitialized, 'quest.vaseInitialized');
   list(quest.flags, 'quest.flags', 512, (value, path) => number(value, path, 0, 511));
+  if (quest.birthstones !== undefined) {
+    const stones = quest.birthstones;
+    if (!Array.isArray(stones) || stones.length !== 4 || stones[0] !== 12 || stones[3] !== 6) invalid('quest.birthstones');
+    number(stones[1], 'second birthstone', 0, 3);
+    number(stones[2], 'third birthstone', 7, 11);
+  }
+  if (quest.scatteredGems !== undefined) for (const [key, gems] of Object.entries(object(quest.scatteredGems, 'quest.scatteredGems'))) {
+    roomId(Number(key), 'gem room');
+    if (String(Number(key)) !== key) invalid('gem room');
+    list(gems, 'scattered gems', 256, (value, path) => number(value, path, 0, 12));
+  }
+  if (quest.poison !== undefined) number(quest.poison, 'quest.poison', 0, 2);
   const files = object(quest.files, 'quest.files');
   for (const [key, value] of Object.entries(files)) {
     roomId(Number(key), 'quest room'); if (String(Number(key)) !== key || typeof value !== 'string' || !forestFiles.has(value)) invalid('quest scene file');

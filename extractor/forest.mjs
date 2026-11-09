@@ -83,6 +83,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     "JEWELS3.CPS",
     "DROPUP.WSA",
     "DROPDOWN.WSA",
+    "FLUTE1.CPS", "FLUTE2.CPS", "HEALBR2.CPS", "POISON.CPS", "SHATTER.WSA",
   ]);
   const get = (n) => {
     const b = resources.get(n);
@@ -110,6 +111,9 @@ export async function buildForest(root, out = "public/assets/forest") {
   for (let y = 0; y < 128; y++) notePixels.set(note.pixels.subarray((y + 8) * 320 + 63, (y + 8) * 320 + 257), y * 194);
   const noteClip = { width: 194, height: 128, frames: [notePixels], palette: note.palette, transparentIndex: -1 };
   const npcProgram = parseEmc(get('_NPC.EMC')), npcVoices = readPak(get('CHAPTER1.VRM'));
+  const flute = { program: npcProgram, durations: Object.fromEntries(
+    [...npcVoices].filter(([name]) => /^(100[01]|201[01]|700[0124]|904[123])\.VOC$/.test(name))
+      .map(([name, data]) => [parseInt(name, 10), vocDuration(data)])) };
   function selfActions(item, room = 0, readable = false) {
     const actions = [];
     runEmc(npcProgram, 0, (op, a, strings) => {
@@ -212,6 +216,9 @@ export async function buildForest(root, out = "public/assets/forest") {
         palette: image.palette,
         transparentIndex: -1,
       };
+    if (name === 'DRAGON') clips.shatter = {
+      ...decodeWsa(get('SHATTER.WSA')), palette: image.palette, transparentIndex: -1,
+    };
     if (name === 'SONG') {
       // Keep the healed bird from the last SNGSPELL frame while its feather falls.
       const { width, frames } = clips.sngspell;
@@ -308,7 +315,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     };
   await writeFile(
     join(out, "forest.json.gz"),
-    gzipSync(JSON.stringify({ rooms: data.rooms, letter, self, caveSelf }), { level: 9 }),
+    gzipSync(JSON.stringify({ rooms: data.rooms, letter, self, caveSelf, flute }), { level: 9 }),
   );
   await mkdir("tests/fixtures", { recursive: true });
   await writeFile(
@@ -352,6 +359,21 @@ export async function buildForest(root, out = "public/assets/forest") {
       },
     }),
   );
+  // Cell positions and order from the original CD character shape tables.
+  const hero = {};
+  for (const [name, sheets, width, height] of [
+    ['flute', [['FLUTE1', 0, 0, 12], ['FLUTE1', 75, 12, 1], ['FLUTE1', 75, 0, 13], ['FLUTE2', 0, 0, 10]], 24, 75],
+    ['cure', [['HEALBR2', 0, 0, 12], ['HEALBR2', 48, 0, 12], ['HEALBR2', 96, 0, 6]], 24, 48],
+    ['poison', [0, 48, 96, 144].map(y => ['POISON', y, 0, 5]), 64, 48],
+  ]) {
+    const frames = sheets.flatMap(([sheet, y, first, count]) => {
+      const { pixels } = decodeCps(get(`${sheet}.CPS`), get('PALETTE.COL'));
+      return Array.from({ length: count }, (_, index) => Uint8Array.from({ length: width * height }, (_, i) =>
+        pixels[(y + Math.floor(i / width)) * 320 + (first + index) * width + i % width]));
+    });
+    hero[name] = { width, height, frames, palette: amuletPalette, transparentIndex: 0 };
+  }
+  await writeFile(join(out, 'hero-actions.kyr.gz'), encodeScenePack(hero));
   console.log({
     rooms: names.length,
     bytes: Object.values(data.rooms).reduce((n, r) => n + r.bytes, 0),

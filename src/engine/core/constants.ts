@@ -8,7 +8,7 @@ export const DEFAULT_ANIM_STEP_INTERVAL = 1;
 export const WALK_PAD_X = 4;
 export const INVENTORY_ICON_SIZE = 16;
 export const ITEMS_SHEET_COLS = 20;
-export const isWorldRoomId = (id: number) => Number.isInteger(id) && id >= 0 && id <= 36 && id !== 25 && id !== 35;
+export const isWorldRoomId = (id: number) => Number.isInteger(id) && (id >= 0 && id <= 36 || id === 109);
 export const YELLOW_JEWEL_FLAG = 86;
 export const YELLOW_JEWEL_POS = { x: 253, y: 159 };
 export const YELLOW_JEWEL_HITBOX = { x: 253, y: 156, w: 26, h: 18 };

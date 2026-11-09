@@ -35,9 +35,13 @@ export type RoomAction =
       y: number;
       color: number;
       blocking: boolean;
-      speaker?: number;
+      speaker?: number | "brandywine";
     }
   | { op: "flag"; flag: number; value: boolean }
+  | { op: "scatterGem"; item: number; room: number }
+  | { op: "poison"; crossings: number }
+  | { op: "heroFrame"; clip?: string; index?: number }
+  | { op: "ambientPosition"; index: number; x: number; y: number }
   | { op: "sceneFile"; room: number; name: string }
   | {
       op: "npc";
