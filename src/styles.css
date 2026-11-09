@@ -93,6 +93,16 @@ body {
   /* A finger aims inside the scene; two fingers can still zoom the page. */
   touch-action: pinch-zoom;
 }
+.scene-loading-logo {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  margin: auto;
+  width: min(34%, 256px);
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.book-status-logo { width: 104px; height: auto; image-rendering: pixelated; }
 .stage .radial-surface { position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 3; }
 .stage :is(.inventory-tooltip, .status-text) { position: absolute; image-rendering: auto; pointer-events: none; }
 .stage .inventory-tooltip { z-index: 4; }
