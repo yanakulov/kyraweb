@@ -3,11 +3,11 @@ import { loadImage, withBase } from "../core/assets";
 import { IndexedClip, loadScenePack, type ScenePack } from "../resources/scenePack";
 import { isWalkable } from "../scene/masks";
 import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneItem, SceneMeta, Vec2, WorldSave } from "../core/types";
-import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, isWorldRoomId, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
+import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, isWorldRoomId, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, RED_JEWEL_FLAG, RED_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 import { roomMusicCommand } from '../audio/cues';
 import type { RoomAction } from "./roomScript";
 import { createForestState, traceForest, applyForestState, loadForestData, originalItem, itemFromOriginal,
-  ageFireberry, canScatterGemsIn, curePoison, dispelMagic, poisonArrival, scatterGem, groveGems, transformWisp } from './forest';
+  ageFireberry, canScatterGemsIn, changeInvisibility, curePoison, dispelMagic, poisonArrival, scatterGem, groveGems, transformWisp } from './forest';
 import { validateWorldSave } from './saveStorage';
 import { findSpawnDestination } from './drops';
 
@@ -39,7 +39,7 @@ export function roomPortals(room: WorldRoom, mask: MaskData, track = room.cursor
   // Side exits take precedence at corners. The south edge includes the status strip.
   for (const side of ["west", "east", "south", "north"] as const) {
     const target = room.exits[SIDES.indexOf(side)];
-    if (target === null) continue;
+    if (target === null || room.id === 204 && target === 205) continue;
     const origin = room.entrances[side];
     const point = nearestFloor(mask, side === "north" ? { x: origin.x, y: room.northHeight + 4 } :
       side === "south" ? { x: origin.x, y: 132 } : { x: side === "east" ? 304 : 16, y: origin.y });
@@ -52,8 +52,10 @@ export function roomPortals(room: WorldRoom, mask: MaskData, track = room.cursor
   // EMC describes the visible entrance separately from the strip Brandon has to cross.
   if (room.id === 48 && track) portals.unshift({ ...track, id: 'faun-door', target: 47,
     point: nearestFloor(mask, { x: 274, y: 100 }) });
+  if (room.id === 203 && track) portals.unshift({ ...track, id: 'castle-path', target: 204,
+    point: nearestFloor(mask, { x: 96, y: 72 }) });
   const tracked = track && portals.find(portal => portal.side === track.side);
-  if (tracked) portals.unshift({ ...tracked, rect: track.rect });
+  if (tracked && tracked.rect !== track.rect) portals.unshift({ ...tracked, rect: track.rect });
   return portals.filter(p => isWorldRoomId(p.target));
 }
 
@@ -161,6 +163,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     const snapshot={...resume, inventorySlots: ageBerries ? carried.inventorySlots.map(ageFireberry) : carried.inventorySlots,
       itemInHand: ageBerries ? ageFireberry(carried.itemInHand) : carried.itemInHand,
       wispMs: carried.wispMs,
+      invisibleMs: carried.invisibleMs,
       sceneItems: [...resume.sceneItems, ...(quest.pendingItems[id] ?? [])].map(item => ({ ...item })), pos:arrival,facing,walkDelayTicks:({slowest:11,slow:9,fast:6,fastest:3})[settings.walkSpeed]};
     let cursorTrack = meta.cursorTrack;
     if (questRoom) {
@@ -245,25 +248,35 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       yellowJewel: quest.flags.has(YELLOW_JEWEL_FLAG),
       purpleJewel: quest.flags.has(PURPLE_JEWEL_FLAG),
       blueJewel: quest.flags.has(BLUE_JEWEL_FLAG),
+      redJewel: quest.flags.has(RED_JEWEL_FLAG),
+      onInvisibilityExpire: () => changeInvisibility(false),
       onWispExpire: () => transformWisp(id, false),
       poisoned: quest.poison > 0,
-      heroActions: quest.poison > 0 || quest.flags.has(PURPLE_JEWEL_FLAG) || [25, 29, 35, 41, 42, 45, 111, 117].includes(id) || snapshot.itemInHand === 'item-55' ||
+      heroActions: quest.poison > 0 || quest.flags.has(PURPLE_JEWEL_FLAG) || [25, 29, 35, 41, 42, 45, 111, 117, 200].includes(id) || snapshot.itemInHand === 'item-55' ||
         snapshot.inventorySlots.includes('item-55') || snapshot.sceneItems.some(item => item.id === 'item-55'),
       onPortalInteract: questRoom ? (portal, point, snapshot) => {
         const grotto = id === 25 && portal.target === 109 && (!quest.flags.has(71) || quest.flags.has(82));
         const closingGate = id === 115 && !quest.flags.has(116) && !quest.flags.has(117);
         const chasm = id === 114 && (portal.target === 120 && !quest.flags.has(113) || portal.target === 121 && quest.flags.has(113));
         const lava = id === 117 && portal.target === 198 && !quest.flags.has(179);
-        if (!grotto && !closingGate && !chasm && !lava && portal.id !== 'faun-door') return null;
+        if (!grotto && !closingGate && !chasm && !lava && portal.id !== 'faun-door' && portal.id !== 'castle-path') return null;
         const trigger = closingGate ? { x: 165, y: 100 } : chasm ? { x: 180, y: portal.target === 120 ? 52 : 108 } : lava ? { x: 8, y: 8 } : point;
         return traceForest(questRoom, 1, quest, snapshot, trigger,
-          p => isWalkable(p, { uiMaskY: 136 } as GameConfig['scene'], mask), [], grotto ? -5 : originalItem(snapshot.itemInHand)).actions;
+          p => isWalkable(p, { uiMaskY: 136 } as GameConfig['scene'], mask), [], grotto || portal.id === 'castle-path' ? -5 : originalItem(snapshot.itemInHand)).actions;
       } : undefined,
-      portalOpen: id === 115 ? portal => portal.target !== 197 || !quest.flags.has(116) || quest.flags.has(117) : undefined,
+      portalOpen: id === 204 ? portal => portal.target !== 205 || quest.flags.has(219)
+        : id === 115 ? portal => portal.target !== 197 || !quest.flags.has(116) || quest.flags.has(117) : undefined,
       onAmuletInteract: (snapshot, jewel) => {
         const say = (text: string, voiceId: number, ms: number): RoomAction => ({ op: 'say', text, voiceId, voiceBank: 'CHAPTER1', ms,
           x: snapshot.pos.x, y: snapshot.pos.y - 56, speaker: 0, color: 15, blocking: true });
         if (snapshot.itemInHand) return [say("Maybe I'd better put this down first.", 2000, 2019)];
+        const reveal = snapshot.invisibleMs ? changeInvisibility(false) : [];
+        if (jewel === 'red') {
+          if (!quest.flags.has(RED_JEWEL_FLAG)) return [say("It's a jewel, but why is it black?", 2002, 2234)];
+          return [{ op: 'sfx', track: 0x45 }, { op: 'frame', clip: 'red-jewel', index: 11, ...RED_JEWEL_POS, ms: 100 },
+            { op: 'close', clip: 'red-jewel' }, ...reveal,
+            ...(snapshot.wispMs ? transformWisp(id, false) : []), ...changeInvisibility(true)];
+        }
         if (jewel === 'blue') {
           if (!quest.flags.has(BLUE_JEWEL_FLAG)) return [say("It's a jewel, but why is it black?", 2002, 2234)];
           const pressed: RoomAction[] = [{ op: 'sfx', track: 0x45 },
@@ -271,7 +284,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
             { op: 'close', clip: 'blue-jewel' }];
           const spell = id === 46 && questRoom ? traceForest(questRoom, 4, quest, snapshot, snapshot.pos,
             p => isWalkable(p, { uiMaskY: 136 } as GameConfig['scene'], mask), [], -1, 4) : undefined;
-          return [...pressed, ...(spell?.handled ? spell.actions : [...dispelMagic(id, !!snapshot.wispMs),
+          return [...pressed, ...(spell?.handled ? spell.actions : [...reveal, ...dispelMagic(id, !!snapshot.wispMs),
             say('That felt strange.', 2007, forest.flute.durations[2007] ?? 1900)])];
         }
         if (jewel === 'purple') {
@@ -280,15 +293,15 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
             { op: 'frame', clip: 'purple-jewel', index: 11, ...PURPLE_JEWEL_POS, ms: 100 },
             { op: 'close', clip: 'purple-jewel' }];
           if (quest.poison) return [...pressed, say("I can't do that while I'm poisoned.", 2004, 1900)];
-          return [...pressed, ...transformWisp(id, !snapshot.wispMs)];
+          return [...pressed, ...reveal, ...transformWisp(id, !snapshot.wispMs)];
         }
         if (!quest.flags.has(YELLOW_JEWEL_FLAG)) return [say("It's a jewel, but why is it black?", 2002, 2234)];
         const pressed: RoomAction[] = [{ op: 'sfx', track: 0x45 },
           { op: 'frame', clip: 'yellow-jewel', index: 11, ...YELLOW_JEWEL_POS, ms: 100 },
           { op: 'close', clip: 'yellow-jewel' }];
-        if (quest.poison) return [...pressed, ...curePoison(snapshot.pos, forest.flute.durations)];
+        if (quest.poison) return [...pressed, ...reveal, ...curePoison(snapshot.pos, forest.flute.durations)];
         const healing = questRoom && traceForest(questRoom, 4, quest, snapshot);
-        return [...pressed, ...(healing && healing.handled ? healing.actions : [say('Gee, this could come in handy if I get hurt.', 2003, 1810)])];
+        return [...pressed, ...(healing && healing.handled ? healing.actions : [...reveal, say('Gee, this could come in handy if I get hurt.', 2003, 1810)])];
       },
       onScriptAction: action => {
         applyForestState(quest, action);
@@ -376,6 +389,10 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     if(portal.id==='script')void navigate(portal);
     else if (currentId === 1 && portal.target === 5) current.runSequence(lift("liftdown", 192, 56, 5), () => void navigate(portal));
     else if (currentId === 5 && portal.target === 1) current.runSequence(lift("dropup", 232, 8, 6), () => void navigate(portal));
+    else if (currentId === 199 && !quest.flags.has(251)) {
+      const departing = roomSource(currentId).questRoom!;
+      current.runSequence(traceForest(departing, 5, quest, current.getSnapshot()).actions, () => void navigate(portal));
+    }
     else void navigate(portal);
   }
   const first = await load(currentId, undefined, undefined, !!restored); current = first.game;

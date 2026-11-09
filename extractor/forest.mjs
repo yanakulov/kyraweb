@@ -85,7 +85,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     "DROPUP.WSA",
     "DROPDOWN.WSA",
     "FLUTE1.CPS", "FLUTE2.CPS", "HEALBR2.CPS", "POISON.CPS", "SHATTER.WSA",
-    "BRANWILL.CPS", "SNOW1A.CPS", "SNOW2A.CPS", "DRINK.CPS", "TELEKIN.CPS",
+    "BRANWILL.CPS", "SNOW1A.CPS", "SNOW2A.CPS", "DRINK.CPS", "TELEKIN.CPS", "BRANSTON.CPS",
   ]);
   const get = (n) => {
     const b = resources.get(n);
@@ -350,6 +350,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     join(out, "amulet.kyr.gz"),
     encodeScenePack({
       "yellow-jewel": { width: 32, height: 17, frames: jewelFrames(1), palette: jewels.palette, transparentIndex: 0 },
+      "red-jewel": { width: 32, height: 17, frames: jewelFrames(2), palette: jewels.palette, transparentIndex: 0 },
       "purple-jewel": { width: 32, height: 17, frames: jewelFrames(3), palette: jewels.palette, transparentIndex: 0 },
       "blue-jewel": { width: 32, height: 17, frames: jewelFrames(4), palette: jewels.palette, transparentIndex: 0 },
       "amulet-rest": {
@@ -375,6 +376,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     ['wisp', [['BRANWILL', 0, 0, 8], ['BRANWILL', 48, 0, 8]], 40, 48],
     ['wisp-float', [['BRANWILL', 96, 0, 8], ['BRANWILL', 125, 0, 2]], 40, 29],
     ['dispel', [['TELEKIN', 0, 0, 5]], 64, 49],
+    ['stone', [['BRANSTON', 0, 0, 8], ['BRANSTON', 51, 0, 6]], 40, 51],
     ['winter', [['SNOW1A', 0, 1, 7],
       ...[['SNOW1A', 66], ['SNOW1A', 132], ['SNOW2A', 0], ['SNOW2A', 66]].flatMap(([sheet, y]) =>
         [0, 2, 4, 6].map(x => [sheet, y, x, 1])),

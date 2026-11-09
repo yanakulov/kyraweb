@@ -1,6 +1,6 @@
 # Forest regions
 
-The playable CD quest chain runs from Brandon’s home through Shadowrealm and Faeriewood to the Pegasus landing on the island of Castle Kyrandia.
+The playable CD quest chain runs from Brandon’s home through Shadowrealm and Faeriewood to the first encounter with Malcolm inside Castle Kyrandia.
 
 | ID | Original resource | Location |
 | --- | --- | --- |
@@ -26,7 +26,7 @@ The playable CD quest chain runs from Brandon’s home through Shadowrealm and F
 | 37–38 | PLTCAVE / PLATEAU | The cave exit and the plateau before Faeriewood |
 | 39–48, 53–65, 73 | Faeriewood | The falling branch, Zanthia’s laboratory, the Enchanted Fountain, the flaming tree, the blueberry waterfall and the Faun’s home |
 | 49, 52, 75, 80–108 | Deeper Faeriewood | The woods behind the laboratory, the tropical lagoon and the Crystals of Alchemy |
-| 199 | LANDING | The Pegasus landing on the castle island |
+| 199–205 | Castle island and entrance | The landing, misty grave, woods, bluff, gargoyle gate and entry hall |
 
 Click the scene edges, doorways or lift to leave. An exit changes the desktop cursor's direction. Brandon walks to a reachable approach before the scene changes. The first attempt to leave home plays the original tree conversation, including when carrying an item. Returning home preserves its completion state.
 

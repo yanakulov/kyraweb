@@ -14,7 +14,7 @@ async function size(dir) {
 // Expand with measured content additions; this is not a full-game size target.
 // The complete LGPL source archive is distributed, but never automatically fetched.
 // The optional GeneralUser GS bank has its own limit and loads only when selected.
-const budget = 6_820_000, runtimeBudget = 5_870_000, menuBudget = 3_200_000;
+const budget = 7_140_000, runtimeBudget = 6_190_000, menuBudget = 3_200_000;
 const result = await size('dist');
 const source = (await stat('dist/assets/audio/mt32-source.tar.gz')).size
   + (await stat('dist/assets/audio/adlib-source.tar.gz')).size;
@@ -35,6 +35,6 @@ if (soundfont !== 32_319_396) throw new Error('Unexpected size for the pinned Ge
 if (runtime > runtimeBudget) throw new Error('Runtime asset budget exceeded.');
 if (menu > menuBudget) throw new Error('3D menu budget exceeded.');
 if (effects > 600_000) throw new Error('Fallback sound effects budget exceeded.');
-if (voices > 6_540_000) throw new Error('CD voice asset budget exceeded.');
+if (voices > 6_980_000) throw new Error('CD voice asset budget exceeded.');
 if (controlPreviews > 60_000) throw new Error('First-run previews budget exceeded.');
 if (runtime + source > budget) throw new Error('Asset budget exceeded. Check duplicate exports and unused public resources before adding content.');

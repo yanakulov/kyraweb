@@ -44,6 +44,7 @@ export type RoomAction =
   | { op: "cauldron"; state: number }
   | { op: "crystal"; slot: 0 | 1; item: number }
   | { op: "wisp"; ms: number }
+  | { op: "invisibility"; level: number; ms?: number }
   | { op: "heroFrame"; clip?: string; index?: number }
   | { op: "heroScale"; value?: number }
   | { op: "offsceneItem"; room: number; item: import("../core/types").SceneItem }
@@ -92,6 +93,7 @@ export type OpeningScript = { opening: RoomAction[]; tree: RoomAction[] };
  * Walking is owned by the game; input stays locked until it actually arrives.
  */
 export class RoomScript {
+  private static readonly timeEpsilon = 1e-6;
   private actions: RoomAction[];
   private index = 0;
   private wait = 0;
@@ -186,7 +188,7 @@ export class RoomScript {
       this.wait -= used;
       budget -= used;
       this.voice = Math.max(0, this.voice - used);
-      if (this.wait > 1e-6) return;
+      if (this.wait > RoomScript.timeEpsilon) return;
       if (this.clearAfterWait) {
         this.lineActive = false;
         this.host.apply({ op: "clearText" });
@@ -195,7 +197,7 @@ export class RoomScript {
       const action = this.actions[this.index];
       if (!action) return;
       // customPrintTalkString waits for the previous CD voice before replacing it.
-      if (action.op === "say" && this.voice > 0) {
+      if (action.op === "say" && this.voice > RoomScript.timeEpsilon) {
         this.wait = this.voice;
         continue;
       }

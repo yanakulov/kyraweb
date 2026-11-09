@@ -815,6 +815,9 @@ document.querySelector('#faeriewood')!.addEventListener('click', async () => {
     await click(252, 114);
     await until(() => id === 80 && !playing && !loading, 'towards the lagoon');
     await route(86, 81, 82, 83, 84, 52);
+    await click(80, 100);
+    held('item-18');
+    await putAway();
     await equip('item-67');
     const hero = game.getSnapshot().pos;
     game.handleClick({ x: hero.x, y: hero.y - 12 });
@@ -831,7 +834,53 @@ document.querySelector('#faeriewood')!.addEventListener('click', async () => {
     game.stop();
     game = await startGame(canvas, { ...config, saveState: arrived });
     if (game.getSaveState()?.currentRoom !== 199) throw Error('The island checkpoint did not restore');
-    results.textContent += 'ALL PASSED — Faeriewood, chalice, Faun, Pegasus and the castle island';
+    await travel(200);
+    expectScore(31);
+    await click(144, 44);
+    if (!lines.some(line => line.includes('William and Katherine'))) throw Error('The tombstone did not read out the royal names');
+    await equip('item-18');
+    game.handleClick({ x: 157, y: 70 });
+    await until(() => lines.some(line => line.includes("I knew you'd come")), 'Katherine’s apparition');
+    capture('Katherine’s ghost at the misty grave');
+    await settle();
+    held(null);
+    const grave = validateWorldSave(game.getSaveState());
+    if (!grave.quest.flags.includes(87) || !grave.quest.flags.includes(211) || !scores.includes(30))
+      throw Error('Katherine did not awaken the red jewel');
+    await route(201, 200, 202, 200, 203, 204);
+    capture('The guardian gargoyles at the castle gate');
+    if (game.getPortals().some(portal => portal.target === 205)) throw Error('The locked gate exposed its exit');
+    const beforeGate = validateWorldSave(game.getSaveState());
+
+    await equip('item-57');
+    await click(169, 90);
+    if (!dead || !scores.includes(49) || game.getSaveState()) throw Error('The gargoyles did not punish the unprotected attempt');
+    game.stop();
+    dead = false;
+    game = await startGame(canvas, { ...config, saveState: beforeGate });
+    await click(241, 177);
+    const invisible = validateWorldSave(game.getSaveState());
+    if (!(invisible.rooms[204].invisibleMs! > 0)) throw Error('The red jewel did not make Brandon invisible');
+    capture('Invisible Brandon before the locked gate');
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: invisible });
+    await equip('item-57');
+    await click(169, 90);
+    held(null);
+    if (!game.getSaveState()?.quest.flags.includes(219) || !lines.some(line => line.includes('Thanks, Mom')))
+      throw Error('The iron key did not open the gate while invisible');
+    capture('The unlocked gate of Castle Kyrandia');
+    const openGate = validateWorldSave(game.getSaveState());
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: openGate });
+    const entry = travel(205);
+    await until(() => lines.some(line => line.includes('puppies')), 'Malcolm’s greeting');
+    capture('Malcolm greets Brandon in the castle entry hall');
+    await entry;
+    expectScore(39);
+    if (!scores.includes(45) || !game.getSaveState()?.quest.flags.includes(213) ||
+        !game.getSnapshot().inventorySlots.includes('item-24')) throw Error('The castle introduction did not finish');
+    results.textContent += 'ALL PASSED — Faeriewood, Pegasus, the island, gargoyles and the castle entrance';
     document.title = 'PASS — Faeriewood to Castle Kyrandia';
   } catch (error) {
     results.textContent += `FAIL ${error}`;

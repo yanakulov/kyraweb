@@ -91,10 +91,13 @@ function quest() {
     );
     for (const a of result.actions)
       if (a.op === "frame" || a.op === "movie") {
-        assert.ok(pack.clips[a.clip], `${name}: missing ${a.clip}`);
+        const clip = a.clip.endsWith('-jewel')
+          ? parseScenePack(gunzipSync(readFileSync('public/assets/forest/amulet.kyr.gz'))).clips[a.clip]
+          : pack.clips[a.clip];
+        assert.ok(clip, `${name}: missing ${a.clip}`);
         if (a.op === "frame")
           assert.ok(
-            a.index >= 0 && a.index < pack.clips[a.clip].frames.length,
+            a.index >= 0 && a.index < clip.frames.length,
             `${name}: ${a.clip} frame ${a.index}`,
           );
       }
@@ -503,4 +506,46 @@ test('the original amulet, Faun and Pegasus scripts connect Faeriewood to the ca
   assert.ok(landing.some(action => action.op === 'movie' && action.clip === 'landing'));
   assert.ok(landing.some(action => action.op === 'music' && action.command === 31));
   assert.ok(!q.state.flags.has(201));
+});
+
+test('Katherine awakens invisibility, and only the protected iron key opens the castle gate', () => {
+  const q = quest();
+  const { snapshot, state } = q;
+  snapshot.itemInHand = 'item-18';
+  const ghost = q.run('GRAVE', 1, 157, 70).actions;
+  assert.ok(ghost.some(action => action.op === 'frame' && action.clip === 'mother2'));
+  assert.ok(ghost.some(action => action.op === 'music' && action.command === 30));
+  assert.ok(state.flags.has(87));
+  assert.equal(snapshot.itemInHand, null);
+
+  snapshot.itemInHand = 'item-57';
+  const fatal = traceForest(data.rooms.CGATE, 1, state, snapshot, { x: 169, y: 90 });
+  assert.ok(fatal.actions.some(action => action.op === 'death'));
+  assert.ok(!state.flags.has(219));
+  snapshot.invisibleMs = 1000;
+  const gate = q.run('CGATE', 1, 169, 90).actions;
+  assert.ok(gate.some(action => action.op === 'frame' && action.clip === 'gate' && action.permanent));
+  assert.ok(!gate.some(action => action.op === 'death'));
+  assert.equal(snapshot.itemInHand, null);
+  assert.ok(state.flags.has(219));
+
+  const welcome = q.run('DNSTAIR', 3).actions;
+  const slide = welcome.findIndex(action => action.op === 'frame' && action.clip === 'slide1');
+  assert.ok(slide > 0 && welcome.slice(0, slide).some(action => action.op === 'visible' && !action.visible));
+  assert.ok(welcome.some(action => action.op === 'frame' && action.clip === 'slide2'));
+  assert.ok(welcome.slice(slide).some(action => action.op === 'actor' && action.visible));
+  assert.deepEqual(welcome.flatMap(action => action.op === 'music' ? [action.command] : []), [45, 1, 39]);
+  assert.ok(state.flags.has(213));
+});
+
+test('a fractional voice remainder cannot trap the room script between lines', () => {
+  const lines: string[] = [];
+  const say = (text: string, ms: number): RoomAction =>
+    ({ op: 'say', text, ms, voiceId: 0, x: 0, y: 0, color: 15, blocking: false });
+  const script = new RoomScript([say('first', 0.1 + 0.2), { op: 'wait', ms: 0.3 }, say('second', 100)], {
+    apply: action => { if (action.op === 'say') lines.push(action.text); },
+    walking: () => false, frames: () => 0,
+  });
+  script.update(0.3);
+  assert.deepEqual(lines, ['first', 'second']);
 });
