@@ -2,10 +2,9 @@ import processorUrl from './mt32-worklet.ts?worker&url';
 import adlibUrl from './adlib-worklet.ts?worker&url';
 import manifest from '../../../public/assets/music/manifest.json';
 import { withBase } from '../core/assets';
-import { isShadowrealmRoom } from '../core/constants';
 import { parseXmidi, type MidiTrack } from './xmidi';
 import { readRoms, storeRoms, readRomFiles, type Mt32Roms } from './romStorage';
-import { introCue, wanderCue, type MusicCue } from './cues';
+import { introCue, roomMusicCommand, wanderCue, type MusicCue } from './cues';
 import { readLocalRoms } from './localRoms';
 import { RecordedEffects } from './recordedEffects';
 import type { BookFoley } from './bookFoley';
@@ -149,7 +148,7 @@ export class MusicPlayer {
     if (!this.disposed && this.userActivated && this.state.voiceEnabled && this.state.voiceVolume > 0) void this.voices.prepare(bank);
   }
   speak(bank: string, id: number) {
-    if (!this.disposed && this.userActivated && this.state.voiceEnabled && this.state.voiceVolume > 0) void this.voices.play(bank, id);
+    if (!this.disposed && this.userActivated && this.state.voiceEnabled && this.state.voiceVolume > 0) return this.voices.play(bank, id);
   }
   stopSpeech() { this.voices.stop(); }
   setVoiceEnabled(value: boolean) {
@@ -359,11 +358,10 @@ export class MusicPlayer {
   /** Older saves have no audio position. Restart the room's score, not the intro. */
   restoreRoom(id: number, wisp = false) {
     this.command = -1;
-    this.wander(({ 0: 41, 2: 5, 7: 3, 8: 7, 27: 12, 36: 4, 37: 21, 38: 21, 113: 18 } as Record<number, number>)[id] ??
-      (isShadowrealmRoom(id) ? wisp ? 17 : 3 : id >= 17 ? 11 : 2), true);
+    this.wander(roomMusicCommand(id, wisp), true);
   }
   wander(command: number, restart = false) {
-    if (!restart && command === this.command) return;
+    if (!restart && command === this.command && (command === 1 || !this.faded)) return;
     this.command = command;
     const cue = wanderCue(command, this.cue.file === 'INTRO' ? 'KYRA1B' : this.cue.file);
     if (cue) this.play(cue, true); else this.fade();

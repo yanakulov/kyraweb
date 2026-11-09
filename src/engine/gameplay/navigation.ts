@@ -1,14 +1,15 @@
 import type { RoomPortal, Vec2 } from "../core/types";
 import { LOGICAL_WIDTH, ROOM_ART } from '../core/constants';
 
+const edgeDepth = 11;
+
 export function roomViewPortals(portals: RoomPortal[]) {
   const { x, y, w, h } = ROOM_ART;
-  const depth = 11;
   return portals.map(portal => {
     const r = portal.rect;
     if (portal.id !== portal.side) return portal;
-    if (r.w === LOGICAL_WIDTH) return { ...portal, rect: { x, y: portal.side === 'north' ? y : y + h - depth, w, h: depth } };
-    if (r.h === 159) return { ...portal, rect: { x: portal.side === 'west' ? x : x + w - depth, y, w: depth, h } };
+    if (r.w === LOGICAL_WIDTH) return { ...portal, rect: { x, y: portal.side === 'north' ? y : y + h - edgeDepth, w, h: edgeDepth } };
+    if (r.h === 159) return { ...portal, rect: { x: portal.side === 'west' ? x : x + w - edgeDepth, y, w: edgeDepth, h } };
     return portal;
   });
 }
@@ -17,12 +18,15 @@ export function portalAtPoint(portals: RoomPortal[], point: Vec2 | null) {
   return point ? portals.find(({ rect: r }) => point.x >= r.x && point.x < r.x + r.w && point.y >= r.y && point.y < r.y + r.h) : undefined;
 }
 
-export function exitCursor(portals: RoomPortal[], point: Vec2 | null) {
+export function exitCursor(portals: RoomPortal[], point: Vec2 | null, modern = false) {
   if (!point || !portals.length) return;
   const portal = portalAtPoint(portals, point);
   if (portal) return portal.side;
-  if (point.x >= 0 && point.x < 320 && point.y >= 0 && point.y < 159 &&
-      (point.x < 12 || point.x >= 308 || point.y < 12 || point.y >= 136)) return 'blocked';
+  const { x, y, w, h } = modern ? ROOM_ART : { x: 0, y: 0, w: LOGICAL_WIDTH, h: 159 };
+  if (point.x < x || point.x >= x + w || point.y < y || point.y >= y + h) return;
+  const depth = modern ? 4 : 12;
+  if (point.x < x + depth || point.x >= x + w - depth || point.y < y + depth ||
+      point.y >= (modern ? y + h - depth : 136)) return 'blocked';
 }
 
 export function portalMarker(portal: RoomPortal): Vec2 {

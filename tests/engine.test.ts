@@ -40,7 +40,7 @@ import opening from "../public/assets/packs/opening.json";
 import openingPixels from "./fixtures/opening-pixels.json";
 import { roomPortals, nearestFloor, type WorldRoom } from "../src/engine/gameplay/world";
 import worldData from "../public/assets/world/world.json";
-import { exitCursor, portalAtPoint, portalMarker } from "../src/engine/gameplay/navigation";
+import { exitCursor, portalAtPoint, portalMarker, roomViewPortals } from "../src/engine/gameplay/navigation";
 import { gemCutScene } from "../src/engine/scenes/gemCut";
 import { validateWorldSave } from "../src/engine/gameplay/saveStorage";
 import { locale, setLocale } from "../src/i18n";
@@ -78,6 +78,24 @@ test("skipping a tree line immediately finishes its mouth frames and retains the
   assert.equal(applied.filter(a => a.op === 'frame').length, 3);
 });
 
+test('dialogue waits for the recording to start and then keeps the full line on its clock', async () => {
+  const applied: RoomAction[] = [];
+  let ready!: () => void;
+  const decoding = new Promise<void>(resolve => { ready = resolve; });
+  const line: RoomAction = { op: 'say', text: 'First', voiceId: 1, ms: 500, x: 160, y: 60, color: 1, blocking: true };
+  const script = new RoomScript([line], { apply: action => applied.push(action), walking: () => false,
+    frames: () => 0, startVoice: () => decoding });
+  script.update(0); script.update(2000);
+  assert.deepEqual(applied, []);
+  assert.equal(script.done, false);
+  ready(); await decoding;
+  script.update(100); script.update(499);
+  assert.deepEqual(applied, [line]);
+  script.update(1);
+  assert.equal(script.done, true);
+  assert.deepEqual(applied.at(-1), { op: 'clearText' });
+});
+
 test('original tree dialogue advances to the next line after skipping its WSA speech', () => {
   const actions = opening.tree as RoomAction[];
   const lines = actions.filter(a=>a.op==='say');
@@ -109,10 +127,15 @@ test("exit markers use actual available portals, including doors and corner prec
     if (room.id === 7) {
       assert.equal(portals.some(p => p.side === 'west'), false);
       assert.equal(exitCursor(portals, { x: 3, y: 62 }), 'blocked');
+      assert.equal(exitCursor(roomViewPortals(portals), { x: 8, y: 62 }, true), 'blocked');
     }
     if (room.id === 9) {
       assert.equal(portalAtPoint(portals, { x: 64, y: 50 })?.target, 7, 'the cave opening is clickable away from the screen edge');
       assert.equal(exitCursor(portals, { x: 2, y: 4 }), 'west');
+      const modern = roomViewPortals(portals);
+      assert.equal(exitCursor(modern, { x: 8, y: 8 }, true), 'west');
+      assert.equal(portalAtPoint(modern, { x: 8, y: 8 })?.target, portalAtPoint(portals, { x: 2, y: 4 })?.target);
+      assert.equal(exitCursor(modern, { x: 64, y: 50 }, true), exitCursor(portals, { x: 64, y: 50 }));
     }
     assert.equal(portalAtPoint(portals, {x: 160, y: 170}), undefined);
     assert.equal(portalAtPoint(portals, null), undefined);

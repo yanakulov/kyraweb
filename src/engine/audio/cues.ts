@@ -1,5 +1,7 @@
 // ScummVM engines/kyra/resource/staticres.cpp, KyraEngine_LoK::_dosTrackMap.
 // SPDX-License-Identifier: GPL-3.0-or-later
+import { isShadowrealmRoom } from '../core/constants';
+
 export type MusicCue = { file: string; track: number };
 export const MUSIC_FILES = ['KYRA1A', 'KYRA1B', 'KYRA2A', 'KYRA3A', 'KYRA4A', 'KYRA4B', 'KYRA5A', 'KYRA5B', 'KYRAMISC'];
 const map = [
@@ -14,4 +16,9 @@ export function wanderCue(command: number, currentFile = 'KYRA1B'): MusicCue | n
 export function introCue(step: string): MusicCue | undefined {
   const track = ({ westwood: 2, tree_anim_1: 3, kallak_writing: 4, kallak_malcolm: 5 } as Record<string, number>)[step];
   return track === undefined ? undefined : { file: 'INTRO', track };
+}
+
+const roomCommands: Record<number, number> = { 0: 41, 2: 5, 7: 3, 8: 7, 27: 12, 36: 4, 37: 21, 38: 21, 113: 18 };
+export function roomMusicCommand(room: number, wisp = false) {
+  return roomCommands[room] ?? (isShadowrealmRoom(room) ? (wisp ? 17 : 3) : room >= 17 ? 11 : 2);
 }

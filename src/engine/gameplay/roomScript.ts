@@ -95,9 +95,15 @@ export class RoomScript {
   private cancelled = false;
   private lineActive = false;
   private skipTalkAnimation = false;
+  private startingVoice?: { ready: boolean };
   /** Dismiss only the current line; movement, movies and choices still complete. */
   skipLine() {
-    if (this.cancelled || this.awaiting || !this.lineActive) return false;
+    if (this.cancelled || this.awaiting || !this.lineActive && !this.startingVoice) return false;
+    if (this.startingVoice) {
+      const line = this.actions[this.index++];
+      this.startingVoice = undefined;
+      this.clearAfterWait = line.op === 'say' && line.blocking;
+    }
     this.voice = 0;
     this.skipTalkAnimation = !this.clearAfterWait;
     this.wait = 0;
@@ -121,6 +127,7 @@ export class RoomScript {
     actions: RoomAction[],
     private host: {
       apply: (action: RoomAction) => void;
+      startVoice?: (line: Extract<RoomAction, { op: 'say' }>) => Promise<void> | undefined;
       walking: () => boolean;
       movementTempo?: () => number;
       frames: (clip: string) => number;
@@ -186,6 +193,22 @@ export class RoomScript {
       if (action.op === "say" && this.voice > 0) {
         this.wait = this.voice;
         continue;
+      }
+      if (action.op === 'say') {
+        if (!this.startingVoice) {
+          const pending = this.host.startVoice?.(action);
+          if (pending) {
+            const start = { ready: false };
+            this.startingVoice = start;
+            const ready = () => { start.ready = true; };
+            void pending.then(ready, ready);
+            return;
+          }
+        } else {
+          if (!this.startingVoice.ready) return;
+          this.startingVoice = undefined;
+          budget = 0;
+        }
       }
       this.index++;
       if (action.op === "choice") {

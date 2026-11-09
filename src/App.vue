@@ -1,5 +1,5 @@
 <template>
-  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()" @pointerover.capture="menuHover" @click.capture="menuClick">
+  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()" @pointermove.capture="rememberMouse" @pointerover.capture="menuHover" @click.capture="menuClick">
     <FantasyBook v-if="!bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :opening-frame-ready="openingFrameReady || !!openingSnapshot || !!gameError" :snapshot="openingSnapshot ?? undefined" :frame-focus="bookFocus" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="beginOpening" @ready="openingReadingReady = true" @open="openBook">
       <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" :show-story="!prologueSeen" @page-turn="music.bookSound('page')" @continue="finishPrologue">
         <template #audio><MusicSettings v-if="musicState" :player="music" :state="musicState" /></template>
@@ -15,7 +15,7 @@
     </FantasyBook>
     <div class="game-frame" :class="{ 'is-concealed': !bookOpened && !openingFrameReady && !openingSnapshot && !gameError }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot">
       <canvas ref="sceneBackdrop" class="scene-backdrop" :width="ROOM_ART.w" :height="ROOM_ART.h" aria-hidden="true"></canvas>
-      <div class="stage" :class="{ 'cursor-controlled': customCursor }" :aria-busy="loading"
+      <div class="stage" ref="stageRef" :class="{ 'cursor-controlled': gamePointerVisible }" :aria-busy="loading"
         @pointerenter="handleMove" @pointermove="handleMove" @pointerleave="leaveStage"
         @pointerdown="handlePointerDown" @pointerup="handlePointerUp" @pointercancel="cancelGesture" @contextmenu.prevent="handleContextMenu">
         <div class="scene-plane" :style="cinematicPlane">
@@ -24,7 +24,7 @@
         <canvas ref="statusTextCanvas" class="status-text" aria-hidden="true" hidden></canvas>
         <canvas ref="inventoryCanvas" class="radial-surface" aria-hidden="true" hidden></canvas>
         <canvas ref="inventoryTooltip" class="inventory-tooltip" aria-hidden="true" hidden></canvas>
-        <div v-if="customCursor && (pointerInStage || touchPointer) && (cursorExit || !heldItem)" class="game-cursor" :style="cursorStyle" aria-hidden="true">
+        <div v-if="gamePointerVisible && (cursorExit || !heldItem)" class="game-cursor" :style="cursorStyle" aria-hidden="true">
           <img :src="`${baseUrl}assets/cursors/${cursorExit ?? 'pointer'}.svg`" alt="" />
         </div>
         <div v-if="noteVisible && locale === 'ru'" class="translated-letter" :style="{ transform: `scale(${subtitleScale}, ${subtitleScaleY})` }"><p>{{ t('Dear Brynn:') }}</p><p>{{ t('Malcolm has broken free. Soon he will come for me. Please help Brandon. Direct him toward the Amulet. Use the lavender rose to key the spells.') }}</p><p>{{ t("Darm and Zanthia should be able to help. Be careful, he'll try to get all of us.") }}</p><p>— {{ t('Kallak') }}</p></div>
@@ -100,10 +100,12 @@ const firstRun = ref(savedMode === null);
 const controlMode = ref<ControlMode>(savedMode ?? 'modern');
 const gameViewHeight = ref(LOGICAL_HEIGHT);
 function setControlMode(mode: ControlMode) {
+  cancelGesture();
   controlMode.value = mode;
   try { localStorage.setItem(controlPreference, mode); } catch { /* Use the selection for this visit. */ }
   game?.setControlMode(mode);
   syncControls();
+  void nextTick(syncControls);
   if (bookSnapshot.value) bookSnapshot.value = captureBookFrame();
 }
 async function finishSetup(mode: ControlMode) {
@@ -148,15 +150,19 @@ import { exitCursor } from "./engine/gameplay/navigation";
 import type { ControlMode, RoomPortal, InventoryItemId, Vec2 } from "./engine/core/types";
 const portals = ref<RoomPortal[]>([]);
 const cursor = ref<Vec2>({ x: 160, y: 100 });
+const stageRef = ref<HTMLElement | null>(null);
 const pointerInStage = ref(false);
-const customCursor = computed(() => !introActive.value && !gameError.value && !overlayOpen.value);
-const cursorExit = computed(() => sequenceActive.value || loading.value || controlMode.value === 'classic' && isOptionsPoint(cursor.value) ? undefined : exitCursor(portals.value, cursor.value));
+const gamePointerVisible = computed(() => !introActive.value && !gameError.value && !overlayOpen.value &&
+  (pointerInStage.value || touchPointer.value));
+const cursorExit = computed(() => sequenceActive.value || loading.value || controlMode.value === 'classic' && isOptionsPoint(cursor.value) ? undefined
+  : exitCursor(portals.value, cursor.value, gameViewHeight.value === ROOM_VIEW_HEIGHT));
 const baseUrl = import.meta.env.BASE_URL;
-const cursorShape = computed(() => ({
+const cursorShapes = {
   pointer: {x:1,y:1,w:8,h:10}, north: {x:5,y:1,w:16,h:9},
   east: {x:7,y:5,w:16,h:11}, south: {x:5,y:7,w:16,h:9}, west: {x:1,y:5,w:16,h:11},
   blocked: {x:4,y:4,w:16,h:10}
-})[cursorExit.value ?? 'pointer']);
+};
+const cursorShape = computed(() => cursorShapes[cursorExit.value ?? 'pointer']);
 const sceneBounds = computed(() => gameViewHeight.value === ROOM_VIEW_HEIGHT
   ? ROOM_ART : { x: 0, y: 0, w: LOGICAL_WIDTH, h: gameViewHeight.value });
 function clampCursor(point: Vec2, width = 1, height = 1) {
@@ -171,9 +177,19 @@ const cursorStyle = computed(() => {
 });
 const heldItem = ref<InventoryItemId | null>(null);
 const touchPointer = ref(typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
+let mousePoint: Vec2 | null = null;
+function rememberMouse(event: PointerEvent) {
+  if (event.pointerType === 'mouse') mousePoint = { x: event.clientX, y: event.clientY };
+}
 let gesture: { id: number; x: number; y: number; travel: number; started: number } | null = null;
 function syncControls() {
   gameViewHeight.value = canvasRef.value?.height ?? LOGICAL_HEIGHT;
+  if (!touchPointer.value && mousePoint && canvasRef.value && stageRef.value) {
+    const rect = stageRef.value.getBoundingClientRect();
+    pointerInStage.value = mousePoint.x >= rect.left && mousePoint.x < rect.right &&
+      mousePoint.y >= rect.top && mousePoint.y < rect.bottom;
+    if (pointerInStage.value) cursor.value = mapPointerToCanvas(canvasRef.value, mousePoint.x, mousePoint.y);
+  }
   cursor.value = clampCursor(cursor.value);
   portals.value = game?.getPortals() ?? [];
   const snapshot = game?.getSnapshot();
@@ -276,16 +292,16 @@ const config = {
   scene: gemCutScene,
   world: import.meta.env.BASE_URL + "assets/world/world.json",
   onLocationChange: (name: string, _id?: number, bank?: string) => { if (bank) music.prepareVoice(bank); locationName.value = name; queueMicrotask(syncControls); scheduleAutosave(); },
+  onVoice: (bank: string, id: number) => music.speak(bank, id),
   onScriptAction: (action: import('./engine/gameplay/roomScript').RoomAction) => {
     if (action.op === 'music') music.wander(action.command, action.restart);
     else if (action.op === 'sfx') music.effect(action.track);
-    else if (action.op === 'say' && action.voiceBank) music.speak(action.voiceBank, action.voiceId);
     else if (action.op === 'clearText' && action.stopVoice) music.stopSpeech();
   },
   onLoadingChange: (value: boolean) => { if (value) music.stopSpeech(); loading.value = value; queueMicrotask(syncControls); },
   onNavigationError: (message: string) => { navigationError.value = message; },
   onSubtitleChange: (lines: import('./engine/intro/types').IntroSubtitle[]) => { subtitleLines.value = lines; },
-  onSequenceChange: (active: boolean) => { if (!active) music.stopSpeech(); sequenceActive.value = active; queueMicrotask(syncControls); }
+  onSequenceChange: (active: boolean) => { sequenceActive.value = active; queueMicrotask(syncControls); }
 };
 
 function refreshSaveSlots() {
@@ -345,6 +361,7 @@ function resumeBook() { if (gameOver.value || bookBusy.value || !bookSnapshot.va
 function finishBookResume() {
   bookSnapshot.value = null; bookReady.value = false; bookReturning.value = false;
   intro?.setPaused(mobilePortrait.value); game?.setPaused(mobilePortrait.value); syncControls();
+  void nextTick(syncControls);
   const action = afterBookResume; afterBookResume = null; action?.();
 }
 function startJourney() {
@@ -384,6 +401,7 @@ async function restoreChapter(record: SaveRecord) {
       onNoteChange: value => { if (committed) config.onNoteChange(value); },
       onLocationChange: (name, id, bank) => { restoredLocation = name; restoredVoiceBank = bank; if (committed) config.onLocationChange(name, id, bank); },
       onScriptAction: action => { if (committed) config.onScriptAction(action); },
+      onVoice: (bank, id) => { if (committed) return config.onVoice(bank, id); },
       onLoadingChange: value => { if (committed) config.onLoadingChange(value); },
       onNavigationError: message => { if (committed) config.onNavigationError(message); },
       onSubtitleChange: lines => { if (committed) config.onSubtitleChange(lines); },
@@ -531,6 +549,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
     onCheckpoint: () => { if (runId === introRunId) config.onCheckpoint(); },
     onLocationChange: (name, id, bank) => { if (runId === introRunId) config.onLocationChange(name, id, bank); },
     onScriptAction: action => { if (runId === introRunId) config.onScriptAction(action); },
+    onVoice: (bank, id) => { if (runId === introRunId) return config.onVoice(bank, id); },
     onNoteChange: visible => { if (runId === introRunId) config.onNoteChange(visible); },
     onLoadingChange: value => { if (runId === introRunId) config.onLoadingChange(value); },
     onNavigationError: message => { if (runId === introRunId) config.onNavigationError(message); },
@@ -657,6 +676,7 @@ function handleMove(event: PointerEvent) {
     cursor.value = clampCursor({ x: cursor.value.x + dx * LOGICAL_WIDTH / rect.width,
       y: cursor.value.y + dy * gameViewHeight.value / rect.height });
   } else {
+    rememberMouse(event);
     touchPointer.value = false;
     pointerInStage.value = true;
     cursor.value = clampCursor(mapPointerToCanvas(canvasRef.value, event.clientX, event.clientY));
@@ -666,6 +686,7 @@ function handleMove(event: PointerEvent) {
 
 function leaveStage(event: PointerEvent) {
   if (event.pointerType !== 'mouse') return;
+  rememberMouse(event);
   pointerInStage.value = false;
   game?.setPointer(null);
 }
@@ -694,6 +715,7 @@ function updateOrientation() {
 watch(rotationDialog, dialog => dialog?.showModal(), { flush: 'post' });
 
 onMounted(() => {
+  for (const cursor of Object.keys(cursorShapes)) new Image().src = `${baseUrl}assets/cursors/${cursor}.svg`;
   void music.restore();
   document.addEventListener('visibilitychange', musicVisibility);
   refreshSaveSlots();

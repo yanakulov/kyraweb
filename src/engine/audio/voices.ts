@@ -49,7 +49,7 @@ export class Voices {
     this.stop();
     const context = this.context;
     if (!context || !this.gain) return;
-    const request = this.request, started = context.currentTime;
+    const request = this.request;
     const main = await this.prepare(bank);
     const data = !main?.index[id] && id >= 1000 && bank !== 'CHAPTER1' ? await this.prepare('CHAPTER1') : main;
     const entry = data?.index[id];
@@ -57,14 +57,13 @@ export class Voices {
     const [offset, length] = entry;
     try {
       const clip = await context.decodeAudioData(data.bytes.slice(data.start + offset, data.start + offset + length));
-      const elapsed = context.currentTime - started;
-      if (request !== this.request || elapsed >= clip.duration) return;
+      if (request !== this.request) return;
       const source = context.createBufferSource();
       this.source = source;
       source.buffer = clip;
       source.connect(this.gain);
       source.onended = () => { if (this.source === source) this.source = undefined; source.disconnect(); };
-      source.start(0, elapsed);
+      source.start(0, 0);
     } catch { /* A bad recording cannot interrupt a scene. */ }
   }
 
