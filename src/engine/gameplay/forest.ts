@@ -7,7 +7,7 @@ import type { RoomAction } from "./roomScript";
 import type { RoomSnapshot, Vec2, InventoryItemId } from "../core/types";
 import type { CursorTrack, WorldRoom } from "./world";
 import { actorScaleAt } from '../characters/brandonFrames';
-import { isShadowrealmRoom, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
+import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, isShadowrealmRoom, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 
 export type ForestRoom = WorldRoom & {
   program: EmcProgram;
@@ -134,6 +134,16 @@ export function transformWisp(room: number, active: boolean): RoomAction[] {
   if (room >= 118 && room <= 186) actions.push({ op: 'palette', start: 228, colors: specialPalettes[14].slice(0, 45), ms: 1200 });
   if (active && cave) actions.push({ op: 'music', command: 17, restart: false });
   return actions;
+}
+
+export function dispelMagic(room: number, activeWisp: boolean): RoomAction[] {
+  return [
+    ...(activeWisp ? transformWisp(room, false) : []),
+    { op: 'flag', flag: 238, value: true },
+    { op: 'sfx', track: 0x15 },
+    ...heroFrames('dispel', [0, 1, 2, 3, 4], 8), waitTicks(120),
+    ...heroFrames('dispel', [4, 3, 2, 1, 0], 10), { op: 'heroFrame' },
+  ];
 }
 
 /** Execute original conditionals against a copy, then play the resulting actions.
@@ -308,17 +318,25 @@ export function traceForest(
           case 0x72:
             return +((poison > 0 && !!(a[0] & 1)) || (wisp && !!(a[0] & 2)));
           case 0x74:
-            if (room.id !== 117 || !a[0]) throw new Error('Unsupported winter scroll sequence');
+            if (![41, 117].includes(room.id) || !a[0]) throw new Error('Unsupported winter scroll sequence');
             for (let index = 0; index < 29; index++) {
               if (index === 7) emit({ op: 'sfx', track: 0x20 });
-              if (index === 25) {
+              if (index === 20 && room.id === 41 && !flags.has(162)) {
+                emit({ op: 'sfx', track: 0x20 });
+                for (const internal of [false, true]) {
+                  emit({ op: 'ambient', index: 0, enabled: false, internal });
+                  emit({ op: 'ambient', index: 1, enabled: true, internal });
+                }
+                setFlag(162, true);
+              }
+              if (index === 25 && room.id === 117 && !flags.has(179)) {
                 for (let slot = 0; slot < 8; slot++) {
                   emit({ op: 'ambient', index: slot, enabled: false });
                   emit({ op: 'ambient', index: slot, enabled: false, internal: true });
                 }
                 emit({ op: 'palette', start: 228, colors: specialPalettes[29].slice(0, 60), ms: 1200 });
                 wait(1200);
-              }
+              } else if (index === 25) wait(2000);
               emit({ op: 'heroFrame', clip: 'winter', index });
               wait(8000 / 60);
             }
@@ -358,9 +376,9 @@ export function traceForest(
           case 0x77:
             return snapshot.sceneItems.length;
           case 0x7f:
-            return +snapshot.sceneItems.some(
-              (item) => originalItem(item.id) === a[0],
-            );
+            return +(a[0] === room.id && snapshot.sceneItems.some(item => originalItem(item.id) === a[1]));
+          case 0x80:
+            return 0; // The cauldron still contains the original neutral mixture in this chapter.
           case 0x8c: {
             const scale = actorScaleAt(actor.y, room.actorScale);
             if (a[0] >= actor.x - 12 * scale && a[0] <= actor.x + 12 * scale && a[1] >= actor.y - 48 * scale && a[1] <= actor.y) return 0;
@@ -638,12 +656,18 @@ export function traceForest(
             return 0;
           case 0x0c:
           case 0x7c:
+          case 0x47:
+            if (id === 0x47 && a[3] !== room.id) return 0;
             emit({
               op: "item",
               item: itemFromOriginal(a[0])!,
               x: a[1],
               y: a[2],
             });
+            if (id === 0x47 && room.id === 39 && hand === a[0]) {
+              hand = -1;
+              emit({ op: 'hand', item: null });
+            }
             return 0;
           case 0x52:
             frame("note", 0, 63, 8, 0);
@@ -673,7 +697,8 @@ export function traceForest(
             return 0;
           case 0x6c: {
             const jewel = a[0] === 1 ? { name: 'yellow-jewel', flag: YELLOW_JEWEL_FLAG, pos: YELLOW_JEWEL_POS }
-              : a[0] === 3 ? { name: 'purple-jewel', flag: PURPLE_JEWEL_FLAG, pos: PURPLE_JEWEL_POS } : undefined;
+              : a[0] === 3 ? { name: 'purple-jewel', flag: PURPLE_JEWEL_FLAG, pos: PURPLE_JEWEL_POS }
+              : a[0] === 4 ? { name: 'blue-jewel', flag: BLUE_JEWEL_FLAG, pos: BLUE_JEWEL_POS } : undefined;
             if (!jewel) throw new Error('Unsupported amulet jewel');
             emit({ op: 'sfx', track: 0x5f });
             for (let index = 0; index <= 10; index++) emit({ op: 'frame', clip: jewel.name, index,
@@ -682,6 +707,49 @@ export function traceForest(
             emit({ op: 'close', clip: jewel.name });
             return 0;
           }
+          case 0x60:
+            if (wisp) {
+              wisp = false;
+              actions.push(...transformWisp(room.id, false));
+            }
+            emit({ op: 'face', facing: 5, shape: 7 });
+            emit({ op: 'palette', start: 254, colors: [84, 164, 252], ms: 0 });
+            actions.push(...heroFrames('drink', indices(0, 9), 5));
+            emit({ op: 'sfx', track: 0x34 });
+            actions.push(...heroFrames('drink', [7, 8, 7, 8], 7));
+            emit({ op: 'palette', start: 254, colors: [120, 120, 120], ms: 0 });
+            actions.push(...heroFrames('drink', indices(0, 9).reverse(), 5), { op: 'heroFrame' });
+            return 0;
+          case 0x6a:
+            actions.push(...dispelMagic(room.id, wisp));
+            wisp = false;
+            flags.add(238);
+            return 0;
+          case 0x6f: {
+            const [item, type] = a;
+            const full = item >= 60 && item <= 77;
+            if (!full && item !== 78 && item !== 79) return 0;
+            const voiceId = full ? 8006 : [8000, 8001, 8002, 8005][type];
+            if (voiceId === undefined) return 0;
+            if (!full) {
+              hand = 70 + type * 2 + (item - 78);
+              emit({ op: 'hand', item: itemFromOriginal(hand) });
+            }
+            const line = full ? 'This flask is already full.' : [
+              'The flask is now filled with fresh, sparkling water.', 'The flask is now filled with salt water.',
+              'The flask is now filled with mineral water.', 'Magic water.',
+            ][type];
+            emit({ op: 'say', text: line, voiceId, voiceBank: 'CHAPTER1', x: actor.x, y: actor.y - 56, speaker: 0,
+              color: 15, blocking: true, ms: room.durations[voiceId] ?? 2000 });
+            return 0;
+          }
+          case 0x7e:
+            if (a[0] === 0) {
+              emit({ op: 'palette', start: 0, colors: Array(768).fill(0), ms: a[1] * 1000 / 60 });
+              emit({ op: 'blackout', active: true });
+            }
+            if (a[0] === 2) emit({ op: 'fadeIn', ms: a[1] * 1000 / 60 });
+            return 0;
           case 0x66:
             emit({
               op: "sceneFile",
@@ -697,11 +765,12 @@ export function traceForest(
             return +phasing;
           case 0x1c:
             return +phasing;
-          case 0x19:
-            if (a[1] !== 21)
-              throw new Error("Unsupported forest scene transformation");
-            emit({ op: "sceneFile", room: a[0], name: "WILLOW" });
+          case 0x19: {
+            const name = ({ 21: 'WILLOW', 28: 'FOUNTN', 40: 'ALGAE' } as Record<number, string>)[a[1]];
+            if (!name) throw new Error("Unsupported forest scene transformation");
+            emit({ op: "sceneFile", room: a[0], name });
             return 0;
+          }
           case 0x8b:
             emit({ op: "message", text: text[a[1]] });
             return 0;
@@ -734,7 +803,6 @@ export function traceForest(
           case 0x57:
           case 0x78:
           case 0x79:
-          case 0x6f: // No water flasks are available before the scroll.
           case 0x95:
           case 0x96:
           case 0x98:
@@ -752,7 +820,7 @@ export function traceForest(
               op: "palette",
               start: a[1],
               colors: specialPalettes[a[0]].slice(0, a[2] * 3),
-              ms: a[3] * 300,
+              ms: ((a[3] * 18) & 0x7f) * 1000 / 60, // DOS fade delay uses a 15-bit fixed-point accumulator.
             });
             return 0;
           case 0x32:

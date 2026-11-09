@@ -1,6 +1,6 @@
 # Forest regions
 
-The playable CD quest chain runs from Brandon’s home through Shadowrealm to the plateau. After Darm’s scroll, Timbermist includes the birthstone quest, the ruby tree and the confrontation with Malcolm at Serpent’s Grotto.
+The playable CD quest chain runs from Brandon’s home through Shadowrealm to Zanthia’s request for blueberries in Faeriewood.
 
 | ID | Original resource | Location |
 | --- | --- | --- |
@@ -24,6 +24,7 @@ The playable CD quest chain runs from Brandon’s home through Shadowrealm to th
 | 17–36 | Timbermist Woods | CAVEB and the paths, huts, clearings, and landmarks beyond it |
 | 109–198 | Shadowrealm | The mineral pool, maze, iron grate, moonlight altar, chasm and volcanic river |
 | 37–38 | PLTCAVE / PLATEAU | The cave exit and the plateau before Faeriewood |
+| 39–47, 53–65, 73 | Faeriewood | The falling branch, Zanthia’s laboratory, the Enchanted Fountain and the flaming tree |
 
 Click the scene edges, doorways or lift to leave. An exit changes the desktop cursor's direction. Brandon walks to a reachable approach before the scene changes. The first attempt to leave home plays the original tree conversation, including when carrying an item. Returning home preserves its completion state.
 
@@ -49,7 +50,7 @@ Failed transitions keep the current room and inventory and allow another click t
 
 Node tests check approach routes across all room exits, RLE decoding and depth scale. `tests/browser/world.html` drives the actual renderer through all 17 rooms and back, including both lift directions. It checks held items, inventory, picked overlays, dropped items, tree completion, the closed bridge, a deliberately failed transition/retry and cancellation during loading. Its gallery captures the original scenes for visual inspection.
 
-The CI budget for gameplay runtime files is 4.8 MB. The 3D book, speech, fallback effects, and optional audio banks have separate limits.
+The CI budget for gameplay runtime files is 5.42 MB. The 3D book, speech, fallback effects, and optional audio banks have separate limits.
 
 ## Quest scripts
 
@@ -60,6 +61,8 @@ Brynn displays the original NOTEENG bitmap and waits for Continue. The home vase
 `tests/browser/forest.html` traverses the quests with actual input, crosses the bridge in both directions, restores a bridge save from before Timbermist, and plays through the scroll. A separate button tests the warning, retreat and fatal crossing. Node tests cover both quest orders, frame and palette hashes, sampled hotspot and item combinations, DAT loops, and confirmation cancellation.
 
 In Shadowrealm, the original room scripts use the brightest carried or dropped fireberry to choose the cave palette. Carried berries lose a stage at room transitions, and dropped berries keep their stage. The Shadowrealm browser scenario starts at a chapter checkpoint, collects the five rocks and coin, opens the grate, exchanges the coin at the well, awakens the purple jewel, freezes the river, retrieves the gold key and reaches the plateau. It also checks the dark-cave death and reloading the wisp form.
+
+In Faeriewood, the fountain's original EMC switches room 42 between the FOUNTN and ALGAE resources. The browser scenario follows the falling branch and both conversations with Zanthia. It also checks Malcolm’s music cues, the scroll animation, both fountain resources, the drinking animation and the blue jewel.
 
 ## Pointer and touch controls
 

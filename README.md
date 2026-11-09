@@ -16,7 +16,8 @@ KyraWeb is an unofficial web remake of *The Legend of Kyrandia*, the first book 
 - Continue into the Timbermist Woods. Meet Darm, Brandywine, and Nolby, plant the three seeds, and use the amulet to heal the songbird. Bring Darm the feather and collect his magic scroll.
 
 - Solve the birthstone puzzle at the marble altar, recover the flute, and confront Malcolm at Serpent's Grotto.
-- Explore Shadowrealm with fireberries, unlock the purple jewel and recover the gold key. The playable route reaches the plateau beyond the Chasm of Everfall.
+- Explore Shadowrealm with fireberries, unlock the purple jewel, recover the gold key and reach the plateau beyond the Chasm of Everfall.
+- Continue into Faeriewood, meet Zanthia, restore the Enchanted Fountain and awaken the blue jewel. The playable quest reaches Zanthia’s request for blueberries.
 
 The game has English and Russian text and original English CD voices.
 

@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// DOS CD connections (N/E/S/W), ScummVM devtools/create_kyradat/resources/lok_dos_cd.h.
+export const faeriewood = {
+  38: ['PLATEAU', null, 39, null, 37],
+  39: ['BONKBG', null, 53, 55, 38],
+  40: ['FALLS', null, 54, 56, null],
+  41: ['BURN', null, null, 59, null],
+  42: ['FOUNTN', 53, 43, 47, 55],
+  43: ['FORESTC', null, 44, null, 42],
+  44: ['EXTPOT', null, null, null, 43],
+  45: ['POTION', null, null, null, 44],
+  46: ['FORESTA', 55, 47, 64, 60],
+  47: ['GLADE', 42, 61, 65, 46],
+  53: ['FWSTSTH', null, null, 42, 39],
+  54: ['FWSTSTH', null, null, 57, 40],
+  55: ['FORESTB', 39, 42, 46, 73],
+  56: ['EDGEB', 40, 57, null, null],
+  57: ['FORESTA', 54, 58, null, 56],
+  58: ['FNORTH', null, 59, null, 57],
+  59: ['XEDGEB', 41, null, 62, 58],
+  60: ['FORESTB', 73, 46, 63, null],
+  61: ['EDGE', null, null, null, 47],
+  62: ['EDGEB', 59, 63, null, null],
+  63: ['FSOUTH', 60, 64, null, 62],
+  64: ['FSOUTHB', 46, 65, null, 63],
+  65: ['EDGE', 47, null, null, 64],
+  73: ['XEDGE', null, 55, 60, null],
+};

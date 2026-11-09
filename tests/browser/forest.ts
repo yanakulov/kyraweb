@@ -31,6 +31,7 @@ window.addEventListener("error", (event) => {
 const lines: string[] = [];
 let fireFrame = -1, featherFalling = false;
 let knifeChoice = false;
+let roomBank = '';
 const scores: number[] = [];
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
@@ -54,7 +55,8 @@ const config: GameConfig = {
     if (action.op === 'ambientRun' && id === 30) featherFalling = true;
     if (action.op === 'choice' && id === 25) knifeChoice = true;
   },
-  onLocationChange: (name, room) => {
+  onLocationChange: (name, room, bank) => {
+    roomBank = bank ?? '';
     id = room!;
     document.querySelector("#location")!.textContent = `${id}: ${name}`;
   },
@@ -590,5 +592,95 @@ document.querySelector("#fall")!.addEventListener("click", async () => {
   } catch (e) {
     results.textContent += "FAIL " + e;
     document.title = "FAIL — bridge choices";
+  }
+});
+
+document.querySelector('#faeriewood')!.addEventListener('click', async () => {
+  lockScenario();
+  try {
+    const start = validateWorldSave(game.getSaveState());
+    start.rooms[0].treeSpoken = true;
+    start.rooms[0].inventorySlots[0] = 'item-80';
+    start.rooms[0].itemInHand = 'item-57';
+    start.quest.flags.push(45, 53, 88);
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: start });
+    game.setWalkSpeed('fastest');
+    game.runSequence([{ op: 'exit', target: 38 }]);
+    await until(() => id === 38 && !loading && !playing, 'plateau checkpoint');
+    const east = game.getPortals().find(portal => portal.target === 39)!;
+    game.handleClick({ x: east.rect.x + east.rect.w / 2, y: east.rect.y + east.rect.h / 2 });
+    await until(() => id === 45 && !loading && !playing, 'Zanthia’s laboratory after the branch falls');
+    expectScore(22);
+    if (![23, 24, 25].every(score => scores.includes(score)) || !lines.some(line => line.includes('fill a flask')))
+      throw Error('The original branch and awakening scenes did not complete');
+    capture('Zanthia gives Brandon an empty flask');
+
+    async function slot(index: number) {
+      const { x, y } = getInventorySlotPositions()[index];
+      await click(x + 8, y + 8);
+    }
+    async function putAway() { await slot(game.getSnapshot().inventorySlots.indexOf(null)); held(null); }
+    async function useOnBrandon() {
+      const hero = game.getSnapshot().pos;
+      await click(hero.x, hero.y - 12);
+    }
+
+    held('item-78');
+    await putAway();
+    await route(44, 43, 42);
+    await until(() => roomBank === 'ALGAE' && !loading && !playing, 'Malcolm’s fountain transformation');
+    if (!scores.includes(26) || !scores.includes(32) || !lines.some(line => line.includes('fix the fountain')))
+      throw Error('Malcolm’s fountain scene did not complete');
+    capture('Malcolm ruins the Enchanted Fountain');
+
+    await route(53, 39);
+    const key = game.getSnapshot().sceneItems.find(item => item.id === 'item-57');
+    if (!key) throw Error('The falling branch did not leave the held key on the ground');
+    await click(key.x, key.y - 4);
+    held('item-57');
+    await putAway();
+    await route(53, 42);
+
+    await route(55, 73, 60, 63, 62, 59, 41);
+    await slot(game.getSnapshot().inventorySlots.indexOf('item-80'));
+    await useOnBrandon();
+    if (!game.getSaveState()?.quest.flags.includes(162)) throw Error('Darm’s scroll did not extinguish the tree');
+    await putAway();
+    await click(87, 66);
+    held('item-51');
+    capture('The crystal orb recovered from the tree');
+    await route(59, 62, 63, 60, 73, 55, 42);
+    await click(90, 93);
+    await until(() => roomBank === 'FOUNTN' && !loading && !playing, 'fountain restoration');
+    if (!game.getSaveState()?.quest.flags.includes(166) || !scores.includes(55)) throw Error('The crystal did not restore the fountain');
+    held(null);
+    capture('The restored Enchanted Fountain');
+
+    await slot(game.getSnapshot().inventorySlots.indexOf('item-78'));
+    await click(163, 90);
+    held('item-76');
+    await useOnBrandon();
+    held('item-78');
+    if (!game.getSaveState()?.quest.flags.includes(89)) throw Error('Drinking magic water did not awaken the blue jewel');
+    await click(163, 90);
+    held('item-76');
+    await route(43, 44, 45);
+    await click(243, 57);
+    held('item-78');
+    if (!game.getSaveState()?.quest.flags.includes(171) || !lines.some(line => line.includes('Go get some blueberries')))
+      throw Error('Zanthia did not reveal Brandon’s heritage and request blueberries');
+    await putAway();
+    await click(286, 177);
+    if (!lines.some(line => line.includes('That felt strange'))) throw Error('The blue jewel could not cast its spell');
+    const ending = validateWorldSave(game.getSaveState());
+    game.stop();
+    game = await startGame(canvas, { ...config, saveState: ending });
+    if (game.getSaveState()?.quest.files[42] !== 'FOUNTN') throw Error('The repaired fountain did not survive a reload');
+    results.textContent += 'ALL PASSED — branch, Zanthia, Malcolm, frozen tree, restored fountain, magic water and blue jewel';
+    document.title = 'PASS — Enchanted Fountain';
+  } catch (error) {
+    results.textContent += `FAIL ${error}`;
+    document.title = 'FAIL — Enchanted Fountain';
   }
 });

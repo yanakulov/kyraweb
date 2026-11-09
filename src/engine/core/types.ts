@@ -36,12 +36,13 @@ export type GameConfig = {
   amulet?: boolean;
   yellowJewel?: boolean;
   purpleJewel?: boolean;
+  blueJewel?: boolean;
   onWispExpire?: () => import("../gameplay/roomScript").RoomAction[];
   poisoned?: boolean;
   heroActions?: boolean;
   onPortalInteract?: (portal: RoomPortal, point: Vec2, snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[] | null;
   portalOpen?: (portal: RoomPortal) => boolean;
-  onAmuletInteract?: (snapshot: RoomSnapshot, jewel: "yellow" | "purple") => import("../gameplay/roomScript").RoomAction[];
+  onAmuletInteract?: (snapshot: RoomSnapshot, jewel: "yellow" | "purple" | "blue") => import("../gameplay/roomScript").RoomAction[];
   portals?: RoomPortal[];
   onExit?: (portal: RoomPortal) => void;
   onLoadingChange?: (loading: boolean) => void;

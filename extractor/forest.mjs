@@ -36,6 +36,7 @@ const ROOMS = {
   XEDGEC: 13,
   CAVEB: 24,
   NWCLIFB: 15,
+  ALGAE: 42,
 };
 for (const [id, region] of REGION.entries()) {
   if (id >= 17 && region && !(region[0] in ROOMS)) ROOMS[region[0]] = id;
@@ -84,7 +85,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     "DROPUP.WSA",
     "DROPDOWN.WSA",
     "FLUTE1.CPS", "FLUTE2.CPS", "HEALBR2.CPS", "POISON.CPS", "SHATTER.WSA",
-    "BRANWILL.CPS", "SNOW1A.CPS", "SNOW2A.CPS",
+    "BRANWILL.CPS", "SNOW1A.CPS", "SNOW2A.CPS", "DRINK.CPS", "TELEKIN.CPS",
   ]);
   const get = (n) => {
     const b = resources.get(n);
@@ -113,7 +114,7 @@ export async function buildForest(root, out = "public/assets/forest") {
   const noteClip = { width: 194, height: 128, frames: [notePixels], palette: note.palette, transparentIndex: -1 };
   const npcProgram = parseEmc(get('_NPC.EMC')), npcVoices = readPak(get('CHAPTER1.VRM'));
   const flute = { program: npcProgram, durations: Object.fromEntries(
-    [...npcVoices].filter(([name]) => /^(100[01]|201[01]|700[0124]|904[123789])\.VOC$/.test(name))
+    [...npcVoices].filter(([name]) => /^(100[01]|2007|201[01]|700[0124]|800[0-6]|902[01]|904[1-9]|9050)\.VOC$/.test(name))
       .map(([name, data]) => [parseInt(name, 10), vocDuration(data)])) };
   function selfActions(item, room = 0, readable = false) {
     const actions = [];
@@ -348,6 +349,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     encodeScenePack({
       "yellow-jewel": { width: 32, height: 17, frames: jewelFrames(1), palette: jewels.palette, transparentIndex: 0 },
       "purple-jewel": { width: 32, height: 17, frames: jewelFrames(3), palette: jewels.palette, transparentIndex: 0 },
+      "blue-jewel": { width: 32, height: 17, frames: jewelFrames(4), palette: jewels.palette, transparentIndex: 0 },
       "amulet-rest": {
         ...amulet,
         frames: [amulet.frames.at(-1)],
@@ -370,6 +372,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     ['poison', [0, 48, 96, 144].map(y => ['POISON', y, 0, 5]), 64, 48],
     ['wisp', [['BRANWILL', 0, 0, 8], ['BRANWILL', 48, 0, 8]], 40, 48],
     ['wisp-float', [['BRANWILL', 96, 0, 8], ['BRANWILL', 125, 0, 2]], 40, 29],
+    ['dispel', [['TELEKIN', 0, 0, 5]], 64, 49],
     ['winter', [['SNOW1A', 0, 1, 7],
       ...[['SNOW1A', 66], ['SNOW1A', 132], ['SNOW2A', 0], ['SNOW2A', 66]].flatMap(([sheet, y]) =>
         [0, 2, 4, 6].map(x => [sheet, y, x, 1])),
@@ -382,6 +385,16 @@ export async function buildForest(root, out = "public/assets/forest") {
     });
     hero[name] = { width, height, frames, palette: amuletPalette, transparentIndex: 0 };
   }
+  const drink = decodeCps(get('DRINK.CPS'), get('PALETTE.COL')).pixels;
+  const drinkFrames = Array.from({ length: 9 }, (_, index) => {
+    const topRow = index < 6, width = index < 5 ? 32 : 40;
+    const x = topRow ? index * 32 : (index - 6) * 40;
+    return Uint8Array.from({ length: 40 * 54 }, (_, pixel) => {
+      const row = Math.floor(pixel / 40), column = pixel % 40;
+      return column >= width || topRow && row < 6 ? 0 : drink[(row + (topRow ? -6 : 48)) * 320 + x + column];
+    });
+  });
+  hero.drink = { width: 40, height: 54, frames: drinkFrames, palette: amuletPalette, transparentIndex: 0 };
   await writeFile(join(out, 'hero-actions.kyr.gz'), encodeScenePack(hero));
   console.log({
     rooms: names.length,

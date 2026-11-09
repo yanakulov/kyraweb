@@ -3,11 +3,11 @@ import { loadImage, withBase } from "../core/assets";
 import { IndexedClip, loadScenePack, type ScenePack } from "../resources/scenePack";
 import { isWalkable } from "../scene/masks";
 import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneItem, SceneMeta, Vec2, WorldSave } from "../core/types";
-import { isWorldRoomId, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
+import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, isWorldRoomId, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 import { roomMusicCommand } from '../audio/cues';
 import type { RoomAction } from "./roomScript";
 import { createForestState, traceForest, applyForestState, loadForestData, originalItem, itemFromOriginal,
-  ageFireberry, canScatterGemsIn, curePoison, poisonArrival, scatterGem, groveGems, transformWisp } from './forest';
+  ageFireberry, canScatterGemsIn, curePoison, dispelMagic, poisonArrival, scatterGem, groveGems, transformWisp } from './forest';
 import { validateWorldSave } from './saveStorage';
 import { findSpawnDestination } from './drops';
 
@@ -199,6 +199,9 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       for(const action of announce)applyForestState(planned,action);
       entryActions=[...(entryActions??[]),...announce,...traceForest(questRoom,3,planned,snapshot,snapshot.pos,p=>isWalkable(p,{uiMaskY:136} as GameConfig['scene'],mask)).actions];
     }
+    if (id === 45 && previous === 39 && !planned.flags.has(161)) {
+      setupActions.push({ op: 'visible', visible: false });
+    }
     if (from && from.id !== 'phase' && meta.title && ![...setupActions, ...(entryActions ?? [])].some(action =>
       action.op === 'message' && action.text.trim() === meta.title.trim())) {
       entryActions = [{ op: 'message', text: meta.title }, ...(entryActions ?? [])];
@@ -233,9 +236,10 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       playOpening: !restoring && !from && config.playOpening !== false, entryActions, setupActions, amulet:quest.flags.has(45), npcFrames:questRoom?.npcFrames, portals,
       yellowJewel: quest.flags.has(YELLOW_JEWEL_FLAG),
       purpleJewel: quest.flags.has(PURPLE_JEWEL_FLAG),
+      blueJewel: quest.flags.has(BLUE_JEWEL_FLAG),
       onWispExpire: () => transformWisp(id, false),
       poisoned: quest.poison > 0,
-      heroActions: quest.poison > 0 || quest.flags.has(PURPLE_JEWEL_FLAG) || [25, 29, 35, 111, 117].includes(id) || snapshot.itemInHand === 'item-55' ||
+      heroActions: quest.poison > 0 || quest.flags.has(PURPLE_JEWEL_FLAG) || [25, 29, 35, 41, 42, 45, 111, 117].includes(id) || snapshot.itemInHand === 'item-55' ||
         snapshot.inventorySlots.includes('item-55') || snapshot.sceneItems.some(item => item.id === 'item-55'),
       onPortalInteract: questRoom ? (portal, point, snapshot) => {
         const grotto = id === 25 && portal.target === 109 && (!quest.flags.has(71) || quest.flags.has(82));
@@ -252,6 +256,11 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
         const say = (text: string, voiceId: number, ms: number): RoomAction => ({ op: 'say', text, voiceId, voiceBank: 'CHAPTER1', ms,
           x: snapshot.pos.x, y: snapshot.pos.y - 56, speaker: 0, color: 15, blocking: true });
         if (snapshot.itemInHand) return [say("Maybe I'd better put this down first.", 2000, 2019)];
+        if (jewel === 'blue') {
+          if (!quest.flags.has(BLUE_JEWEL_FLAG)) return [say("It's a jewel, but why is it black?", 2002, 2234)];
+          return [{ op: 'sfx', track: 0x45 }, { op: 'frame', clip: 'blue-jewel', index: 11, ...BLUE_JEWEL_POS, ms: 100 },
+            { op: 'close', clip: 'blue-jewel' }, ...dispelMagic(id, !!snapshot.wispMs), say('That felt strange.', 2007, forest.flute.durations[2007] ?? 1900)];
+        }
         if (jewel === 'purple') {
           if (!quest.flags.has(PURPLE_JEWEL_FLAG)) return [say("It's a jewel, but why is it black?", 2002, 2234)];
           const pressed: RoomAction[] = [{ op: 'sfx', track: 0x45 },
@@ -280,7 +289,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       },
       onActorInteract: snapshot => {
         const { itemInHand, pos } = snapshot;
-        if (itemInHand === 'item-55' || id === 117 && itemInHand === 'item-80') {
+        if (itemInHand === 'item-55' || (id === 41 || id === 117) && itemInHand === 'item-80' ||
+            itemInHand === 'item-76' || itemInHand === 'item-77') {
           return traceForest({ ...meta, clipFrames: questRoom?.clipFrames ?? {}, npcFrames: {}, ...forest.flute },
             0, quest, snapshot).actions;
         }
@@ -319,7 +329,15 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   async function navigate(portal: RoomPortal) {
     try {
       config.onLoadingChange?.(true);
-      saved.set(currentId, { ...current.getSnapshot(), gemPlacementChecked: true });
+      const snapshot = current.getSnapshot();
+      const departing = roomSource(currentId).questRoom;
+      if (currentId === 45 && departing) {
+        for (const action of traceForest(departing, 5, quest, snapshot).actions) {
+          if (action.op === 'item' && snapshot.sceneItems.length < 12)
+            snapshot.sceneItems.push({ id: action.item, x: action.x, y: action.y });
+        }
+      }
+      saved.set(currentId, { ...snapshot, gemPlacementChecked: true });
       const next = await load(portal.target, portal, currentId);
       if (!active) { next.game.stop(); return; }
       current.stop(); current = next.game; currentId = portal.target;
