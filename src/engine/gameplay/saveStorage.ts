@@ -1,5 +1,5 @@
 import type { WorldSave } from '../core/types';
-import { isWorldRoomId } from '../core/constants';
+import { INVISIBILITY_MS, isWorldRoomId } from '../core/constants';
 
 export type SaveRecord = {
   version: 1; name: string; location: string; savedAt: string; thumbnail: string; state: WorldSave;
@@ -96,11 +96,12 @@ export function validateWorldSave(value: unknown): WorldSave {
   const rooms = object(data.rooms, 'rooms');
   for (const [key, value] of Object.entries(rooms)) {
     roomId(Number(key), `rooms.${key}`); if (String(Number(key)) !== key) invalid('room ID');
-    const room = object(value, `rooms.${key}`, 'pos facing walkDelayTicks wispMs inventorySlots itemInHand sceneItems overlays treeSpoken gemPlacementChecked runtime');
+    const room = object(value, `rooms.${key}`, 'pos facing walkDelayTicks wispMs invisibleMs inventorySlots itemInHand sceneItems overlays treeSpoken gemPlacementChecked runtime');
     coordinates(object(room.pos, 'position', 'x y'), 'position');
     if (room.facing !== undefined) number(room.facing, 'facing', 0, 7);
     if (room.walkDelayTicks !== undefined) number(room.walkDelayTicks, 'walkDelayTicks', 1, 60);
     if (room.wispMs !== undefined) number(room.wispMs, 'wispMs', 0, 300_000, false);
+    if (room.invisibleMs !== undefined) number(room.invisibleMs, 'invisibleMs', 0, INVISIBILITY_MS, false);
     if (room.gemPlacementChecked !== undefined) boolean(room.gemPlacementChecked, 'gemPlacementChecked');
     list(room.inventorySlots, 'inventory', 10, item); item(room.itemInHand, 'held item'); boolean(room.treeSpoken, 'treeSpoken');
     list(room.sceneItems, 'sceneItems', 256, sceneItem);

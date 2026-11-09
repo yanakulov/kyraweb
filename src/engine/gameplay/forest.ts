@@ -7,7 +7,7 @@ import type { RoomAction } from "./roomScript";
 import type { RoomSnapshot, Vec2, InventoryItemId, SceneItem } from "../core/types";
 import type { CursorTrack, WorldRoom } from "./world";
 import { actorScaleAt } from '../characters/brandonFrames';
-import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, isWorldRoomId, isShadowrealmRoom, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
+import { BLUE_JEWEL_FLAG, BLUE_JEWEL_POS, INVISIBILITY_MS, isCastleRoom, isWorldRoomId, isShadowrealmRoom, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, RED_JEWEL_FLAG, RED_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 
 export type ForestRoom = WorldRoom & {
   program: EmcProgram;
@@ -148,6 +148,15 @@ export function transformWisp(room: number, active: boolean): RoomAction[] {
   return actions;
 }
 
+export function changeInvisibility(active: boolean): RoomAction[] {
+  const actions: RoomAction[] = [{ op: 'sfx', track: 0x77 }];
+  for (let step = 0; step <= 16; step++) {
+    actions.push({ op: 'invisibility', level: (active ? step : 16 - step) * 16 }, waitTicks(10));
+  }
+  actions.push({ op: 'invisibility', level: active ? 256 : 0, ms: active ? INVISIBILITY_MS - 170 * 1000 / 60 : 0 });
+  return actions;
+}
+
 export function dispelMagic(room: number, activeWisp: boolean): RoomAction[] {
   return [
     ...(activeWisp ? transformWisp(room, false) : []),
@@ -196,7 +205,7 @@ export function traceForest(
     voiceMs = 0,
     voiceElapsed = 0,
     hand = originalItem(snapshot.itemInHand);
-  let poison = state.poison, wisp = !!snapshot.wispMs, cauldron = state.cauldron;
+  let poison = state.poison, wisp = !!snapshot.wispMs, invisible = !!snapshot.invisibleMs, cauldron = state.cauldron;
   const crystals = [...state.crystals];
   const scaleOverrides = new Map<number, number>();
   const delays: Record<number, number> = { 0: snapshot.walkDelayTicks ?? 6, 1: 7, 2: 8 };
@@ -334,7 +343,7 @@ export function traceForest(
           case 0x13:
             return +(hand === -1);
           case 0x72:
-            return +((poison > 0 && !!(a[0] & 1)) || (wisp && !!(a[0] & 2)));
+            return +((poison > 0 && !!(a[0] & 1)) || (wisp && !!(a[0] & 2)) || (invisible && !!(a[0] & 0x20)));
           case 0x74:
             if (![41, 117].includes(room.id) || !a[0]) throw new Error('Unsupported winter scroll sequence');
             for (let index = 0; index < 29; index++) {
@@ -534,7 +543,8 @@ export function traceForest(
           case 0x29: {
             const clip = text[a[0]].slice(0, -4).toLowerCase();
             slots.set(a[1], clip);
-            if (clip === 'pegasus' || clip === 'lep_in' || clip === 'lepclimb') emit({ op: 'visible', visible: false });
+            if (['pegasus', 'lep_in', 'lepclimb', 'ridge', 'ridge2', 'acidgate', 'slide1'].includes(clip))
+              emit({ op: 'visible', visible: false });
             return 0;
           }
           case 0x2a:
@@ -738,6 +748,7 @@ export function traceForest(
             return 0;
           case 0x6c: {
             const jewel = a[0] === 1 ? { name: 'yellow-jewel', flag: YELLOW_JEWEL_FLAG, pos: YELLOW_JEWEL_POS }
+              : a[0] === 2 ? { name: 'red-jewel', flag: RED_JEWEL_FLAG, pos: RED_JEWEL_POS }
               : a[0] === 3 ? { name: 'purple-jewel', flag: PURPLE_JEWEL_FLAG, pos: PURPLE_JEWEL_POS }
               : a[0] === 4 ? { name: 'blue-jewel', flag: BLUE_JEWEL_FLAG, pos: BLUE_JEWEL_POS } : undefined;
             if (!jewel) throw new Error('Unsupported amulet jewel');
@@ -846,15 +857,29 @@ export function traceForest(
             emit({ op: "sfx", track: a[0] });
             return 0;
           case 0x26:
+            if (invisible) {
+              invisible = false;
+              actions.push(...changeInvisibility(false));
+            }
             if (wisp) {
               wisp = false;
               actions.push(...transformWisp(room.id, false));
             }
             return 0;
+          case 0x91:
+            return 1; // ScummVM's original passive-protection check is a constant.
+          case 0x93:
+            actions.push(...heroFrames('stone', indices(0, 14), 8));
+            return 0;
+          case 0x96:
+            if (isCastleRoom(room.id)) wait(a[0] * 1000);
+            return 0;
+          case 0x28:
+            if (room.id === 203 && fn === 1 && a[1] === a[3]) emit({ op: 'heroScale', value: a[1] / 256 });
+            return 0;
           // Engine configuration. Audio follows the original EMC calls.
           case 8:
           case 0x0f:
-          case 0x28:
           case 0x31:
           case 0x33:
           case 0x36:
@@ -868,8 +893,8 @@ export function traceForest(
           case 0x57:
           case 0x78:
           case 0x79:
+          case 0x92:
           case 0x95:
-          case 0x96:
           case 0x98:
           case 0x9a:
           case 0x9b:

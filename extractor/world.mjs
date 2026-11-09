@@ -31,7 +31,15 @@ export const REGION = [
   ['WELL', 30, 28, 18, 34], ['SQUARE', 26, 30, 34, 29],
   ['WISE', 33, 32, 21, 17], ['RUBY', null, null, 31, null], ['DEAD', 18, 19, null, null]
 ];
-Object.assign(REGION, shadowrealm, faeriewood);
+Object.assign(REGION, shadowrealm, faeriewood, {
+  199: ['LANDING', null, 200, null, null],
+  200: ['GRAVE', 201, 203, 202, 199],
+  201: ['FORESTA', null, null, 200, null],
+  202: ['FORESTB', 200, null, null, null],
+  203: ['CASTLE', null, null, null, 200],
+  204: ['CGATE', null, null, 203, 205],
+  205: ['DNSTAIR', 227, 212, 204, 211],
+});
 
 // ScummVM copyBackgroundBlock: restore the interleaved forest backdrop columns.
 export function restoreBackgroundColumns(pixels, blocks, height=128) {
@@ -121,6 +129,7 @@ export async function buildWorld(gameDir, outputDir = 'public/assets/world') {
     };
     runEmc(program, 0, host, { 0: id, 7: 0 });
     runEmc(program, 2, host, { 0: id, 7: 0 });
+    if (name === 'CGATE') runEmc(program, 3, host, { 0: id, 7: 0 });
     const image = decodeCps(get(`${name}.CPS`), get('PALETTE.COL'));
     image.palette.splice(228 * 3, 60, ...Array.from(get(`${name}.DAT`).subarray(0x17, 0x17 + 60), x => x * 4));
     const mask = decodeMask(get(`${name}.MSC`));

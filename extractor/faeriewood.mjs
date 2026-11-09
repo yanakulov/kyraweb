@@ -58,5 +58,4 @@ export const faeriewood = {
   106: ['FSOUTH', 102, 107, null, 105],
   107: ['FSOUTHB', 75, 108, null, 106],
   108: ['EDGE', 103, null, null, 107],
-  199: ['LANDING', null, 200, null, null],
 };

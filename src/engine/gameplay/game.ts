@@ -1,6 +1,6 @@
 import { sceneShuffle } from './sceneShuffle';
 import { locale, t, translateGameText } from '../../i18n';
-import { BLUE_JEWEL_FLAG, BLUE_JEWEL_HITBOX, BLUE_JEWEL_POS, DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_HITBOX, PURPLE_JEWEL_POS, ROOM_ART, TICK_MS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from "../core/constants";
+import { BLUE_JEWEL_FLAG, BLUE_JEWEL_HITBOX, BLUE_JEWEL_POS, DEFAULT_ANIM_STEP_INTERVAL, HUD_OPTIONS_RECT, INVENTORY_ICON_SIZE, LOGICAL_HEIGHT, LOGICAL_WIDTH, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_HITBOX, PURPLE_JEWEL_POS, RED_JEWEL_FLAG, RED_JEWEL_HITBOX, RED_JEWEL_POS, ROOM_ART, TICK_MS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from "../core/constants";
 import { loadImage, loadMask, loadSceneEmc, loadSceneMeta, loadSceneShapes, withBase } from "../core/assets";
 import { dropItemAt, drawDropAnims, updateDrops } from "./drops";
 import {
@@ -35,9 +35,10 @@ import { exitCursor, portalAtPoint, roomViewPortals } from "./navigation";
 import type { ControlMode, DropAnim, GameConfig, InventoryItemId, RoomRuntimeSnapshot, RoomSnapshot, SceneItem, SceneOverlayState, Vec2, WorldSave } from "../core/types";
 
 const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell', 'brantalk', 'dodge', 'frozen', 'branbrn', 'bonk', 'waken', 'frog']);
-const heroOffsets: Record<string, number> = { flute: -12, cure: -11, poison: -31, wisp: -20, winter: -20, drink: -20, dispel: -32 };
+const heroOffsets: Record<string, number> = { flute: -12, cure: -11, poison: -31, wisp: -20, winter: -20, drink: -20, dispel: -32, stone: -20 };
 const jewels = [
   { color: 'yellow', clip: 'yellow-jewel', flag: YELLOW_JEWEL_FLAG, pos: YELLOW_JEWEL_POS, hit: YELLOW_JEWEL_HITBOX },
+  { color: 'red', clip: 'red-jewel', flag: RED_JEWEL_FLAG, pos: RED_JEWEL_POS, hit: RED_JEWEL_HITBOX },
   { color: 'purple', clip: 'purple-jewel', flag: PURPLE_JEWEL_FLAG, pos: PURPLE_JEWEL_POS, hit: PURPLE_JEWEL_HITBOX },
   { color: 'blue', clip: 'blue-jewel', flag: BLUE_JEWEL_FLAG, pos: BLUE_JEWEL_POS, hit: BLUE_JEWEL_HITBOX },
 ] as const;
@@ -131,6 +132,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let hasAmulet=config.amulet??false;
     const activeJewels = new Set<number>();
     if (config.yellowJewel) activeJewels.add(YELLOW_JEWEL_FLAG);
+    if (config.redJewel) activeJewels.add(RED_JEWEL_FLAG);
     if (config.purpleJewel) activeJewels.add(PURPLE_JEWEL_FLAG);
     if (config.blueJewel) activeJewels.add(BLUE_JEWEL_FLAG);
     let shakeUntil = 0;
@@ -183,6 +185,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     let heroPose: { image: HTMLCanvasElement; xOffset: number; yOffset: number } | undefined;
     let wispMs = config.resume?.wispMs ?? 0;
     let heroScale: number | undefined;
+    let invisibleMs = config.resume?.invisibleMs ?? 0;
+    let invisibilityLevel = invisibleMs ? 256 : 0;
+    let invisibleSprite: CanvasRenderingContext2D | undefined;
     const floatingWisp = scriptRenderers.get('hero-wisp-float');
     let poisoned = config.poisoned ?? false;
     let poisonAtlas: HTMLCanvasElement | undefined;
@@ -294,6 +299,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (wispMs > 0 && !sequence && !dead) {
         wispMs = Math.max(0, wispMs - dt * 1000);
         if (!wispMs && config.onWispExpire) playScript(config.onWispExpire());
+      }
+      if (invisibleMs > 0 && !sequence && !dead) {
+        invisibleMs = Math.max(0, invisibleMs - dt * 1000);
+        if (!invisibleMs && config.onInvisibilityExpire) playScript(config.onInvisibilityExpire());
       }
       updatePalette(dt*1000);
       speechRemaining = Math.max(0, speechRemaining - dt * 1000);
@@ -474,7 +483,34 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       ctx.imageSmoothingEnabled = false;
 
       const drawBrandon = actorVisible && !blackout;
-      if (drawBrandon && talkingFrame >= 0) {
+      const flip = !pose && state.dir === 'right';
+      if (drawBrandon && invisibilityLevel > 0) {
+        invisibleSprite ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
+        const ghost = invisibleSprite, sprite = ghost.canvas;
+        sprite.width = drawW;
+        sprite.height = drawH;
+        // DOS replaces pixels in Brandon’s silhouette with nearby background pixels.
+        const offset = [1, 3, 2, 5, 4, 3, 2, 1][Math.floor(clockMs / TICK_MS) % 8];
+        ghost.drawImage(canvas, drawX + offset, drawY, drawW, drawH, 0, 0, drawW, drawH);
+        const backdrop = ghost.getImageData(0, 0, drawW, drawH).data;
+        ghost.clearRect(0, 0, drawW, drawH);
+        ghost.imageSmoothingEnabled = false;
+        if (flip) { ghost.translate(drawW, 0); ghost.scale(-1, 1); }
+        ghost.drawImage(atlas, frame.x, frame.y, frame.w, frame.h, 0, 0, drawW, drawH);
+        const pixels = ghost.getImageData(0, 0, drawW, drawH);
+        let threshold = 0;
+        for (let i = 0; i < pixels.data.length; i += 4) {
+          if (!pixels.data[i + 3]) continue;
+          threshold += invisibilityLevel;
+          if (threshold < 256) continue;
+          threshold -= 256;
+          if (backdrop[i + 3]) pixels.data.set(backdrop.subarray(i, i + 3), i);
+        }
+        ghost.putImageData(pixels, 0, 0);
+        ctx.drawImage(sprite, drawX, drawY);
+      }
+      const drawSolidBrandon = drawBrandon && !invisibilityLevel;
+      if (drawSolidBrandon && talkingFrame >= 0) {
         const head = frames.find(frame => frame.shapeIndex === brandonTalkHead(speechAge));
         if (head) {
           const headX = drawX + Math.trunc((state.dir === "right" ? 2 : 6) * scale);
@@ -486,13 +522,13 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         }
       }
 
-      if (drawBrandon && !pose && state.dir === "right") {
+      if (drawSolidBrandon && flip) {
         ctx.save();
         ctx.translate(drawX + drawW, 0);
         ctx.scale(-1, 1);
         ctx.drawImage(atlas, frame.x, frame.y, frame.w, frame.h, 0, drawY, drawW, drawH);
         ctx.restore();
-      } else if (drawBrandon) {
+      } else if (drawSolidBrandon) {
         ctx.drawImage(atlas, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
       }
 
@@ -934,6 +970,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           break;
         }
         case 'wisp': wispMs = action.ms; break;
+        case 'invisibility':
+          invisibilityLevel = action.level;
+          if (action.ms !== undefined) invisibleMs = action.ms;
+          break;
         case 'heroScale': heroScale = action.value; break;
         case 'heroFrame': {
           const animation = action.clip && scriptRenderers.get(`hero-${action.clip}`);
@@ -1123,7 +1163,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     if (!paused) animationFrame = requestAnimationFrame(loop);
 
     function getSnapshot(): RoomSnapshot { return structuredClone({ pos: state.pos, walkDelayTicks: state.walkDelayTicks, facing: state.facing, inventorySlots: state.inventorySlots, itemInHand: state.itemInHand,
-      sceneItems: state.sceneItems, overlays: state.overlays, treeSpoken, wispMs,
+      sceneItems: state.sceneItems, overlays: state.overlays, treeSpoken, wispMs, invisibleMs,
       runtime: { clockMs, sceneTicks, sceneAccumulatorMs, actorVisible, actorShape, hasAmulet,
         sceneAnims: sceneAnims.map(({ script, ...anim }) => anim),
         npcs: [...npcs.values()].map(({ op, ...npc }) => npc), heldNpcPoses: [...heldNpcPoses.values()].map(({ op, ...npc }) => npc),
