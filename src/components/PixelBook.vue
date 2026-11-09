@@ -2,6 +2,8 @@
   <canvas ref="canvas" class="pixel-book" width="640" height="360" tabindex="0" role="dialog" aria-modal="true"
     :aria-label="canvasLabel" @pointermove="move" @pointerleave="leave" @pointerdown="press"
     @pointerup="release" @pointercancel="release" @keydown="key" @paste="paste" @wheel.prevent="scroll" />
+  <canvas v-show="showCredit" ref="credit" class="book-studio-credit" :width="STUDIO_MARK.w" :height="STUDIO_MARK.h"
+    :style="creditStyle" role="img" aria-label="AkulaFlow" />
 </template>
 
 <script setup lang="ts">
@@ -36,6 +38,11 @@ const emit = defineEmits<{
 }>();
 
 const canvas = ref<HTMLCanvasElement>();
+const credit = ref<HTMLCanvasElement>();
+const showCredit = ref(false);
+const creditStyle = ref({ top: '0px', width: '0px' });
+const STUDIO_MARK = { x: 13, y: 74, w: 300, h: 54 };
+const CREDIT_TOP = 342;
 const canvasLabel = ref('');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const pages: Page[] = ['main', 'story', 'save', 'load', 'settings', 'sound', 'dev'];
@@ -485,25 +492,47 @@ function paintPages() {
 function coverImage(r: Rect) {
   pixels(ctx, coverFace, r);
 }
+function coverButton(id: string, label: string, area: Rect, action: () => void, primary = false) {
+  const { x, y, w, h } = area;
+  const hot = !props.busy && (hover === id || focus === id);
+  const fill = ctx.createLinearGradient(x, y, x, y + h);
+  fill.addColorStop(0, primary ? hot ? '#476457' : '#344d42' : hot ? '#584039' : '#48302d');
+  fill.addColorStop(1, primary ? '#202e29' : '#2c1b1b');
+  ctx.fillStyle = '#140909a8';
+  ctx.fillRect(x + 4, y + 5, w - 7, h);
+  ctx.beginPath();
+  ctx.moveTo(x + 5, y + .5);
+  ctx.lineTo(x + w - 5, y + .5);
+  ctx.lineTo(x + w - .5, y + 5);
+  ctx.lineTo(x + w - .5, y + h - 5);
+  ctx.lineTo(x + w - 5, y + h - .5);
+  ctx.lineTo(x + 5, y + h - .5);
+  ctx.lineTo(x + .5, y + h - 5);
+  ctx.lineTo(x + .5, y + 5);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = hot ? '#f0ce8b' : '#b88752';
+  ctx.stroke();
+  ctx.strokeStyle = '#c1945f50';
+  ctx.strokeRect(x + 4.5, y + 4.5, w - 9, h - 9);
+  sparkle(ctx, x + 11, y + h / 2, hot ? 2 : 1, '#bd8c50');
+  text(ctx, label, x + w / 2 + 4, y + h / 2, 11, props.busy ? MUTED : hot ? '#ffedbe' : FOIL, 'center', menuFont, w - 28);
+  if (!props.busy) add(id, label, area, action);
+}
 function cover() {
-  bookShadow(ctx, { x: COVER.x + 7, y: COVER.y + 7, w: COVER.w - 15, h: COVER.h - 24 });
+  bookShadow(ctx, { x: COVER.x + 7, y: COVER.y + 4, w: COVER.w - 15, h: COVER.h - 13 });
   coverImage(COVER);
-  const open = { x: COVER.x + 16, y: COVER.y + 11, w: COVER.w - 25, h: COVER.h - 13 };
-  const label = t('Open the book');
-  add('cover', label, open, startCover);
-  const hot = hover === 'cover' || focus === 'cover';
-  ctx.fillStyle = '#352118e8'; ctx.fillRect(256, 299, 135, 18);
-  text(ctx, label, 324, 308, 11, hot ? '#ffe6ae' : FOIL, 'center', menuFont, 125);
-  if (!reduced.matches && time % 3800 < 300) sparkle(ctx, 332, 267, 2, '#a9e1a1');
-  if (props.latestSave && !props.setup) {
-    const r = { x: 449, y: 270, w: 134, h: 26 };
-    frame(ctx, r, hover === 'continue' || focus === 'continue');
-    text(ctx, t('Continue journey'), 516, 283, 11, FOIL, 'center', menuFont, 125);
-    add('continue', t('Continue journey'), r, () => emit('continue'));
+  if (!reduced.matches && time % 3800 < 300) sparkle(ctx, 331, 231, 2, '#a9e1a1');
+  const resume = props.latestSave && !props.setup;
+  coverButton('cover', t('Open the book'), { x: resume ? 150 : 230, y: 292, w: resume ? 163 : 180, h: 27 }, startCover, true);
+  if (resume) {
+    coverButton('continue', t('Continue journey'), { x: 327, y: 292, w: 163, h: 27 }, () => emit('continue'));
   }
-  pixels(ctx, art!.studio, { x: 577, y: 316, w: 48, h: 30 });
-  text(ctx, t('Original tale © 1992 Westwood Studios'), 320, 346, 10, '#d3af84', 'center', textFont, 335);
-  if (props.message || props.busy) text(ctx, t(props.message || 'Opening your saved chapter…'), 320, 325, 11, FOIL, 'center', textFont, 415);
+  text(ctx, t('Original tale © 1992 Westwood Studios'), 320, 331, 10, '#d3af84', 'center', textFont, 335);
+  if (props.message || props.busy) {
+    text(ctx, t(props.message || 'Opening your saved chapter…'), 514, 272, 10, FOIL, 'center', textFont, 220);
+  }
 }
 function openCover(progress: number) {
   if (progress >= 1) {
@@ -578,6 +607,7 @@ function paint(now: number) {
   }
   const motion = reduced.matches ? 0 : time;
   desk(ctx, art, motion, view);
+  showCredit.value = !props.options && coverAt === null && !props.portrait;
   if (props.portrait) {
     const panel = { x: 139, y: 96, w: 362, h: 168 };
     frame(ctx, panel, true);
@@ -633,6 +663,9 @@ async function prepare() {
     const [loaded] = await Promise.all([loadBookArt(), document.fonts.load('11px Kyrandia'), document.fonts.load('21px Germanica')]);
     if (!alive) return;
     coverFace = coverBoard(loaded);
+    const studio = credit.value?.getContext('2d');
+    const { x, y, w, h } = STUDIO_MARK;
+    studio?.drawImage(loaded.studio, x, y, w, h, 0, 0, w, h);
     bookmarks = bookmarkPalette(loaded.bookmark);
     art = loaded;
     mountTime = performance.now();
@@ -646,6 +679,11 @@ onMounted(() => {
     if (!scale) return;
     const w = target.clientWidth / scale, h = target.clientHeight / scale;
     view = { x: (WIDTH - w) / 2, y: (HEIGHT - h) / 2, w, h };
+    const creditTop = (CREDIT_TOP - view.y) * scale;
+    creditStyle.value = {
+      top: `${Math.round(creditTop)}px`,
+      width: `${Math.floor(Math.min(STUDIO_MARK.w, Math.max(0, target.clientHeight - creditTop - 5) * STUDIO_MARK.w / STUDIO_MARK.h))}px`,
+    };
     const extra = Math.min(65, Math.max(0, h - HEIGHT) * .78);
     book = { ...SPREAD, y: SPREAD.y - extra / 2, h: SPREAD.h + extra };
     ctx = surface(target, view);
@@ -769,5 +807,15 @@ function key(event: KeyboardEvent) {
   cursor: url('/assets/cursors/book-pointer.svg') 2 2, auto;
   touch-action: none;
   outline: none;
+}
+.book-studio-credit {
+  position: fixed;
+  left: 50%;
+  z-index: 21;
+  transform: translateX(-50%);
+  height: auto;
+  max-width: calc(100% - 24px);
+  image-rendering: auto;
+  pointer-events: none;
 }
 </style>

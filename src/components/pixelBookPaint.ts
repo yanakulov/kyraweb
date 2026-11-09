@@ -6,16 +6,16 @@ import { ROOM_ART } from '../engine/core/constants';
 export const WIDTH = 640, HEIGHT = 360;
 export const BOOK_RESOLUTION = 1.5;
 export const SPREAD = { x: 49, y: 25, w: 542, h: 310 };
-export const COVER = { x: 204, y: 24, w: 232, h: 304 };
+export const COVER = { x: 213, y: 13, w: 214, h: 270 };
 export const ILLUSTRATION = { x: 339, y: 112, w: 192, h: 131 };
 export const RUBRIC = '#e5b97a', INK = '#e9d0ae', MUTED = '#b79674', FOIL = '#f1d198';
 export type Rect = { x: number; y: number; w: number; h: number };
-export type Art = Record<'desk' | 'spread' | 'cover' | 'retail' | 'bookmark' | 'modern' | 'classic' | 'studio', HTMLImageElement>;
+export type Art = Record<'desk' | 'spread' | 'cover' | 'retail' | 'title' | 'bookmark' | 'modern' | 'classic' | 'studio', HTMLImageElement>;
 type Point = { x: number; y: number };
 
 export async function loadBookArt(): Promise<Art> {
   const files = {
-    desk: 'pixel-book/desk.webp', spread: 'pixel-book/spread.webp', cover: 'pixel-book/cover.webp', retail: 'book-cover.webp',
+    desk: 'pixel-book/desk.webp', spread: 'pixel-book/spread.webp', cover: 'pixel-book/cover.webp', retail: 'book-cover.webp', title: 'kyrandia-title.webp',
     bookmark: 'pixel-book/bookmark.webp',
     modern: 'controls-modern.webp', classic: 'controls-classic.webp', studio: 'akulaflow-studio.webp',
   };
@@ -44,14 +44,13 @@ export function coverBoard(art: Art) {
   const ctx = canvas.getContext('2d')!;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(art.cover, 0, 0);
-  ctx.drawImage(art.cover, 47, 37, 138, 40, 36, 36, 165, 177);
-  ctx.fillStyle = '#28140e';
-  ctx.fillRect(36, 36, 165, 165);
-  ctx.drawImage(art.retail, 73, 145, 365, 365, 39, 39, 159, 159);
-  ctx.fillStyle = '#6b280f28';
-  ctx.fillRect(39, 39, 159, 159);
-  ctx.strokeStyle = '#b38349';
-  ctx.strokeRect(36.5, 36.5, 164, 164);
+  ctx.drawImage(art.title, 41, 35, 154, 51);
+  const panel = { x: 51, y: 100, w: 134, h: 96 };
+  // The retail title is on the plate above. Use the illustration below its printed title block.
+  frame(ctx, panel, true);
+  ctx.drawImage(art.retail, 74, 249, 362, 259, panel.x, panel.y, panel.w, panel.h);
+  ctx.fillStyle = '#4b160b18';
+  ctx.fillRect(panel.x, panel.y, panel.w, panel.h);
   return canvas;
 }
 
@@ -190,7 +189,7 @@ export function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, rad
 
 export function desk(ctx: CanvasRenderingContext2D, art: Art, time: number, view: Rect) {
   ctx.drawImage(art.desk, view.x - 1, view.y - 1, view.w + 2, view.h + 2);
-  const fx = Math.round(view.x + 23 * view.w / WIDTH), fy = Math.round(view.y + 26 * view.h / HEIGHT);
+  const fx = Math.round(view.x + 29 * view.w / WIDTH), fy = Math.round(view.y + 48 * view.h / HEIGHT);
   const flame = Math.floor(time / 90);
   const flicker = Math.sin(flame * .85) + Math.sin(flame * 1.89);
   const glow = ctx.createRadialGradient(fx, fy, 3, fx, fy, 124);
