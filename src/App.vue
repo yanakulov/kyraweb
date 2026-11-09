@@ -1,13 +1,26 @@
 <template>
   <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()" @pointermove.capture="rememberMouse" @pointerover.capture="menuHover" @click.capture="menuClick">
-    <FantasyBook v-if="!bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :opening-frame-ready="openingFrameReady || !!openingSnapshot || !!gameError" :snapshot="openingSnapshot ?? undefined" :frame-focus="bookFocus" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="beginOpening" @ready="openingReadingReady = true" @open="openBook">
+    <PixelBook v-if="pixelBook && (!bookOpened || bookSnapshot)" ref="openingBook"
+      :options="!!bookSnapshot" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy"
+      :returning="bookReturning" :message="bookMessage" :initial-view="bookInitialView" :setup="firstRun"
+      :latest-save="!!latestSave" :seen-prologue="prologueSeen" :location="locationName"
+      :snapshot="bookSnapshot ?? openingSnapshot ?? undefined" :game-canvas="canvasRef ?? undefined"
+      :focus="bookFocus" :opening-ready="openingFrameReady || !!openingSnapshot || !!gameError" :portrait="mobilePortrait"
+      :slots="bookSlots" :dev-scene="activeDevScene" :dev-finished="devFinished"
+      :walk-speed="walkSpeed" :control-mode="controlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen"
+      :music="music" :music-state="musicState" @begin="beginOpening" @ready="bookOptionsReady"
+      @open="openBook" @prologue="finishPrologue" @continue="continueJourney" @finish-setup="finishSetup"
+      @start="startJourney" @resume="resumeBook" @returned="finishBookResume" @save="saveChapter" @load="loadChapter"
+      @control="setControlMode" @speed="walkSpeed = $event" @fullscreen="toggleFullscreen"
+      @leave="leaveBook" @dev-run="launchDevScene" @leave-dev="returnToStory" />
+    <FantasyBook v-if="!pixelBook && !bookOpened" ref="openingBook" :game-canvas="canvasRef ?? undefined" :opening-frame-ready="openingFrameReady || !!openingSnapshot || !!gameError" :snapshot="openingSnapshot ?? undefined" :frame-focus="bookFocus" :prologue="openingPrologue && !openingSnapshot" :inert="bookBusy" @begin="beginOpening" @ready="openingReadingReady = true" @open="openBook">
       <BookPrologue v-if="openingPrologue && !openingSnapshot" :ready="openingReadingReady" :show-story="!prologueSeen" @page-turn="music.bookSound('page')" @continue="finishPrologue">
         <template #audio><MusicSettings v-if="musicState" :player="music" :state="musicState" /></template>
       </BookPrologue>
       <template #invitation><button v-if="latestSave" class="book-continue" type="button" :disabled="bookBusy" @click.stop="continueJourney">{{ t('Continue journey') }}</button><p v-if="bookBusy || bookMessage" class="book-status" role="status">{{ t(bookBusy ? 'Opening your saved chapter…' : bookMessage) }}</p></template>
     </FantasyBook>
-    <FirstRunLetter v-if="firstRun && musicState" :player="music" :state="musicState" :mode="controlMode" @finish="finishSetup" />
-    <FantasyBook v-if="bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :frame-focus="bookFocus" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
+    <FirstRunLetter v-if="!pixelBook && firstRun && musicState" :player="music" :state="musicState" :mode="controlMode" @finish="finishSetup" />
+    <FantasyBook v-if="!pixelBook && bookSnapshot" mode="options" :game-canvas="canvasRef ?? undefined" :snapshot="bookSnapshot" :frame-focus="bookFocus" :returning="bookReturning" @ready="bookOptionsReady" @resume="finishBookResume">
       <BookPrologue v-if="readingHistory" :ready="bookReady" returning @page-turn="music.bookSound('page')" @continue="readingHistory = false" />
       <BookMenu v-else :gameplay="!introActive" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy || !bookReady || bookReturning" :message="bookMessage" :slots="bookSlots" :initial-view="bookInitialView" :dev-scene="activeDevScene" :dev-finished="devFinished"
         v-model:walk-speed="walkSpeed" :control-mode="controlMode" @update:control-mode="setControlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen" :music-player="music" :music-state="musicState"
@@ -36,7 +49,7 @@
         <p v-if="navigationError" class="scene-notice" role="status">{{ t(navigationError) }}</p>
       </div>
     </div>
-    <dialog v-if="mobilePortrait" ref="rotationDialog" class="rotation-dialog" aria-labelledby="rotation-title" aria-describedby="rotation-help" @cancel.prevent>
+    <dialog v-if="mobilePortrait && (!pixelBook || bookOpened && !bookSnapshot)" ref="rotationDialog" class="rotation-dialog" aria-labelledby="rotation-title" aria-describedby="rotation-help" @cancel.prevent>
       <svg class="rotation-icon" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="5" y="5" width="15" height="26" rx="2" />
         <rect x="17" y="32" width="26" height="13" rx="2" />
@@ -55,6 +68,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 const FantasyBook = defineAsyncComponent(() => import('./components/FantasyBook.vue'));
+const PixelBook = defineAsyncComponent(() => import('./components/PixelBook.vue'));
+const pixelBook = new URLSearchParams(location.search).get('book') === '2d';
 import BookMenu from './components/BookMenu.vue';
 import BookPrologue from './components/BookPrologue.vue';
 import FirstRunLetter from './components/FirstRunLetter.vue';
@@ -117,7 +132,7 @@ async function finishSetup(mode: ControlMode) {
   setControlMode(mode);
   firstRun.value = false;
   await nextTick();
-  if (!latestSave.value) openingBook.value?.openBook();
+  if (!pixelBook && !latestSave.value) openingBook.value?.openBook();
 }
 const bookReturning = ref(false), bookReady = ref(false), bookBusy = ref(false), canSave = ref(false), gameOver = ref(false);
 const bookMessage = ref(''), bookInitialView = ref<'main' | 'load' | 'dev'>('main');
