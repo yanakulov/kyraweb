@@ -83,7 +83,6 @@ body {
 .is-modern .scene-plane { inset: -6.25% -2.631579% 0; }
 .is-cinematic .stage { width: min(100%, calc(100dvh * var(--cinematic-ratio, 1.6))); height: auto; aspect-ratio: var(--cinematic-ratio, 1.6); }
 .is-cinematic .scene-plane { inset: auto; }
-.is-cinematic .subtitle-line { text-shadow: 1px 1px 0 #151016; }
 
 .stage canvas {
   width: 100%;

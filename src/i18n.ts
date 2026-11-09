@@ -30,6 +30,7 @@ export const russian: Record<string, string> = {
   'Full scene with a circular inventory.': 'Вся сцена и круговой инвентарь по ПКМ.',
   'Original inventory bar beneath the scene.': 'Оригинальная панель инвентаря под сценой.',
   'Right-click or press I to open the inventory. On touch screens, press and hold. Menu opens the book.': 'ПКМ или клавиша I открывают инвентарь. На сенсорном экране удерживайте палец. Кнопка «Меню» открывает книгу.',
+  'Right-click or press I to open the inventory. On touch screens, tap with two fingers or press and hold. Menu opens the book.': 'ПКМ или I открывают инвентарь. На сенсорном экране коснитесь двумя пальцами или удерживайте один. Кнопка «Меню» открывает книгу.',
   'Previous page': 'Предыдущая страница',
   'Next page': 'Следующая страница',
   'Preparing your story…': 'Готовим вашу историю…',

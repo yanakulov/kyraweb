@@ -1,16 +1,16 @@
 <template>
   <canvas ref="canvas" class="pixel-book" width="640" height="360" tabindex="0" role="dialog" aria-modal="true"
     :aria-label="canvasLabel" @pointermove="move" @pointerleave="leave" @pointerdown="press"
-    @pointerup="release" @pointercancel="release" @keydown="key" @paste="paste" @wheel.prevent="scroll" />
+    @pointerup="release" @pointercancel="cancelPress" @contextmenu.prevent @keydown="key" @paste="paste" @wheel.prevent="scroll" />
   <canvas v-show="showCredit" ref="credit" class="book-studio-credit" :width="STUDIO_MARK.w" :height="STUDIO_MARK.h"
     :style="creditStyle" role="img" aria-label="AkulaFlow" />
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { locale, setLocale, t } from '../i18n';
 import { withBase } from '../engine/core/assets';
-import { ROOM_ART } from '../engine/core/constants';
+import { LOGICAL_HEIGHT, LOGICAL_WIDTH, ROOM_ART, ROOM_VIEW_HEIGHT } from '../engine/core/constants';
 import type { ControlMode, Vec2 } from '../engine/core/types';
 import type { MusicPlayer, MusicState } from '../engine/audio/music';
 import { AUTOSAVE_SLOT, type SaveRecord } from '../engine/gameplay/saveStorage';
@@ -26,8 +26,8 @@ type Page = 'main' | 'story' | 'save' | 'load' | 'settings' | 'sound' | 'dev' | 
 type Slot = { index: number; error?: string | null } & Partial<SaveRecord>;
 const props = defineProps<{
   options: boolean; mainMenu: boolean; gameOver: boolean; canSave: boolean; busy: boolean; returning: boolean; message: string;
-  initialView: 'main' | 'load' | 'dev'; setup: boolean; latestSave: boolean; location: string;
-  snapshot?: HTMLCanvasElement; gameCanvas?: HTMLCanvasElement; focus?: Vec2; openingReady: boolean; portrait: boolean;
+  initialView: 'main' | 'load' | 'dev'; setup: boolean; showPrologue: boolean; latestSave: boolean; location: string;
+  snapshot?: HTMLCanvasElement; gameCanvas?: HTMLCanvasElement; gameStage?: HTMLElement; focus?: Vec2; openingReady: boolean; portrait: boolean;
   filmBounds?: Rect;
   slots: Slot[]; devScene: DevScene | null; devFinished: boolean;
   walkSpeed: WalkSpeed; controlMode: ControlMode; fullscreenAvailable: boolean; isFullscreen: boolean;
@@ -43,6 +43,12 @@ const canvas = ref<HTMLCanvasElement>();
 const credit = ref<HTMLCanvasElement>();
 const showCredit = ref(false);
 const creditStyle = ref({ top: '0px', width: '0px' });
+const SCENE_ZOOM_MS = 400;
+const DISSOLVE_ORDER = [
+  [0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5],
+];
+const mosaic = document.createElement('canvas');
+const mosaicContext = mosaic.getContext('2d')!;
 const STUDIO_MARK = { x: 13, y: 74, w: 300, h: 54 };
 const CREDIT_TOP = 342;
 const canvasLabel = ref('');
@@ -57,10 +63,16 @@ let ctx: CanvasRenderingContext2D, left: CanvasRenderingContext2D, outgoing: Can
 let bookmarks: HTMLCanvasElement[] = [];
 const bookmarkOffsets = pages.map(() => 0);
 let mountTime = 0, coverAt: number | null = null, finishAt: number | null = null, turnAt: number | null = null, storyAt = 0;
+let scenePosition = props.options ? 1 : 0, returnFrom = 0;
 let pendingEnter = false, openingStarted = false, closing = false, wasReturning = false, direction = true, ready = false, renderFrame = 0, alive = true;
+let openingMenu = false;
 let time = 0, hover = '', focus = '', lastHover = -Infinity, dragging: Hit | undefined, revealAll = false, loadFailed = false;
 let noticeMessage = '', noticeAt = 0;
-let touch = false, keyboardLanguage = locale.value;
+let touch = matchMedia('(pointer: coarse)').matches, keyboardLanguage = locale.value;
+const touchCursor = { x: WIDTH / 2, y: HEIGHT / 2 };
+let touchDrag: { id: number; x: number; y: number; travel: number } | undefined;
+const pointerArt = new Image();
+pointerArt.src = withBase('assets/cursors/pointer.svg');
 let choosingDevice = false, devicePage = 0, canvasSize: ResizeObserver;
 let view: Rect = { x: 0, y: 0, w: WIDTH, h: HEIGHT };
 let book = SPREAD;
@@ -189,6 +201,7 @@ function flip(next: Page, change?: () => void, forward = pages.indexOf(next) >= 
   direction = forward;
   if (page === 'sound' && next !== 'sound') props.music.stopPreview();
   page = next;
+  canvasLabel.value = names()[page];
   visiblePrint = previousPrint = undefined;
   editing = null; focus = ''; hover = ''; selectedSlot = undefined; chapterAction = null; confirmLeave = null;
   choosingDevice = false;
@@ -221,9 +234,11 @@ function startCover() {
   coverAt = time;
   storyAt = time + 490;
   readChapter();
-  readChapter(chapter + 1);
+  if (props.showPrologue) readChapter(chapter + 1);
   if (!openingStarted) { openingStarted = true; emit('begin'); }
+  if (!props.setup && !props.showPrologue) enterMenu();
 }
+function enterMenu() { openingMenu = true; enter(); }
 function enter() {
   pendingEnter = true;
   if (coverAt === null) { coverAt = time; props.music.bookSound('cover'); }
@@ -231,6 +246,7 @@ function enter() {
 }
 defineExpose({ openBook: enter });
 function story() {
+  if (!props.options && !props.showPrologue) return;
   const entry = prologue[locale.value][chapter];
   heading(entry.title, tr('CHRONICLES OF KYRANDIA', 'ЛЕТОПИСИ КИРАНДИИ'));
   const ink = revealAll || reduced.matches ? Infinity : Math.floor(Math.max(0, time - storyAt) / 10);
@@ -243,8 +259,9 @@ function story() {
       else flip('story', () => { chapter++; readChapter(chapter + 1); });
     }, { x: LEFT + PAGE_W - 83, w: 83, compact: true });
   }
-  row('enter', props.options ? tr('Return to the journey', 'Назад к путешествию') : tr('Enter the legend', 'Перейти к легенде'), FOOT, () => {
-    if (props.options) flip('main');
+  row('enter', props.options ? tr('Watch the intro', 'Смотреть заставку') : tr('Enter the legend', 'Перейти к легенде'), FOOT, () => {
+    if (props.options && !props.mainMenu) flip('settings', () => confirmLeave = 'intro');
+    else if (props.options) emit('leave', 'intro');
     else { emit('prologue'); enter(); }
   }, { primary: true });
 }
@@ -283,7 +300,10 @@ function settings() {
   select('controls', t('Controls'), ['modern', 'classic'], [t('Modern'), t('Classic')], props.controlMode, 204, value => emit('control', value));
   if (props.fullscreenAvailable) row('fullscreen', t(props.isFullscreen ? 'Exit full screen' : 'Full screen'), 236,
     () => emit('fullscreen'), { primary: !props.isFullscreen, compact: true });
-  row('replay-intro', tr('Intro', 'Заставка'), 264, () => props.mainMenu ? emit('leave', 'intro') : confirmLeave = 'intro',
+  row('replay-intro', tr('Intro', 'Интро'), 264, () => flip('story', () => {
+    chapter = 0;
+    readChapter(1);
+  }),
     { x: LEFT + 4, w: props.mainMenu ? PAGE_W - 8 : 88, compact: true });
   if (!props.mainMenu) row('menu', tr('Menu', 'В меню'), 264, () => confirmLeave = 'menu',
     { x: LEFT + 98, w: 90, compact: true, danger: true });
@@ -316,15 +336,22 @@ function sound() {
     ...state.banks.map(bank => ({ id: 'sf2:' + bank.id, label: bank.name }))];
   const active = devices.find(device => device.id === state.renderer);
   if (choosingDevice) {
+    const count = Math.ceil(devices.length / 5);
+    devicePage = Math.max(0, Math.min(devicePage, count - 1));
     devices.slice(devicePage * 5, devicePage * 5 + 5).forEach((device, i) => {
       row('device-' + device.id, device.label, 125 + i * 24, () => {
         choosingDevice = false;
         void props.music.selectRenderer(device.id);
       }, { kind: 'choice', marked: active === device, disabled: state.busy });
     });
-    row('close-devices', tr('Back', 'Назад'), FOOT, () => choosingDevice = false, { w: 70 });
-    if (devicePage) row('devices-prev', '‹', 273, () => devicePage--, { x: LEFT + 74, w: 35 });
-    if ((devicePage + 1) * 5 < devices.length) row('devices-next', '›', 273, () => devicePage++, { x: LEFT + 114, w: 38 });
+    row('close-devices', tr('Back', 'Назад'), 264, () => choosingDevice = false, { x: LEFT + 4, w: 65, compact: true });
+    if (count > 1) {
+      if (devicePage > 0) listFade(114, 121);
+      if (devicePage + 1 < count) listFade(233, 227);
+      text(left, (devicePage + 1) + ' / ' + count, LEFT_CENTER, pageY(264), 10, MUTED, 'center');
+      row('devices-prev', '‹', 264, () => devicePage--, { x: LEFT + 121, w: 29, compact: true, disabled: devicePage === 0 });
+      row('devices-next', '›', 264, () => devicePage++, { x: LEFT + 159, w: 29, compact: true, disabled: devicePage + 1 === count });
+    }
   } else {
     row('device', active?.label ?? 'AdLib', 123, () => { choosingDevice = true; devicePage = 0; }, { kind: 'select', disabled: state.busy });
     slider('music', t('Music'), state.enabled, state.volume, 153, () => props.music.setEnabled(!state.enabled), value => props.music.setVolume(value));
@@ -342,9 +369,14 @@ function sound() {
   row('roms', tr('Import MT-32 ROMs', 'Импорт ROM MT-32'), 178, () => void importAudio(true), { x: RIGHT, disabled: state.busy });
   row('soundfont', tr('Import SF2', 'Импорт SF2'), 202, () => void importAudio(false), { x: RIGHT, disabled: state.busy });
   if (props.setup) {
-    row('back-setup', tr('‹ Back', '‹ Назад'), FOOT, () => flip('setup'), { x: RIGHT, w: 70, compact: true });
-    row('finish-setup', t('Continue'), FOOT, () => { props.music.stopPreview(); emit('finishSetup', selectedMode); flip('story'); },
-      { x: RIGHT + 74, w: 100, primary: true, compact: true, disabled: state.busy || state.renderer === 'mt32' && !state.available });
+    row('back-setup', tr('Back', 'Назад'), 264, () => flip('setup'), { x: RIGHT + 6, w: 64, compact: true });
+    row('finish-setup', t('Continue'), 264, () => {
+      props.music.stopPreview();
+      emit('finishSetup', selectedMode);
+      flip('story');
+      if (!props.showPrologue) enterMenu();
+    },
+      { x: RIGHT + 79, w: 104, primary: true, compact: true, disabled: state.busy || state.renderer === 'mt32' && !state.available });
   } else if (state.renderer === 'mt32' && state.available && state.source !== 'local') {
     row('remove-roms', t('Remove ROMs'), FOOT, () => void props.music.forgetRoms(), { x: RIGHT, disabled: state.busy });
   }
@@ -434,13 +466,13 @@ function dev() {
   if (!scenes.length) text(left, t('No matching scenes.'), LEFT, pageY(150), 11, INK);
   if (roomFetchFailed) row('retry-scenes', t('Retry scene list'), 259, () => void loadRooms());
   if (roomLoading) text(left, t('Loading scene list…'), LEFT, pageY(264), 9, MUTED);
-  if (devPage > 0) devFade(134, 141);
-  if (devPage + 1 < count) devFade(251, 243);
+  if (devPage > 0) listFade(134, 141);
+  if (devPage + 1 < count) listFade(251, 243);
   row('dev-prev', '‹', 265, () => devPage--, { x: LEFT + 5, w: 44, compact: true, disabled: devPage === 0 });
   text(left, (devPage + 1) + ' / ' + count, LEFT_CENTER, pageY(265), 10, MUTED, 'center');
   row('dev-next', '›', 265, () => devPage++, { x: LEFT + PAGE_W - 49, w: 44, compact: true, disabled: devPage + 1 >= count });
 }
-function devFade(edge: number, inside: number) {
+function listFade(edge: number, inside: number) {
   const outer = pageY(edge), inner = pageY(inside);
   const fade = left.createLinearGradient(0, outer, 0, inner);
   fade.addColorStop(0, '#251710a8');
@@ -452,7 +484,7 @@ function help() {
   heading(t('How to play'), tr('A TRAVELLER’S GUIDE', 'ПАМЯТКА ПУТНИКУ'));
   lines(t('Click to walk. Move the cursor to an exit to reveal its arrow.'), LEFT, 124, PAGE_W, 12, Infinity, false, 168);
   lines(t('Click people to talk or objects to take them. Choose an inventory item, then click where to use it.'), LEFT, 176, PAGE_W, 12, Infinity, false, 225);
-  lines(t(props.controlMode === 'modern' ? 'Right-click or press I to open the inventory. On touch screens, press and hold. Menu opens the book.' : 'Options returns you to this book and pauses the adventure.'), LEFT, 232, PAGE_W, 11);
+  lines(t(props.controlMode === 'modern' ? 'Right-click or press I to open the inventory. On touch screens, tap with two fingers or press and hold. Menu opens the book.' : 'Options returns you to this book and pauses the adventure.'), LEFT, 232, PAGE_W, 11);
 }
 function drawKeyboard() {
   heading(tr('Write here', 'Пишите здесь'), tr('THE SCRIBE’S QUILL', 'ПЕРО ПИСЦА'), RIGHT_CENTER);
@@ -497,7 +529,7 @@ function picture() {
     }
     pixels(left, print, r);
     lines(modern
-      ? tr('Full scene. Inventory: right-click, I, or a long press.', 'Вся сцена на экране. Инвентарь: ПКМ, I или долгое касание.')
+      ? tr('Full scene. Inventory: right-click, I, two-finger tap or hold.', 'Вся сцена на экране. Инвентарь: ПКМ, I, тап двумя пальцами или удержание.')
       : tr('The original inventory and menu sit below the scene.', 'Инвентарь и меню под сценой, как в оригинале.'), RIGHT + 3, 228, PAGE_W - 5, 12, Infinity, false, 268);
     return;
   }
@@ -555,7 +587,8 @@ function paintPages() {
   left.clearRect(view.x, view.y, view.w, view.h);
   pixels(left, art!.spread, book);
   spreadLight(left, reduced.matches ? 0 : time, book);
-  const available = props.options ? pages : props.setup ? [] : ['story', 'sound'] as const;
+  const available = props.options ? pages.filter(id => id !== 'story')
+    : props.setup || !props.showPrologue ? [] : ['story', 'sound'] as const;
   const labels: Record<string, string> = {
     main: tr('Path', 'Путь'), story: tr('Story', 'Пролог'), save: tr('Save', 'Перо'), load: tr('Load', 'Главы'),
     settings: tr('Game', 'Игра'), sound: tr('Sound', 'Звук'), dev: 'Dev',
@@ -563,7 +596,8 @@ function paintPages() {
   const edge = book.x + book.w, paperEdge = edge - 28;
   available.forEach((id, index) => {
     const y = pageY(84 + index * 27);
-    const hot = hover === 'tab-' + id || focus === 'tab-' + id, active = id === page;
+    const hot = hover === 'tab-' + id || focus === 'tab-' + id;
+    const active = id === page || id === 'settings' && page === 'story' && props.options;
     const sprite = pages.indexOf(id);
     const target = active ? 9 : hot ? 5 : 0;
     bookmarkOffsets[sprite] = reduced.matches ? target : bookmarkOffsets[sprite] + (target - bookmarkOffsets[sprite]) * .45;
@@ -694,34 +728,78 @@ function openCover(progress: number) {
 }
 function liveScene() {
   const image = props.gameCanvas ?? props.snapshot;
-  const bounds = props.filmBounds ?? (props.controlMode === 'modern' ? ROOM_ART : undefined);
+  const bounds = props.filmBounds ?? (image?.height === ROOM_VIEW_HEIGHT ? ROOM_ART : undefined);
   return image && bounds && image.width >= bounds.x + bounds.w && image.height >= bounds.y + bounds.h
     ? cropFrame(image, bounds) : image;
 }
-function sceneZoom(progress: number, source: HTMLCanvasElement) {
-  const viewport = photoBounds(source, view, undefined, true);
-  const p = ease(progress);
-  if (p > .8) {
-    ctx.fillStyle = 'rgba(0,0,0,' + clamp((p - .8) / .2) + ')';
-    ctx.fillRect(view.x - 1, view.y - 1, view.w + 2, view.h + 2);
+function sceneViewport(source: HTMLCanvasElement): Rect {
+  const stage = props.gameStage?.getBoundingClientRect();
+  if (!stage?.width || !stage.height) return photoBounds(source, view, undefined, true);
+  const outer = canvas.value!.getBoundingClientRect();
+  const sx = view.w / outer.width, sy = view.h / outer.height;
+  return { x: view.x + (stage.left - outer.left) * sx, y: view.y + (stage.top - outer.top) * sy,
+    w: stage.width * sx, h: stage.height * sy };
+}
+function dissolveToScene(progress: number) {
+  const count = Math.floor(clamp((progress - .78) / .22) * 16);
+  if (count === 0) return;
+  const tile = 20;
+  for (let row = 0; row * tile < view.h; row++) {
+    for (let column = 0; column * tile < view.w; column++) {
+      if (DISSOLVE_ORDER[row % 4][column % 4] < count) {
+        ctx.clearRect(view.x + column * tile, view.y + row * tile, tile, tile);
+      }
+    }
   }
+}
+function sceneZoom(progress: number, source: HTMLCanvasElement) {
+  if (progress === 1) {
+    ctx.clearRect(view.x - 1, view.y - 1, view.w + 2, view.h + 2);
+    return;
+  }
+  const p = ease(progress);
+  const viewport = sceneViewport(source);
   const print = illustration();
-  const pageFrame = photoBounds(source, print, props.focus);
+  const fullRoom = props.snapshot?.width === ROOM_ART.w && source.width === LOGICAL_WIDTH && source.height === LOGICAL_HEIGHT;
+  const pageFrame = fullRoom ? photoBounds({ width: ROOM_ART.w, height: ROOM_ART.h }, print, props.focus)
+    : photoBounds(source, print, props.focus);
+  if (fullRoom) {
+    const scale = pageFrame.w / ROOM_ART.w;
+    pageFrame.x -= ROOM_ART.x * scale;
+    pageFrame.y -= ROOM_ART.y * scale;
+    pageFrame.w = source.width * scale;
+    pageFrame.h = source.height * scale;
+  }
+  const block = Math.round(1 + 5 * Math.sin(Math.PI * p) ** 2);
+  if (block > 1) {
+    mosaic.width = Math.ceil(source.width / block);
+    mosaic.height = Math.ceil(source.height / block);
+    mosaicContext.imageSmoothingEnabled = false;
+    mosaicContext.drawImage(source, 0, 0, mosaic.width, mosaic.height);
+  }
   const clip = mix(print, viewport, p);
   ctx.save();
   ctx.beginPath();
   ctx.rect(clip.x, clip.y, clip.w, clip.h);
   ctx.clip();
   ctx.globalAlpha = clamp(p / .18);
-  pixels(ctx, source, mix(pageFrame, viewport, p));
+  pixels(ctx, block > 1 ? mosaic : source, mix(pageFrame, viewport, p));
   ctx.restore();
+  dissolveToScene(p);
 }
 function paint(now: number) {
   renderFrame = requestAnimationFrame(paint);
   if (now - time < 31) return;
   time = now;
   hits = [];
+  paintBook();
+  if (touch && !pendingEnter && !props.returning && (!props.options || ready) && pointerArt.naturalWidth) {
+    pixels(ctx, pointerArt, { x: touchCursor.x - 2, y: touchCursor.y - 2, w: 16, h: 20 });
+  }
+}
+function paintBook() {
   if (!art) {
+    if (props.options && !loadFailed) return;
     ctx.fillStyle = '#200f11'; ctx.fillRect(view.x - 1, view.y - 1, view.w + 2, view.h + 2);
     text(ctx, t(loadFailed ? 'Try again' : 'Preparing your story…'), 320, 177, 13, FOIL, 'center');
     if (loadFailed) add('retry', t('Try again'), { x: 220, y: 151, w: 200, h: 52 }, () => void prepare());
@@ -755,23 +833,30 @@ function paint(now: number) {
     else turnAt = null;
   }
   if (openProgress === 1) notice();
-  if (props.options && !ready) {
-    const progress = reduced.matches ? 1 : clamp((time - mountTime) / 365);
+  if (props.options && !ready && !props.returning) {
+    const progress = reduced.matches ? 1 : clamp((time - mountTime) / SCENE_ZOOM_MS);
+    scenePosition = 1 - progress;
     transitionFrame ??= liveScene();
-    if (progress < 1 && transitionFrame) sceneZoom(1 - progress, transitionFrame);
-    else { ready = true; emit('ready'); }
+    if (scenePosition > 0 && transitionFrame) sceneZoom(scenePosition, transitionFrame);
+    else { scenePosition = 0; ready = true; emit('ready'); }
   }
   if (!props.options && pendingEnter && !props.openingReady && openProgress === 1) {
     text(ctx, t('Preparing your story…'), RIGHT_CENTER, pageY(276), 10, RUBRIC, 'center');
   }
+  if (!props.options && openingMenu && props.mainMenu && openProgress === 1 && props.openingReady) {
+    hits = [];
+    if (!closing) { closing = true; emit('open'); }
+    return;
+  }
   if (!props.options && pendingEnter && openProgress === 1 && props.openingReady && finishAt === null
     || props.options && props.returning && !wasReturning) {
     finishAt = time;
+    returnFrom = props.options ? scenePosition : 0;
     transitionFrame = liveScene();
   }
   wasReturning = props.returning;
   if (finishAt !== null && !closing) {
-    const progress = reduced.matches ? 1 : clamp((time - finishAt) / 365);
+    const progress = reduced.matches ? 1 : Math.min(1, returnFrom + (time - finishAt) / SCENE_ZOOM_MS);
     if (transitionFrame) sceneZoom(progress, transitionFrame);
     if (progress === 1) { closing = true; props.options ? emit('returned') : emit('open'); }
   }
@@ -794,6 +879,16 @@ async function prepare() {
     if (page === 'dev') void loadRooms();
   } catch { loadFailed = true; }
 }
+watch(() => props.options, options => {
+  if (!options) return;
+  // Keep the already open spread when the cover leads straight to Kallak's menu.
+  page = props.initialView;
+  canvasLabel.value = names()[page];
+  pendingEnter = closing = false;
+  finishAt = null;
+  ready = true;
+  emit('ready');
+});
 onMounted(() => {
   function resize() {
     const target = canvas.value!;
@@ -840,31 +935,64 @@ function at(x: number, y: number) {
   return hits.find(({ area }) => x >= area.x && x < area.x + area.w && y >= area.y && y < area.y + area.h);
 }
 function move(event: PointerEvent) {
-  const { x, y } = point(event);
-  if (dragging) dragging.action(x);
+  let pos: Vec2;
+  if (event.pointerType !== 'mouse') {
+    if (touchDrag?.id !== event.pointerId) return;
+    const dx = event.clientX - touchDrag.x, dy = event.clientY - touchDrag.y;
+    touchDrag.x = event.clientX;
+    touchDrag.y = event.clientY;
+    touchDrag.travel += Math.hypot(dx, dy);
+    const scale = canvas.value!.clientWidth / view.w;
+    touchCursor.x = Math.max(view.x, Math.min(view.x + view.w - 1, touchCursor.x + dx / scale));
+    touchCursor.y = Math.max(view.y, Math.min(view.y + view.h - 1, touchCursor.y + dy / scale));
+    pos = touchCursor;
+  } else {
+    touch = false;
+    pos = point(event);
+    if (dragging) dragging.action(pos.x);
+  }
+  const { x, y } = pos;
   const hit = at(x, y);
   const id = hit?.id ?? '';
-  if (id !== hover && hit && event.pointerType === 'mouse' && time - lastHover > 90) {
+  if (id !== hover && hit && time - lastHover > 90) {
     props.music.bookSound('hover');
     lastHover = time;
   }
   hover = id;
 }
-function leave() { hover = ''; }
+function leave(event: PointerEvent) { if (event.pointerType === 'mouse') hover = ''; }
 function press(event: PointerEvent) {
   if (event.button !== 0) return;
-  const { x, y } = point(event), hit = at(x, y);
-  if (!hit) { editing = null; return; }
   touch = event.pointerType !== 'mouse';
+  if (touch) {
+    if (!event.isPrimary) { cancelPress(); return; }
+    touchDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, travel: 0 };
+    canvas.value?.setPointerCapture(event.pointerId);
+  } else activate(point(event), event.pointerId);
+}
+function activate({ x, y }: Vec2, pointerId?: number) {
+  const hit = at(x, y);
+  if (!hit) { editing = null; return; }
   canvas.value?.focus({ preventScroll: true });
   focus = '';
   if (hit.id !== 'query' && hit.id !== 'save-name' && !hit.id.startsWith('letter-') && !hit.id.startsWith('keyboard-')) editing = null;
-  if (hit.level !== undefined) { dragging = hit; canvas.value?.setPointerCapture(event.pointerId); }
+  if (hit.level !== undefined && pointerId !== undefined) { dragging = hit; canvas.value?.setPointerCapture(pointerId); }
   props.music.bookSound('click');
   hit.action(x);
 }
-function release() { dragging = undefined; }
-function scroll(event: WheelEvent) { if (page === 'dev' && hits.length) devPage += Math.sign(event.deltaY); }
+function release(event: PointerEvent) {
+  if (touchDrag?.id === event.pointerId) {
+    if (touchDrag.travel < 6) activate(touchCursor);
+    touchDrag = undefined;
+  }
+  dragging = undefined;
+}
+function cancelPress() { dragging = touchDrag = undefined; }
+function scroll(event: WheelEvent) {
+  if (!hits.length) return;
+  if (page === 'dev') devPage += Math.sign(event.deltaY);
+  if (page === 'sound' && choosingDevice) devicePage += Math.sign(event.deltaY);
+}
 function insert(value: string) {
   if (editing === 'query') { query = (query + value).slice(0, 48); devPage = 0; }
   else if (editing === 'save') saveName = (saveName + value).slice(0, 48);
@@ -880,6 +1008,7 @@ function key(event: KeyboardEvent) {
     else if (chapterAction) chapterAction = null;
     else if (confirmLeave) confirmLeave = null;
     else if (choosingDevice) choosingDevice = false;
+    else if (props.options && page === 'story' && hits.length) flip('settings');
     else if (props.options && !props.mainMenu && !props.gameOver && !props.devFinished && hits.length) emit('resume');
     else if (props.options && hits.length) flip('main');
     else return;
@@ -934,7 +1063,6 @@ function key(event: KeyboardEvent) {
   inset: 0;
   width: 100%;
   height: 100%;
-  background: #160d0e;
   image-rendering: pixelated;
   cursor: url('/assets/cursors/book-pointer.svg') 2 2, auto;
   touch-action: none;

@@ -155,7 +155,7 @@ export function photo(ctx: CanvasRenderingContext2D, image: HTMLImageElement | H
   ctx.restore();
 }
 
-export function photoBounds(image: HTMLImageElement | HTMLCanvasElement, r: Rect, focus?: Point, contain = false): Rect {
+export function photoBounds(image: { width: number; height: number }, r: Rect, focus?: Point, contain = false): Rect {
   const width = image.width, height = image.height;
   const scale = (contain ? Math.min : Math.max)(r.w / width, r.h / height);
   const w = width * scale, h = height * scale;

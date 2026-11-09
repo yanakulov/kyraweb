@@ -4,9 +4,9 @@
     ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()" @pointermove.capture="rememberMouse" @pointerover.capture="menuHover" @click.capture="menuClick">
     <PixelBook v-if="pixelBook && (!bookOpened || bookSnapshot)" ref="openingBook"
       :options="!!bookSnapshot" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy"
-      :returning="bookReturning" :message="bookMessage" :initial-view="bookInitialView" :setup="firstRun"
+      :returning="bookReturning" :message="bookMessage" :initial-view="bookInitialView" :setup="firstRun" :show-prologue="openingPrologue"
       :latest-save="!!latestSave" :location="locationName" :film-bounds="cinematicArt ?? undefined"
-      :snapshot="bookSnapshot ?? openingSnapshot ?? undefined" :game-canvas="canvasRef ?? undefined"
+      :snapshot="bookSnapshot ?? openingSnapshot ?? undefined" :game-canvas="canvasRef ?? undefined" :game-stage="stageRef ?? undefined"
       :focus="bookFocus" :opening-ready="openingFrameReady || !!openingSnapshot || !!gameError" :portrait="mobilePortrait"
       :slots="bookSlots" :dev-scene="activeDevScene" :dev-finished="devFinished"
       :walk-speed="walkSpeed" :control-mode="controlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen"
@@ -34,7 +34,8 @@
         @pointerenter="handleMove" @pointermove="handleMove" @pointerleave="leaveStage"
         @pointerdown="handlePointerDown" @pointerup="handlePointerUp" @pointercancel="cancelGesture" @contextmenu.prevent="handleContextMenu">
         <div class="scene-plane" :style="cinematicPlane">
-        <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :scale-y="subtitleScaleY" :alpha="subtitleAlpha" :visible="subtitleVisible" />
+        <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :scale-y="subtitleScaleY" :bounds="cinematicArt ?? sceneBounds"
+          :alpha="subtitleAlpha" :visible="subtitleVisible" />
         <canvas ref="canvasRef" width="320" height="200" :aria-label="t('Kyrandia game scene')" @click="handleClick"></canvas>
         <canvas ref="statusTextCanvas" class="status-text" aria-hidden="true" hidden></canvas>
         <canvas ref="inventoryCanvas" class="radial-surface" aria-hidden="true" hidden></canvas>
@@ -108,7 +109,7 @@ let storyBeforeDev: StoryCheckpoint | null = null;
 const bookOpened = ref(false);
 function hasReadPrologue() { try { return localStorage.getItem('kyrandia.prologueSeen') === '1'; } catch { return false; } }
 const prologueSeen = hasReadPrologue();
-const openingPrologue = ref(true), openingReadingReady = ref(false), readingHistory = ref(false), kallakMenu = ref(false), noteVisible = ref(false);
+const openingPrologue = ref(!prologueSeen), openingReadingReady = ref(false), readingHistory = ref(false), kallakMenu = ref(false), noteVisible = ref(false);
 function finishPrologue() { try { localStorage.setItem('kyrandia.prologueSeen', '1'); } catch { /* Reading remains available without storage. */ } music.bookSound('enter'); openingPrologue.value = false; }
 const openingBook = ref<{ openBook: () => void } | null>(null);
 const openingSnapshot = shallowRef<HTMLCanvasElement | null>(null), bookSnapshot = shallowRef<HTMLCanvasElement | null>(null);
@@ -158,7 +159,9 @@ function openBook() {
   if (openingSnapshot.value && game) {
     bookOpened.value = true; openingSnapshot.value = null; game.setPaused(mobilePortrait.value); syncControls();
   } else if (openingFrameReady.value || gameError.value) {
-    bookOpened.value = true; intro?.setPaused(mobilePortrait.value);
+    bookOpened.value = true;
+    if (kallakMenu.value) showBookOptions();
+    else intro?.setPaused(mobilePortrait.value);
   } else prepareOpening();
 }
 function closePanels() { if (readingHistory.value) { readingHistory.value = false; return; } if (!kallakMenu.value) resumeBook(); }
@@ -205,7 +208,8 @@ let mousePoint: Vec2 | null = null;
 function rememberMouse(event: PointerEvent) {
   if (event.pointerType === 'mouse') mousePoint = { x: event.clientX, y: event.clientY };
 }
-let gesture: { id: number; x: number; y: number; travel: number; started: number } | null = null;
+const touchContacts = new Map<number, { x: number; y: number; travel: number; released: boolean }>();
+let touchStarted = 0;
 function syncControls() {
   gameViewHeight.value = canvasRef.value?.height ?? LOGICAL_HEIGHT;
   if (!touchPointer.value && mousePoint && canvasRef.value && stageRef.value) {
@@ -288,6 +292,7 @@ function handlePanelKey(event: KeyboardEvent) {
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
 }
 const introSteps = buildIntroSteps();
+const menuStep = introSteps.findIndex(step => step.id === "kallak_writing");
 let introRunId = 0;
 let subtitleResizeObserver: ResizeObserver | null = null;
 const currentIntroStep = ref(introSteps[0]?.id ?? "");
@@ -527,7 +532,7 @@ async function continueJourney() {
 async function boot() {
   if (!canvasRef.value) return;
   updateSubtitleScale();
-  await launchIntro(0, true);
+  await launchIntro(prologueSeen ? menuStep : 0, true);
 }
 
 function updateSubtitleScale() {
@@ -586,7 +591,10 @@ async function startIntro(startIndex: number, autoStartGame: boolean, singleStep
       }
     },
     onStepReady: id => {
-      if (id === 'kallak_writing' && autoStartGame && runId === introRunId) { kallakMenu.value = true; showBookOptions(); }
+      if (id === 'kallak_writing' && autoStartGame && runId === introRunId) {
+        kallakMenu.value = true;
+        if (bookOpened.value) showBookOptions();
+      }
     },
     onSubtitleChange: (payload) => {
       if (runId !== introRunId) return;
@@ -687,7 +695,7 @@ async function launchIntro(startIndex: number, autoStartGame: boolean, singleSte
 
 function openMenu() {
   closePanels();
-  void launchIntro(introSteps.findIndex(step => step.id === "kallak_writing"), true);
+  void launchIntro(menuStep, true);
 }
 
 function replayIntro() {
@@ -744,18 +752,26 @@ function handlePointerDown(event: PointerEvent) {
   if (overlayOpen.value) return;
   touchPointer.value = event.pointerType !== 'mouse';
   if (!touchPointer.value) { handleMove(event); return; }
-  if (!event.isPrimary) { cancelGesture(); return; }
-  gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, travel: 0, started: performance.now() };
+  if (touchContacts.size === 0) {
+    if (!event.isPrimary) return;
+    touchStarted = performance.now();
+  } else if (touchContacts.size >= 2) {
+    cancelGesture();
+    return;
+  }
+  touchContacts.set(event.pointerId, { x: event.clientX, y: event.clientY, travel: 0, released: false });
   canvasRef.value?.setPointerCapture(event.pointerId);
 }
 
 function handleMove(event: PointerEvent) {
   if (overlayOpen.value || !canvasRef.value) return;
   if (event.pointerType !== 'mouse') {
-    if (!gesture || gesture.id !== event.pointerId) return;
-    const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
-    gesture.travel += Math.hypot(dx, dy);
-    gesture.x = event.clientX; gesture.y = event.clientY;
+    const contact = touchContacts.get(event.pointerId);
+    if (!contact || contact.released) return;
+    const dx = event.clientX - contact.x, dy = event.clientY - contact.y;
+    contact.travel += Math.hypot(dx, dy);
+    contact.x = event.clientX; contact.y = event.clientY;
+    if (touchContacts.size > 1) return;
     const rect = canvasRef.value.getBoundingClientRect();
     cursor.value = clampCursor({ x: cursor.value.x + dx * LOGICAL_WIDTH / rect.width,
       y: cursor.value.y + dy * gameViewHeight.value / rect.height });
@@ -776,17 +792,24 @@ function leaveStage(event: PointerEvent) {
 }
 
 function handlePointerUp(event: PointerEvent) {
-  if (!gesture || gesture.id !== event.pointerId) return;
-  const tap = gesture.travel < 6;
-  const hold = performance.now() - gesture.started >= 420;
+  const contact = touchContacts.get(event.pointerId);
+  if (!contact) return;
+  contact.released = true;
+  const contacts = [...touchContacts.values()];
+  if (contacts.some(contact => !contact.released)) return;
+  const duration = performance.now() - touchStarted;
+  const twoFingers = contacts.length === 2;
   cancelGesture();
-  if (tap) {
-    if (introActive.value) intro?.skipLine();
-    else if (hold && controlMode.value === 'modern') toggleInventory();
-    else interact(cursor.value);
+  if (contacts.some(contact => contact.travel >= (twoFingers ? 9 : 6))) return;
+  if (twoFingers) {
+    if (duration <= 320 && !introActive.value) toggleInventory();
+    return;
   }
+  if (introActive.value) intro?.skipLine();
+  else if (duration >= 420 && controlMode.value === 'modern') toggleInventory();
+  else interact(cursor.value);
 }
-function cancelGesture() { gesture = null; }
+function cancelGesture() { touchContacts.clear(); }
 
 function updateOrientation() {
   mobilePortrait.value = portraitMedia.matches;
@@ -814,6 +837,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  cancelGesture();
   cancelAnimationFrame(autosaveFrame);
   music.dispose(); document.removeEventListener('visibilitychange', musicVisibility);
   introRunId++;

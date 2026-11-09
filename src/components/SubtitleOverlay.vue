@@ -15,12 +15,14 @@
 import { computed } from "vue";
 import type { IntroSubtitle } from "../engine/intro/types";
 import { translateGameText } from '../i18n';
+import { LOGICAL_WIDTH } from '../engine/core/constants';
 
 const props = withDefaults(
   defineProps<{
     lines: IntroSubtitle[];
     scale: number;
     scaleY?: number;
+    bounds: { x: number; y: number; w: number; h: number };
     alpha: number;
     visible: boolean;
   }>(),
@@ -40,20 +42,20 @@ const layerStyle = computed(() => ({
 }));
 
 const lineStyle = (line: IntroSubtitle) => {
+  const { x, y, w, h } = props.bounds;
+  const margin = 5;
   const align = line.align ?? "center";
-  const x = line.x ?? 160;
-  const maxWidth = Math.min(300, line.maxWidth ?? 300);
-  const left = Math.max(10, Math.min(310 - maxWidth, x - (align === "left" ? 0 : align === "right" ? maxWidth : maxWidth / 2)));
+  const anchorX = line.x ?? LOGICAL_WIDTH / 2;
+  const offsetX = align === "left" || align === "start" ? 0 : align === "right" || align === "end" ? 100 : 50;
+  const offsetY = line.type === "talk" ? 100 : 0;
+  // Translate percentages use the actual wrapped box, including any change in translation length.
+  const left = `clamp(${x + margin}px, ${anchorX}px - ${offsetX}%, ${x + w - margin}px - 100%)`;
+  const top = `clamp(${y + margin}px, ${line.y}px - ${offsetY}%, ${y + h - margin}px - 100%)`;
   return {
-    left: `${left}px`,
-    top: line.type === "talk" ? undefined : `${line.y}px`,
-    bottom: line.type === "talk" ? `${200 - line.y}px` : undefined,
-    maxHeight: `${line.type === "talk" ? line.y : 200 - line.y}px`,
-    width: `${maxWidth}px`,
+    transform: `translate(${left}, ${top})`,
+    maxWidth: `${Math.min(w - margin * 2, line.maxWidth ?? LOGICAL_WIDTH - 20)}px`,
     textAlign: align,
-    color: line.color ?? "#f2f2f2",
-    fontSize: "8px",
-    lineHeight: "10px"
+    color: line.color ?? "#f2f2f2"
   } as const;
 };
 </script>
@@ -69,10 +71,15 @@ const lineStyle = (line: IntroSubtitle) => {
 
 .subtitle-line {
   position: absolute;
+  left: 0;
+  top: 0;
+  width: max-content;
   font-family: "Kyrandia", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 8px;
+  line-height: 10px;
   white-space: normal;
   overflow-wrap: anywhere;
-  overflow: hidden;
+  text-shadow: 0 1px 0 #130c0bba, 1px 1px 1px #130c0b8c;
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: none;
   image-rendering: pixelated;
