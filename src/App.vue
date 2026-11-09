@@ -393,7 +393,7 @@ async function restoreChapter(record: SaveRecord) {
     intro?.stop(); intro = null; game?.stop(); gameLoadController?.abort();
     gameLoadController = controller; game = candidate; committed = true;
     introActive.value = openingScene.value = false; kallakMenu.value = false; noteVisible.value = false;
-    music.stop(); music.restoreRoom(record.state.currentRoom);
+    music.stop(); music.restoreRoom(record.state.currentRoom, !!record.state.rooms[record.state.currentRoom].wispMs);
     if (restoredVoiceBank) music.prepareVoice(restoredVoiceBank);
     gameError.value = ''; gameOver.value = false; navigationError.value = ''; loading.value = false;
     sequenceActive.value = awaitingContinue.value = false; subtitleLines.value = []; subtitleAlpha.value = 1;

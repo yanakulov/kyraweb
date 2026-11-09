@@ -90,10 +90,11 @@ export function validateWorldSave(value: unknown): WorldSave {
   const rooms = object(data.rooms, 'rooms');
   for (const [key, value] of Object.entries(rooms)) {
     roomId(Number(key), `rooms.${key}`); if (String(Number(key)) !== key) invalid('room ID');
-    const room = object(value, `rooms.${key}`, 'pos facing walkDelayTicks inventorySlots itemInHand sceneItems overlays treeSpoken runtime');
+    const room = object(value, `rooms.${key}`, 'pos facing walkDelayTicks wispMs inventorySlots itemInHand sceneItems overlays treeSpoken runtime');
     coordinates(object(room.pos, 'position', 'x y'), 'position');
     if (room.facing !== undefined) number(room.facing, 'facing', 0, 7);
     if (room.walkDelayTicks !== undefined) number(room.walkDelayTicks, 'walkDelayTicks', 1, 60);
+    if (room.wispMs !== undefined) number(room.wispMs, 'wispMs', 0, 300_000, false);
     list(room.inventorySlots, 'inventory', 10, item); item(room.itemInHand, 'held item'); boolean(room.treeSpoken, 'treeSpoken');
     list(room.sceneItems, 'sceneItems', 256, (value, path) => {
       const entry = object(value, path, 'id x y'); coordinates(entry, path); item(entry.id, path); if (entry.id === null) invalid(path);

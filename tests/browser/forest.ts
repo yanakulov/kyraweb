@@ -3,7 +3,7 @@ import { gemCutScene } from "../../src/engine/scenes/gemCut";
 import { validateWorldSave } from '../../src/engine/gameplay/saveStorage';
 import type { GameConfig } from '../../src/engine/core/types';
 import { getInventorySlotPositions } from '../../src/engine/gameplay/inventory';
-import { itemFromOriginal } from '../../src/engine/gameplay/forest';
+import { fireberryBush, itemFromOriginal, originalItem } from '../../src/engine/gameplay/forest';
 import {
   IndexedClip,
   loadScenePack,
@@ -392,6 +392,157 @@ document.querySelector("#run")!.addEventListener("click", async () => {
   }
 });
 advance(50);
+
+document.querySelector('#shadow')!.addEventListener('click', async () => {
+  lockScenario();
+  try {
+    const start = validateWorldSave(game.getSaveState());
+    start.rooms[0].treeSpoken = true;
+    start.rooms[0].inventorySlots[0] = 'item-80';
+    start.quest.flags.push(45, 53, 71);
+    async function reload(save: typeof start) {
+      game.stop();
+      game = await startGame(canvas, { ...config, saveState: save });
+      game.setWalkSpeed('fastest');
+      dead = false;
+      await settle();
+    }
+    await reload(start);
+    game.runSequence([{ op: 'exit', target: 109 }]);
+    await until(() => id === 109 && !loading && !playing, 'Shadowrealm checkpoint');
+    await route(197, 115);
+    await click(165, 100);
+    if (game.getPortals().some(portal => portal.target === 197)) throw Error('The grate did not close');
+    capture('The locked iron grate');
+    await travel(187);
+    const beforeDark = validateWorldSave(game.getSaveState());
+    await travel(121);
+    if (!dead || !lines.includes("I can't see a thing in here!")) throw Error('A dark cave must run the original death');
+    await reload(beforeDark);
+
+    async function slot(index: number) {
+      const { x, y } = getInventorySlotPositions()[index];
+      await click(x + 8, y + 8);
+    }
+    async function storeItem() {
+      await slot(game.getSnapshot().inventorySlots.findIndex(item => item === null));
+      held(null);
+    }
+    async function pick(item: string) {
+      const floor = game.getSnapshot().sceneItems.find(entry => entry.id === item);
+      if (!floor) throw Error(`Missing ${item} in room ${id}`);
+      await click(floor.x, floor.y - 4);
+      held(item);
+    }
+    const { rooms } = await fetch(config.world!).then(response => response.json()) as {
+      rooms: { id: number; name: string; exits: (number | null)[] }[];
+    };
+    async function visit(target: number) {
+      const { inventorySlots, wispMs } = game.getSnapshot();
+      const light = Math.max(0, ...inventorySlots.map(item => {
+        const original = originalItem(item);
+        return original >= 29 && original <= 32 ? 33 - original : 0;
+      }));
+      const pending = [{ room: id, light, path: [] as number[] }];
+      const seen = new Set<string>();
+      const flags = game.getSaveState()!.quest.flags;
+      while (pending.length) {
+        const node = pending.shift()!;
+        const key = `${node.room}/${node.light}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (node.room === target) {
+          for (const next of node.path) {
+            if (fireberryBush(id) && !game.getSnapshot().wispMs) {
+              await click(155, 88);
+              held('item-29');
+              await storeItem();
+            }
+            await travel(next);
+            if (dead) throw Error(`Ran out of light in room ${id}`);
+          }
+          return;
+        }
+        const from = rooms.find(room => room.id === node.room)!;
+        for (const next of from.exits) {
+          const room = rooms.find(room => room.id === next);
+          if (!room || node.room === 115 && next === 197 && !flags.includes(117) ||
+              node.room === 114 && next === 120 && !flags.includes(113) ||
+              node.room === 117 && next === 198 && !flags.includes(179)) continue;
+          const remaining = Math.max(0, (fireberryBush(node.room) ? 4 : node.light) - 1);
+          if (!wispMs && !remaining && !fireberryBush(room.id) && ['GEN_CAV', 'GENCAVB'].includes(room.name)) continue;
+          pending.push({ room: room.id, light: remaining, path: [...node.path, room.id] });
+        }
+      }
+      throw Error(`No lit route from ${id} to ${target}`);
+    }
+    for (const rockRoom of [129, 153, 161, 184, 110]) {
+      await visit(rockRoom);
+      await pick('item-102');
+      await storeItem();
+    }
+    await pick('item-22');
+    await storeItem();
+    await visit(115);
+    for (let i = 0; i < 5; i++) {
+      await slot(game.getSnapshot().inventorySlots.indexOf('item-102'));
+      await click(197, 49);
+      held(null);
+    }
+    if (!game.getPortals().some(portal => portal.target === 197)) throw Error('Five rocks did not reopen the grate');
+    await route(197, 109, 25);
+    await visit(32);
+    await slot(game.getSnapshot().inventorySlots.indexOf('item-22'));
+    await click(180, 80);
+    held('item-13');
+    await storeItem();
+
+    await visit(109);
+    await visit(111);
+    await click(32, 44);
+    await slot(game.getSnapshot().inventorySlots.indexOf('item-13'));
+    await click(160, 91);
+    held(null);
+    if (!game.getSaveState()!.quest.flags.includes(88)) throw Error('The altar did not awaken the purple jewel');
+    capture('The Pantheon of Moonlight after the offering');
+    game.setControlMode('modern');
+    game.setPointer({ x: 160, y: 90 });
+    game.setInventoryOpen(true);
+    await click(160, 92);
+    if (!game.getSnapshot().wispMs) throw Error('The radial purple jewel did not transform Brandon');
+    game.setControlMode('classic');
+    await reload(validateWorldSave(game.getSaveState()));
+    if (!game.getSnapshot().wispMs) throw Error('A saved wisp reverted early');
+
+    await visit(117);
+    const beforeLava = validateWorldSave(game.getSaveState());
+    await click(160, 6);
+    if (!dead || !lines.includes("I'm burning!")) throw Error('An unfrozen river must run the original death');
+    await reload(beforeLava);
+    await slot(game.getSnapshot().inventorySlots.indexOf('item-80'));
+    const hero = game.getSnapshot().pos;
+    await click(hero.x, hero.y - 10);
+    if (!game.getSaveState()!.quest.flags.includes(179)) throw Error('Darm’s scroll did not freeze the river');
+    capture('The frozen volcanic river');
+    await storeItem();
+    await travel(198);
+    await pick('item-57');
+    await storeItem();
+    await travel(117);
+    await click(263, 188);
+    await visit(114);
+    await click(180, 52);
+    if (!game.getSaveState()!.quest.flags.includes(113)) throw Error('The wisp did not cross the chasm');
+    await route(120, 37, 38);
+    if (game.getSnapshot().wispMs) throw Error('Brandon stayed a wisp at the plateau');
+    capture('The scenic plateau');
+    results.textContent += 'ALL PASSED — fireberries, darkness, grate, coin, moonstone, wisp, lava, gold key and plateau';
+    document.title = 'PASS — Shadowrealm quests';
+  } catch (e) {
+    results.textContent += `FAIL ${e}`;
+    document.title = 'FAIL — Shadowrealm quests';
+  }
+});
 
 document.querySelector("#fall")!.addEventListener("click", async () => {
   lockScenario();

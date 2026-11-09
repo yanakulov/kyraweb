@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { readGameResources, decodeCps, decodeFrame4, decodeWsa } from './indexed_resources.mjs';
 import { encodeScenePack } from './scene_pack.mjs';
 import { parseEmc, runEmc } from './emc.mjs';
+import { shadowrealm } from './shadowrealm.mjs';
 
 // DOS room IDs and N/E/S/W connections, ScummVM devtools/create_kyradat/resources/lok_dos.h.
 // BROKEN's west exit (24) is deliberately unavailable while the bridge is broken.
@@ -29,7 +30,7 @@ export const REGION = [
   ['WELL', 30, 28, 18, 34], ['SQUARE', 26, 30, 34, 29],
   ['WISE', 33, 32, 21, 17], ['RUBY', null, null, 31, null], ['DEAD', 18, 19, null, null]
 ];
-REGION[109] = ['ENTER', null, null, null, 25];
+Object.assign(REGION, shadowrealm);
 
 // ScummVM copyBackgroundBlock: restore the interleaved forest backdrop columns.
 export function restoreBackgroundColumns(pixels, blocks, height=128) {
@@ -101,6 +102,7 @@ export async function buildWorld(gameDir, outputDir = 'public/assets/world') {
       if (op === 0x5b) scroll=a[0];
       if (op === 0x28) dat.actorScale = { fromY: a[0], fromScale: a[1], toY: a[2], toScale: a[3] };
       if (op === 4) return +[55, 57, 172, 243, 253].includes(a[0]);
+      if (op === 0x1d) return REGION[a[0]]?.[1 + a[1] / 2] ?? -1;
       if (op === 0x3d) return Math.floor((a[0] + a[1]) / 2);
       if (op === 3) shapes.push({ shape: a[0], x: a[1], y: a[2], flags: a[3], page: a[4] });
       if (op === 9 || op === 10) regions.push({ blocked: op === 10, x: a[0], y: a[1], w: a[2] - a[0] + 1, h: a[3] - a[1] + 1 });

@@ -13,6 +13,7 @@ export type RoomAction =
   | { op: "walk"; x: number; y: number }
   | { op: "actor"; x: number; y: number; facing: number; visible: boolean }
   | { op: "visible"; visible: boolean }
+  | { op: "blackout"; active: boolean }
   | { op: "face"; facing: number; shape: number }
   | { op: "movie"; clip: string; x: number; y: number; ticks: number }
   | {
@@ -40,6 +41,7 @@ export type RoomAction =
   | { op: "flag"; flag: number; value: boolean }
   | { op: "scatterGem"; item: number; room: number }
   | { op: "poison"; crossings: number }
+  | { op: "wisp"; ms: number }
   | { op: "heroFrame"; clip?: string; index?: number }
   | { op: "ambientPosition"; index: number; x: number; y: number }
   | { op: "sceneFile"; room: number; name: string }
