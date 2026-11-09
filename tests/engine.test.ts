@@ -1041,6 +1041,20 @@ test('world saves restore visited props, quest files, NPCs and inventory without
       assert.equal(firstExit.getSaveState(), null);
       firstExit.stop();
     }
+    let signRoom = -1, signShown = false;
+    const status = { getContext: () => null, set hidden(value: boolean) {
+      if (!value && location === signRoom) signShown = true;
+    } } as unknown as HTMLCanvasElement;
+    const forestWalk = await startGame(h.canvas, { ...config, controlMode: 'modern', statusTextCanvas: status, devRoom: { room: 8 } });
+    games.push(forestWalk);
+    for (const [target, shown] of [[12, true], [11, false], [6, true], [11, true]] as const) {
+      signRoom = target; signShown = false;
+      forestWalk.runSequence([{ op: 'exit', target }]);
+      await until(() => location === target && !loading && !sequence, `room ${target} did not become ready`);
+      tick();
+      assert.equal(signShown, shown, `location sign on entry to room ${target}`);
+    }
+    forestWalk.stop();
     const game = await startGame(h.canvas, config); games.push(game);
     game.handleClick({ x: 248, y: 82 }); game.handleClick({ x: 100, y: 165 });
     assert.equal(game.getSnapshot().inventorySlots[0], 'ruby');

@@ -63,7 +63,7 @@ const pages: Page[] = ['main', 'story', 'save', 'load', 'settings', 'sound', 'de
 const initial = props.options ? props.initialView : props.setup ? 'setup' : 'story';
 let page: Page = initial, selectedMode = props.controlMode, chapter = 0, devPage = 0, query = '', saveName = '';
 let selectedSlot: number | undefined, chapterAction: 'replace' | 'delete' | null = null;
-let confirmLeave: 'intro' | 'menu' | null = null, editing: 'query' | 'save' | null = null;
+let confirmIntro = false, editing: 'query' | 'save' | null = null;
 let art: Art | undefined, coverFace: HTMLCanvasElement;
 let ctx: CanvasRenderingContext2D, left: CanvasRenderingContext2D, outgoing: CanvasRenderingContext2D;
 let bookmarks: HTMLCanvasElement[] = [];
@@ -219,7 +219,7 @@ function flip(next: Page, change?: () => void, forward = pages.indexOf(next) >= 
   page = next;
   canvasLabel.value = names()[page];
   visiblePrint = previousPrint = undefined;
-  editing = null; focus = ''; hover = ''; selectedSlot = undefined; chapterAction = null; confirmLeave = null;
+  editing = null; focus = ''; hover = ''; selectedSlot = undefined; chapterAction = null; confirmIntro = false;
   choosingDevice = false;
   change?.();
   storyAt = time; revealAll = false;
@@ -277,7 +277,7 @@ function story() {
     }, { x: LEFT + PAGE_W - 83, w: 83, compact: true });
   }
   row('enter', props.options ? tr('Watch the intro', 'Смотреть заставку') : tr('Enter the legend', 'Перейти к легенде'), FOOT, () => {
-    if (props.options && !props.mainMenu) flip('settings', () => confirmLeave = 'intro');
+    if (props.options && !props.mainMenu) flip('settings', () => confirmIntro = true);
     else if (props.options) emit('leave', 'intro');
     else { emit('prologue'); enter(); }
   }, { primary: true });
@@ -306,10 +306,10 @@ function select<T extends string>(id: string, label: string, values: readonly T[
 }
 function settings() {
   heading(t('Settings'), tr('THE SCRIBE’S DESK', 'СТОЛ ПИСЦА'));
-  if (confirmLeave) {
+  if (confirmIntro) {
     lines(t('Leave this adventure? Unsaved progress will be lost.'), LEFT, 125, PAGE_W, 13);
-    row('leave-confirm', t('Continue'), 211, () => emit('leave', confirmLeave!), { danger: true });
-    row('leave-cancel', t('Stay here'), 242, () => confirmLeave = null);
+    row('leave-confirm', t('Continue'), 211, () => emit('leave', 'intro'), { danger: true });
+    row('leave-cancel', t('Stay here'), 242, () => confirmIntro = false);
     return;
   }
   select('language', t('Language'), ['en', 'ru'], ['English', 'Русский'], locale.value, 126, setLocale);
@@ -329,9 +329,7 @@ function settings() {
     chapter = 0;
     readChapter(1);
   }),
-    { x: LEFT + 4, w: props.mainMenu ? PAGE_W - 8 : 88, compact: true });
-  if (!props.mainMenu) row('menu', tr('Menu', 'В меню'), 264, () => confirmLeave = 'menu',
-    { x: LEFT + 98, w: 90, compact: true, danger: true });
+    { x: LEFT + 4, w: PAGE_W - 8, compact: true });
 }
 function slider(id: string, label: string, enabled: boolean, value: number, y: number, toggle: () => void, update: (value: number) => void) {
   row(id, label, y, toggle, { kind: 'toggle', marked: enabled });
@@ -770,8 +768,9 @@ function sceneViewport(source: HTMLCanvasElement): Rect {
   if (!stage?.width || !stage.height) return photoBounds(source, view, undefined, true);
   const outer = canvas.value!.getBoundingClientRect();
   const sx = view.w / outer.width, sy = view.h / outer.height;
-  return { x: view.x + (stage.left - outer.left) * sx, y: view.y + (stage.top - outer.top) * sy,
+  const viewport = { x: view.x + (stage.left - outer.left) * sx, y: view.y + (stage.top - outer.top) * sy,
     w: stage.width * sx, h: stage.height * sy };
+  return props.filmBounds ? photoBounds(source, viewport, undefined, true) : viewport;
 }
 function dissolveToScene(progress: number) {
   const count = Math.floor(clamp((progress - .78) / .22) * 16);
@@ -1109,7 +1108,7 @@ function key(event: KeyboardEvent) {
     if (props.installHelp) emit('closeInstall');
     else if (editing) editing = null;
     else if (chapterAction) chapterAction = null;
-    else if (confirmLeave) confirmLeave = null;
+    else if (confirmIntro) confirmIntro = false;
     else if (choosingDevice) choosingDevice = false;
     else if (props.options && page === 'story' && hits.length) flip('settings');
     else if (props.options && !props.mainMenu && !props.gameOver && !props.devFinished && hits.length) emit('resume');

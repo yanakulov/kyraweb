@@ -9,7 +9,7 @@ import { locale } from '../../i18n';
 import { IntroEffects } from './effects';
 
 const fullFrameSteps = new Set(["westwood", "akulaflow", "kyrandia", "kyrandia_scroll", "story_text", "shore_anim", "shore_destruct"]);
-const wideArtworkSteps = new Set(["kyrandia_scroll", "shore_anim", "shore_destruct"]);
+const wideArtworkSteps = new Set(["westwood", "akulaflow", "story_text", "kyrandia_scroll", "shore_anim", "shore_destruct"]);
 export function introArtBounds(step: string) {
   if (wideArtworkSteps.has(step)) return { x: 0, y: 8, w: LOGICAL_WIDTH, h: 168 };
   return fullFrameSteps.has(step) ? { x: 0, y: 0, w: LOGICAL_WIDTH, h: LOGICAL_HEIGHT } : ROOM_ART;
@@ -28,9 +28,10 @@ export function frameAtTime(times: number[], elapsedMs: number) {
 export function playIntro(
   canvas: HTMLCanvasElement,
   steps: IntroStep[],
-  options?: { onFirstFrame?: () => void; onStepChange?: (id: string) => void; onStepReady?: (id: string) => void; onSoundEffect?: (track: number) => void; onVoiceSkip?: () => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean; atmosphere?: () => boolean; onLoadingChange?: (loading: boolean) => void }
+  options?: { onFirstFrame?: () => void; onStepChange?: (id: string) => void; onStepReady?: (id: string) => void; onSoundEffect?: (track: number) => void; onVoiceSkip?: () => void; onSubtitleChange?: (payload: { stepId: string; lines: IntroSubtitle[]; alpha: number }) => void; renderSubtitlesOnCanvas?: boolean; atmosphere?: () => boolean; onLoadingChange?: (loading: boolean) => void; backdropCanvas?: HTMLCanvasElement }
 ): IntroPlayback {
   const ctx = canvas.getContext("2d");
+  const backdrop = options?.backdropCanvas?.getContext("2d");
   if (!ctx) {
     return {
       setPaused: () => {},
@@ -103,6 +104,7 @@ export function playIntro(
       if (!running) return;
       options?.onLoadingChange?.(false);
       let loadingSince: number | null = null;
+      let backdropAt = -Infinity;
       let stepIndex = 0;
       let stepStart = clock();
       skipLine = () => {
@@ -435,6 +437,15 @@ export function playIntro(
         if (!fullFrameSteps.has(step.id)) {
           ctx.fillStyle = "#000000";
           ctx.fillRect(0, 136, LOGICAL_WIDTH, LOGICAL_HEIGHT - 136);
+        }
+        if (backdrop && (sceneChanged || now - backdropAt >= 80)) {
+          const { x, y, w, h } = introArtBounds(step.id);
+          if (backdrop.canvas.width !== w || backdrop.canvas.height !== h) {
+            backdrop.canvas.width = w;
+            backdrop.canvas.height = h;
+          }
+          backdrop.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+          backdropAt = now;
         }
 
         // Emit empty lists too: cuts and gaps must clear the DOM overlay.

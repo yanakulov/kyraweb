@@ -50,7 +50,7 @@
               <BookSelect id="book-controls" :label="t('Controls')" :model-value="controlMode" :options="controls" :disabled="busy" @update:model-value="$emit('update:controlMode', $event as ControlMode)" />
             </div>
             <button v-if="fullscreenAvailable" type="button" @click="$emit('fullscreen')">{{ t(isFullscreen ? 'Exit full screen' : 'Full screen') }}</button>
-            <div class="folio-inline folio-navigation"><button v-if="!mainMenu" type="button" @click="askLeave('menu')">{{ t('Main menu') }}</button><button type="button" @click="mainMenu ? $emit('replayIntro') : askLeave('intro')">{{ t('Replay intro') }}</button></div>
+            <button type="button" @click="mainMenu ? $emit('replayIntro') : askLeave()">{{ t('Replay intro') }}</button>
             <button type="button" @click="$emit('readPrologue')">{{ t('The story so far') }}</button>
             <div v-if="confirmAction" class="folio-confirm"><p>{{ t('Leave this adventure? Unsaved progress will be lost.') }}</p><div class="folio-inline"><button type="button" @click="leave">{{ t('Continue') }}</button><button type="button" @click="cancelLeave">{{ t('Stay here') }}</button></div></div>
             <p class="folio-credits">{{ t('Original tale © 1992 Westwood Studios') }}<br /><a href="https://github.com/yanakulov/kyraweb" target="_blank" rel="noopener noreferrer">{{ t('Reimagined by AkulaFlow · Yan Akulov') }}</a></p>
@@ -116,7 +116,7 @@ const controls = computed(() => [{ value: 'modern', label: t('Modern') }, { valu
 const view = ref<View>(props.initialView === 'dev' ? 'settings' : props.initialView), heading = ref<HTMLHeadingElement | null>(null);
 const menu = ref<HTMLElement | null>(null);
 const content = ref<HTMLElement | null>(null), settingsPage = ref<'game' | 'audio' | 'dev'>(props.initialView === 'dev' ? 'dev' : 'game');
-const saveName = ref(''), overwrite = ref<number | null>(null), confirmAction = ref<'menu' | 'intro' | null>(null);
+const saveName = ref(''), overwrite = ref<number | null>(null), confirmAction = ref(false);
 const canLoadAutosave = computed(() => props.slots.some(slot => slot.index === AUTOSAVE_SLOT && slot.savedAt));
 const shownSlots = computed(() => props.slots.filter(slot => slot.index !== AUTOSAVE_SLOT || view.value === 'load' && (slot.savedAt || slot.error)));
 const title = computed(() => view.value === 'settings' && settingsPage.value === 'dev' ? 'Dev Menu' :
@@ -148,7 +148,7 @@ const sceneGroups = computed(() => {
   }) })).filter(group => group.scenes.length);
 });
 watch(settingsPage, () => {
-  confirmAction.value = null;
+  confirmAction.value = false;
   content.value?.scrollTo(0, 0);
   if (settingsPage.value === 'dev' && roomStatus.value === 'idle') void loadRooms();
 }, { immediate: true });
@@ -157,7 +157,7 @@ async function go(next: View) {
   view.value = next;
   settingsPage.value = 'game';
   overwrite.value = null;
-  confirmAction.value = null;
+  confirmAction.value = false;
   await nextTick();
   content.value?.scrollTo(0, 0);
   heading.value?.focus({ preventScroll: true });
@@ -165,9 +165,9 @@ async function go(next: View) {
 async function askOverwrite(index: number) { overwrite.value = index; await nextTick(); menu.value?.querySelector<HTMLButtonElement>('.folio-inline button')?.focus(); }
 async function cancelOverwrite() { overwrite.value = null; await nextTick(); heading.value?.focus(); }
 async function save(index: number) { overwrite.value = null; emit('save', index, saveName.value.trim() || t(`Chapter ${index + 1}`)); await nextTick(); heading.value?.focus(); }
-async function askLeave(destination: 'menu' | 'intro') { confirmAction.value = destination; await nextTick(); menu.value?.querySelector<HTMLButtonElement>('.folio-confirm button')?.focus(); }
-async function cancelLeave() { confirmAction.value = null; await nextTick(); heading.value?.focus(); }
-function leave() { if (confirmAction.value === 'menu') emit('mainMenu'); else emit('replayIntro'); }
+async function askLeave() { confirmAction.value = true; await nextTick(); menu.value?.querySelector<HTMLButtonElement>('.folio-confirm button')?.focus(); }
+async function cancelLeave() { confirmAction.value = false; await nextTick(); heading.value?.focus(); }
+function leave() { emit('replayIntro'); }
 function formatDate(value: string) { return new Date(value).toLocaleString(locale.value === 'ru' ? 'ru-RU' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }); }
 </script>
 
@@ -300,7 +300,6 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .folio-tabs button { border: 1px solid var(--rule); }
 .folio-tabs button[aria-pressed="true"] { color: var(--rubric); background: #783b201e; box-shadow: inset 0 -2px var(--rubric); font-weight: bold; }
 .folio-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding-bottom: 6px; }
-.folio-navigation button { font-size: 14px; }
 .folio-note { font-size: 14px; margin: 4px 0 12px; }
 .folio-dev-group h3 { margin: 12px 0 2px; font-size: 13px; color: var(--rubric); }
 .folio-dev-group button { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; }

@@ -149,6 +149,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     const roomPalette=packedBackground?.clip.info.palette.slice();
     let paletteFade:{from:number[];to:number[];ms:number;age:number;step:number}|null=null;
     const backdrop = config.backdropCanvas?.getContext('2d');
+    if (backdrop && (backdrop.canvas.width !== ROOM_ART.w || backdrop.canvas.height !== ROOM_ART.h)) {
+      backdrop.canvas.width = ROOM_ART.w;
+      backdrop.canvas.height = ROOM_ART.h;
+    }
     let backdropDirty = true;
     let backdropScene = '';
     function updatePalette(ms:number){
@@ -700,7 +704,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
       if (tooltip) tooltip.hidden = !showTooltip;
       const statusSurface = config.statusTextCanvas;
-      const statusText = showRadial || transition?.active ? null : state.statusMessage;
+      const repeatedTitle = modern && config.repeatLocation && state.statusMessage?.trim() === scene.name.trim();
+      const statusText = showRadial || transition?.active || repeatedTitle ? null : state.statusMessage;
       if (statusText) {
         const label = translateGameText(statusText);
         if (config.locationSign && statusText.trim() === scene.name.trim()) {

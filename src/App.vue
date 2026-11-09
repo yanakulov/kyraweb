@@ -1,6 +1,5 @@
 <template>
-  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane, 'is-portrait': pixelBook && mobilePortrait }"
-    :style="cinematicArt ? { '--cinematic-ratio': cinematicArt.w / cinematicArt.h } : undefined"
+  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': modernViewport, 'is-cinematic': cinematicArt, 'is-portrait': pixelBook && mobilePortrait }"
     ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()" @pointermove.capture="rememberMouse" @pointerover.capture="menuHover" @click.capture="menuClick">
     <PixelBook v-if="pixelBook && (!bookOpened || bookSnapshot || mobilePortrait)" ref="openingBook"
       :options="!!bookSnapshot" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy"
@@ -45,7 +44,6 @@
         <div v-if="gamePointerVisible && (cursorExit || !heldItem)" class="game-cursor" :style="cursorStyle" aria-hidden="true">
           <img :src="`${baseUrl}assets/cursors/${cursorExit ?? 'pointer'}.svg`" alt="" />
         </div>
-        <img v-if="loading && bookOpened && !bookSnapshot && !gameError" class="scene-loading-logo" :src="titleLogo" alt="The Legend of Kyrandia" />
         <div v-if="noteVisible && locale === 'ru'" class="translated-letter" :style="{ transform: `scale(${subtitleScale}, ${subtitleScaleY})` }"><p>{{ t('Dear Brynn:') }}</p><p>{{ t('Malcolm has broken free. Soon he will come for me. Please help Brandon. Direct him toward the Amulet. Use the lavender rose to key the spells.') }}</p><p>{{ t("Darm and Zanthia should be able to help. Be careful, he'll try to get all of us.") }}</p><p>— {{ t('Kallak') }}</p></div>
         <button v-if="controlMode === 'classic' && !introActive && !endingActive && !gameError && !sequenceActive && !loading" class="hud-options" :style="optionsStyle" type="button" :aria-label="t('Options')" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
         </div>
@@ -312,10 +310,22 @@ let introRunId = 0;
 let subtitleResizeObserver: ResizeObserver | null = null;
 const currentIntroStep = ref(introSteps[0]?.id ?? "");
 const cinematicArt = computed(() => introActive.value ? introArtBounds(currentIntroStep.value) : openingScene.value ? ROOM_ART : null);
+const modernViewport = computed(() => controlMode.value === 'modern' && (!!cinematicArt.value || gameViewHeight.value === ROOM_VIEW_HEIGHT));
 const cinematicPlane = computed(() => {
   const art = cinematicArt.value;
-  return art ? { left: `${-art.x / art.w * 100}%`, top: `${-art.y / art.h * 100}%`,
-    width: `${LOGICAL_WIDTH / art.w * 100}%`, height: `${gameViewHeight.value / art.h * 100}%` } : undefined;
+  if (!art) return;
+  const ratio = modernViewport.value ? ROOM_ART.w / ROOM_ART.h : LOGICAL_WIDTH / LOGICAL_HEIGHT;
+  const artRatio = art.w / art.h;
+  const w = Math.min(1, artRatio / ratio);
+  const h = Math.min(1, ratio / artRatio);
+  const height = gameViewHeight.value;
+  return {
+    left: `${(1 - w) * 50 - art.x / art.w * w * 100}%`,
+    top: `${(1 - h) * 50 - art.y / art.h * h * 100}%`,
+    width: `${LOGICAL_WIDTH / art.w * w * 100}%`,
+    height: `${height / art.h * h * 100}%`,
+    clipPath: `inset(${art.y / height * 100}% ${(LOGICAL_WIDTH - art.x - art.w) / LOGICAL_WIDTH * 100}% ${Math.max(0, height - art.y - art.h) / height * 100}% ${art.x / LOGICAL_WIDTH * 100}%)`,
+  };
 });
 const subtitleLines = ref([] as import('./engine/intro/types').IntroSubtitle[]);
 const subtitleAlpha = ref(1);
@@ -587,6 +597,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean, singleStep
   let introVoice: number | undefined;
   openingFrameReady.value = false;
   intro = playIntro(canvasRef.value, steps, {
+    backdropCanvas: sceneBackdrop.value ?? undefined,
     onFirstFrame: () => {
       openingFrameReady.value = true;
       if (bookOpened.value || openingFinished) bookOpened.value = true;
@@ -872,7 +883,6 @@ onMounted(() => {
   window.addEventListener('beforeinstallprompt', offerInstall);
   window.addEventListener('appinstalled', finishInstall);
   portraitMedia.addEventListener('change', updateOrientation);
-  document.title = 'Fables & Fiends — The Legend of Kyrandia';
   subtitleResizeObserver = new ResizeObserver(updateSubtitleScale);
   if (canvasRef.value) subtitleResizeObserver.observe(canvasRef.value);
   window.addEventListener("resize", updateSubtitleScale);
@@ -907,11 +917,6 @@ watch([showMask, maskOpacity, showLayerInfo, walkSpeed, animStepInterval], () =>
   }
   game?.setAnimStepInterval(animStepInterval.value);
 });
-
-watch(introActive, (active) => {
-  document.title = active ? "Intro — Kyrandia" : "GemCut — Kyrandia";
-}, { immediate: true });
-
 
 function musicVisibility() { music.setHidden(document.hidden); }
 watch([bookOpened, bookSnapshot, loading, gameError, mobilePortrait],
