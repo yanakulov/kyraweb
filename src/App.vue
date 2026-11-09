@@ -21,6 +21,7 @@
         <div class="scene-plane" :style="cinematicPlane">
         <SubtitleOverlay :lines="subtitleLines" :scale="subtitleScale" :scale-y="subtitleScaleY" :alpha="subtitleAlpha" :visible="subtitleVisible" />
         <canvas ref="canvasRef" width="320" height="200" :aria-label="t('Kyrandia game scene')" @click="handleClick"></canvas>
+        <canvas ref="statusTextCanvas" class="status-text" aria-hidden="true" hidden></canvas>
         <canvas ref="inventoryCanvas" class="radial-surface" aria-hidden="true" hidden></canvas>
         <canvas ref="inventoryTooltip" class="inventory-tooltip" aria-hidden="true" hidden></canvas>
         <div v-if="customCursor && (pointerInStage || touchPointer) && (cursorExit || !heldItem)" class="game-cursor" :style="cursorStyle" aria-hidden="true">
@@ -204,6 +205,7 @@ const rotationDialog = ref<HTMLDialogElement>();
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const inventoryCanvas = ref<HTMLCanvasElement | null>(null);
 const inventoryTooltip = ref<HTMLCanvasElement | null>(null);
+const statusTextCanvas = ref<HTMLCanvasElement | null>(null);
 const sceneBackdrop = ref<HTMLCanvasElement | null>(null);
 let game: Awaited<ReturnType<typeof startGame>> | null = null;
 let gameLoadController: AbortController | null = null;
@@ -374,6 +376,7 @@ async function restoreChapter(record: SaveRecord) {
   try {
     const candidate = await startGame(canvasRef.value, { ...config, inventoryCanvas: inventoryCanvas.value ?? undefined,
       inventoryTooltipCanvas: inventoryTooltip.value ?? undefined,
+      statusTextCanvas: statusTextCanvas.value ?? undefined,
       backdropCanvas: sceneBackdrop.value ?? undefined, controlMode: controlMode.value, saveState: record.state, paused: true, signal: controller.signal,
       onDeath: () => { if (committed) config.onDeath(); },
       onCheckpoint: () => { if (committed) config.onCheckpoint(); },
@@ -522,6 +525,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   gameLoadController = new AbortController();
   const startedGame = await startGame(canvasRef.value, { ...config, inventoryCanvas: inventoryCanvas.value ?? undefined,
     inventoryTooltipCanvas: inventoryTooltip.value ?? undefined,
+    statusTextCanvas: statusTextCanvas.value ?? undefined,
     backdropCanvas: sceneBackdrop.value ?? undefined, controlMode: controlMode.value, paused: mobilePortrait.value,
     signal: gameLoadController.signal,
     onCheckpoint: () => { if (runId === introRunId) config.onCheckpoint(); },

@@ -22,9 +22,10 @@ import { facingDirection, getIdleFrame, getSequence, stepFacing } from "./moveme
 import { filterSceneAnimShapes, findOverlayAt, initSceneOverlays, drawSceneOverlays } from "../scene/overlays";
 import { buildSceneAnimStates, drawSceneAnims, updateSceneAnims } from "../scene/sceneAnims";
 import { buildSceneShapesCanvas, buildSpriteDefMap, drawSceneAnimShapes } from "../scene/sceneShapes";
-import { buildUiOverlay, drawInventoryTooltip, drawLayerDebug, drawStatusLine } from "../core/ui";
+import { buildUiOverlay, drawInventoryTooltip, drawLayerDebug, drawLocationSign, drawStatusLine } from "../core/ui";
 import { loadPackedAnimation, createPackedAnimation } from "../resources/packedAnimation";
 import { drawKallakAtmosphere } from "../rendering/kallakAtmosphere";
+import { createCoastSky } from "../rendering/roomAtmosphere";
 import { buildIndexedCanvas, IndexedRenderer } from "../rendering/indexedRenderer";
 import { IndexedClip, loadScenePack } from "../resources/scenePack";
 import { RoomScript, type OpeningScript, type RoomAction } from "./roomScript";
@@ -36,6 +37,8 @@ import type { ControlMode, DropAnim, GameConfig, InventoryItemId, RoomRuntimeSna
 const actorMovies = new Set(['brantree', 'touch', 'brynn1', 'brynn2', 'brynn3', 'raindrop', 'wow', 'tag', 'agile', 'balance2', 'sngspell', 'brantalk', 'dodge', 'frozen']);
 const heroOffsets: Record<string, number> = { flute: -12, cure: -11, poison: -31 };
 const behindActors = (clip: string) => clip === 'face' || clip === 'face2' || clip === 'songbird-rest';
+const STATUS_MESSAGE_MS = 2400;
+const LOCATION_SIGN_TRANSITION_MS = 180;
 
 export type RoomGame = Awaited<ReturnType<typeof startRoom>>;
 export async function startGame(canvas: HTMLCanvasElement, config: GameConfig): Promise<RoomGame> {
@@ -270,6 +273,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
     let atmosphere = true;
     const reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
+    const coastSky = packedBackground && config.roomResource === 'NWCLIFB' ? createCoastSky(packedBackground.clip) : null;
 
     const transition = config.transitionImage ? sceneShuffle(config.transitionImage) : null;
     function update(dt: number, nowMs: number) {
@@ -393,6 +397,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       }
       ctx.save();
       ctx.beginPath(); ctx.rect(8, 8, 304, scene.uiMaskY - 8); ctx.clip();
+      const movingAtmosphere = atmosphere && backgroundName === 'room' && !reducedMotion?.matches;
+      if (movingAtmosphere && !paletteFade && coastSky && roomPalette) ctx.drawImage(coastSky(clockMs, roomPalette), 0, 0);
       if (backgroundName === "room" && spriteDefMap && filteredSceneAnimShapes.length) {
         drawSceneAnimShapes(ctx, sceneShapesImage, spriteDefMap, filteredSceneAnimShapes);
       }
@@ -477,7 +483,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (backgroundName === "room") drawSceneItems(ctx, itemsSheet, inventoryItems, state.sceneItems, mask, actorLayer, "front");
       for (const [name, layer] of scriptLayers) if (!behindActors(name)) ctx.drawImage(layer.image, layer.x, layer.y);
 
-      if (scene.opening && backgroundName === "room" && packedBackground && atmosphere && !reducedMotion?.matches) drawKallakAtmosphere(ctx, clockMs);
+      if (scene.opening && packedBackground && movingAtmosphere) drawKallakAtmosphere(ctx, clockMs);
       ctx.restore();
 
       const amulet = scriptLayers.get('amulet');
@@ -527,13 +533,10 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
             }, ROOM_ART, tooltip);
             showTooltip = true;
           }
-        } else if (state.statusMessage) {
-          drawStatusLine(ctx, translateGameText(state.statusMessage), scene.uiMaskY - 13, ROOM_ART.x + ROOM_ART.w, ROOM_ART.x + 4);
         }
       } else {
         ctx.fillStyle = '#000';
         ctx.fillRect(0, scene.uiMaskY, LOGICAL_WIDTH, LOGICAL_HEIGHT - scene.uiMaskY);
-        if (state.statusMessage) drawStatusLine(ctx, translateGameText(state.statusMessage), scene.uiMaskY + 8, LOGICAL_WIDTH);
         if (uiOverlay) {
           ctx.drawImage(uiOverlay, 0, 0);
           if (locale.value === 'ru' && optionsRu) ctx.drawImage(optionsRu, HUD_OPTIONS_RECT.x, HUD_OPTIONS_RECT.y);
@@ -555,6 +558,22 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         }
       }
       if (tooltip) tooltip.hidden = !showTooltip;
+      const statusSurface = config.statusTextCanvas;
+      const statusText = showRadial || transition?.active ? null : state.statusMessage;
+      if (statusText) {
+        const label = translateGameText(statusText);
+        if (config.locationSign && statusText.trim() === scene.name.trim()) {
+          const remaining = state.statusMessageUntil - clockMs;
+          const edge = Math.min(remaining, STATUS_MESSAGE_MS - remaining);
+          const progress = Math.max(0, Math.min(1, edge / LOCATION_SIGN_TRANSITION_MS));
+          const opacity = 1 - (1 - progress) ** 3;
+          const slide = reducedMotion?.matches ? 0 : (1 - opacity) * 5;
+          const y = scene.uiMaskY - 31 + slide;
+          drawLocationSign(ctx, config.locationSign, label, ROOM_ART.x + 4, statusSurface ? y : Math.round(y), statusSurface, opacity);
+        } else drawStatusLine(ctx, label, modern ? ROOM_ART.x + 4 : 8,
+          scene.uiMaskY + (modern ? -13 : 8), modern ? ROOM_ART.x + ROOM_ART.w : LOGICAL_WIDTH, statusSurface);
+      }
+      if (statusSurface) statusSurface.hidden = !statusText;
       if (!heldOverRadial && state.itemInHand && state.pointer && !exitCursor(availablePortals(), state.pointer))
         drawHeldItem(ctx, state.pointer, INVENTORY_ICON_SIZE);
 
@@ -620,6 +639,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     function stop() {
       running = false;
       cancelAnimationFrame(animationFrame);
+      if (config.statusTextCanvas) config.statusTextCanvas.hidden = true;
       sequence?.stop();
       config.onSequenceChange?.(false);
       config.onContinueChange?.(false);
@@ -755,7 +775,6 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
             state.itemInHand = item.id;
             state.sceneItems.splice(itemIndex, 1);
           }
-          setStatusMessage(`Took ${getItemStatusName(state.itemInHand)}`);
           soundEffect(53);
           config.onCheckpoint?.();
           return true;
@@ -764,9 +783,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       if (state.itemInHand) {
         stopWalking();
         if(noDropRegions.some(r=>point.x>=r.x&&point.x<r.x+r.w&&point.y>=r.y&&point.y<r.y+r.h)){soundEffect(54);return true;}
-        const droppedItem = state.itemInHand;
         if (dropItemAt(point, state.itemInHand, state.drops, state.sceneItems, scene, mask)) {
-          setStatusMessage(`Placed ${getItemStatusName(droppedItem)}`);
           state.itemInHand = null;
         } else soundEffect(54);
         // A failed drop keeps the item in hand and must not trigger walking/pickup.
@@ -809,7 +826,6 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       foregroundFrames.clear();
       state.itemInHand = overlay.id;
       soundEffect(53);
-      setStatusMessage(`Took ${getItemStatusName(overlay.id)}`);
       if (overlay.replaceShape !== undefined) {
         overlay.shape = overlay.replaceShape;
         overlay.x = overlay.replaceX ?? overlay.x;
@@ -828,7 +844,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
 
     function setStatusMessage(text: string) {
       state.statusMessage = text;
-      state.statusMessageUntil = clockMs + 2400;
+      state.statusMessageUntil = clockMs + STATUS_MESSAGE_MS;
     }
 
     function face(facing: number) {

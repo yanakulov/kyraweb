@@ -60,6 +60,8 @@ export function drawLayerDebug(
 }
 
 const statusFont = '8px "Kyrandia", "Segoe UI", sans-serif';
+const labelFont = '6.5px "Kyrandia", monospace';
+const labelSpacing = 0.5;
 let statusBitmap: { text: string; width: number; image: HTMLCanvasElement } | undefined;
 
 function labelWidth(ctx: CanvasRenderingContext2D, text: string, spacing = 1) {
@@ -118,48 +120,99 @@ function drawPixelLabel(ctx: CanvasRenderingContext2D, text: string, x: number, 
   ctx.restore();
 }
 
-export function drawStatusLine(ctx: CanvasRenderingContext2D, text: string, y: number, width: number, x = 8) {
-  drawPixelLabel(ctx, text, x, y, width - x - 10);
+function prepareLabelSurface(ctx: CanvasRenderingContext2D, surface: HTMLCanvasElement | undefined,
+  x: number, y: number, width: number, height: number) {
+  const overlay = surface?.getContext('2d');
+  if (!surface || !overlay) return null;
+  const rect = ctx.canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const sx = rect.width / ctx.canvas.width, sy = rect.height / ctx.canvas.height;
+  const pixelWidth = Math.max(1, Math.round(width * sx * dpr));
+  const pixelHeight = Math.max(1, Math.round(height * sy * dpr));
+  if (surface.width !== pixelWidth) surface.width = pixelWidth;
+  if (surface.height !== pixelHeight) surface.height = pixelHeight;
+  surface.style.left = `${Math.round((rect.left + x * sx) * dpr) / dpr - rect.left}px`;
+  surface.style.top = `${Math.round((rect.top + y * sy) * dpr) / dpr - rect.top}px`;
+  surface.style.width = `${pixelWidth / dpr}px`;
+  surface.style.height = `${pixelHeight / dpr}px`;
+  overlay.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
+  return overlay;
+}
+
+export function drawStatusLine(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, right: number,
+  surface?: HTMLCanvasElement) {
+  const width = right - x - 10, height = 11;
+  const overlay = prepareLabelSurface(ctx, surface, x, y, width, height);
+  if (!overlay) {
+    drawPixelLabel(ctx, text, x, y, width);
+    return;
+  }
+  overlay.canvas.style.opacity = '';
+  overlay.clearRect(0, 0, width, height);
+  overlay.font = labelFont;
+  overlay.textBaseline = 'middle';
+  overlay.textAlign = 'left';
+  const label = text.normalize('NFC');
+  overlay.fillStyle = '#1a1010';
+  paintLabel(overlay, label, 0.75, height / 2 + 0.75, width - 1, labelSpacing);
+  overlay.fillStyle = '#fff';
+  paintLabel(overlay, label, 0, height / 2, width - 1, labelSpacing);
+}
+
+export function drawLocationSign(ctx: CanvasRenderingContext2D, sign: HTMLImageElement, text: string, x: number, y: number,
+  surface?: HTMLCanvasElement, opacity = 1) {
+  const label = text.normalize('NFC'), height = 25, end = 12;
+  ctx.save();
+  ctx.font = labelFont;
+  const width = Math.max(64, Math.min(148, Math.ceil(labelWidth(ctx, label, labelSpacing)) + 28));
+  ctx.restore();
+  const overlay = prepareLabelSurface(ctx, surface, x, y, width, height);
+  const target = overlay ?? ctx;
+  target.save();
+  if (overlay) {
+    overlay.canvas.style.opacity = String(opacity);
+    overlay.clearRect(0, 0, width, height);
+  } else {
+    target.globalAlpha *= opacity;
+    target.translate(x, y);
+  }
+  target.imageSmoothingEnabled = false;
+  // Keep the chipped ends and iron pins at their original scale as the label grows.
+  target.drawImage(sign, 0, 0, end, sign.height, 0, 0, end, height);
+  target.drawImage(sign, end, 0, sign.width - end * 2, sign.height, end, 0, width - end * 2, height);
+  target.drawImage(sign, sign.width - end, 0, end, sign.height, width - end, 0, end, height);
+  target.font = labelFont;
+  target.textBaseline = 'middle';
+  target.textAlign = 'center';
+  target.fillStyle = '#321b10';
+  paintLabel(target, label, width / 2 + 0.6, height / 2 + 0.6, width - 28, labelSpacing);
+  target.fillStyle = '#fff0cf';
+  paintLabel(target, label, width / 2, height / 2, width - 28, labelSpacing);
+  target.restore();
 }
 
 export function drawInventoryTooltip(ctx: CanvasRenderingContext2D, text: string,
   anchor: { x: number; top: number; bottom: number }, bounds: { x: number; y: number; w: number; h: number },
   surface?: HTMLCanvasElement) {
-  const font = '6.5px "Kyrandia", monospace';
-  const spacing = .5;
   text = text.normalize('NFC');
-  ctx.save(); ctx.font = font;
-  const width = Math.min(bounds.w - 4, Math.ceil(labelWidth(ctx, text, spacing)) + 8), height = 11;
+  ctx.save(); ctx.font = labelFont;
+  const width = Math.min(bounds.w - 4, Math.ceil(labelWidth(ctx, text, labelSpacing)) + 8), height = 11;
   ctx.restore();
   const x = Math.round(Math.max(bounds.x + 2, Math.min(anchor.x - width / 2, bounds.x + bounds.w - width - 2)));
   const above = Math.floor(anchor.top - height - 2);
   const y = Math.max(bounds.y + 2, Math.min(bounds.y + bounds.h - height - 2,
     above >= bounds.y + 2 ? above : Math.ceil(anchor.bottom + 2)));
-  const overlay = surface?.getContext('2d');
+  const overlay = prepareLabelSurface(ctx, surface, x, y, width, height);
   const target = overlay ?? ctx;
-  if (surface && overlay) {
-    const rect = ctx.canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const sx = rect.width / ctx.canvas.width, sy = rect.height / ctx.canvas.height;
-    const pixelWidth = Math.max(1, Math.round(width * sx * dpr));
-    const pixelHeight = Math.max(1, Math.round(height * sy * dpr));
-    if (surface.width !== pixelWidth) surface.width = pixelWidth;
-    if (surface.height !== pixelHeight) surface.height = pixelHeight;
-    surface.style.left = `${Math.round((rect.left + x * sx) * dpr) / dpr - rect.left}px`;
-    surface.style.top = `${Math.round((rect.top + y * sy) * dpr) / dpr - rect.top}px`;
-    surface.style.width = `${pixelWidth / dpr}px`;
-    surface.style.height = `${pixelHeight / dpr}px`;
-    overlay.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
-  }
   target.save();
   if (!overlay) target.translate(x, y);
   target.fillStyle = '#927c57'; target.fillRect(0, 0, width, height);
   target.fillStyle = '#191820'; target.fillRect(1, 1, width - 2, height - 2);
-  target.font = font;
+  target.font = labelFont;
   target.textBaseline = 'middle';
   target.textAlign = 'center';
   target.fillStyle = '#f1e4c5';
-  paintLabel(target, text, width / 2, height / 2, width - 6, spacing);
+  paintLabel(target, text, width / 2, height / 2, width - 6, labelSpacing);
   target.restore();
 }
 
