@@ -1,4 +1,4 @@
-import { LOGICAL_WIDTH, ROOM_ART, YELLOW_JEWEL_HITBOX, YELLOW_JEWEL_POS } from '../core/constants';
+import { LOGICAL_WIDTH, ROOM_ART } from '../core/constants';
 import type { Vec2 } from '../core/types';
 import { paintLabel } from '../core/ui';
 import { getInventorySlotPositions, inside } from './inventory';
@@ -18,12 +18,12 @@ export function radialLayout(height: number, anchor?: Vec2 | null, footprint = {
     return { x: Math.round(x + Math.sin(angle) * orbit) - halfSlot, y: Math.round(y - Math.cos(angle) * orbit) - halfSlot };
   });
   const amulet = { x: x - 16, y: y - 12, w: 32, h: 19 };
+  return { x, y, radius: outer, slots, amulet, options: { x: x - 10, y: y + 9, w: 21, h: 8 } };
+}
+
+export function radialJewel(amulet: Vec2, { x, y, w, h }: Vec2 & { w: number; h: number }) {
   const scale = (value: number) => Math.round(value * amuletScale);
-  return { x, y, radius: outer, slots, amulet,
-    jewel: { x: amulet.x + scale(YELLOW_JEWEL_POS.x - 224), y: amulet.y + scale(YELLOW_JEWEL_POS.y - 152), w: scale(32), h: scale(17) },
-    jewelHit: { x: amulet.x + scale(YELLOW_JEWEL_HITBOX.x - 224), y: amulet.y + scale(YELLOW_JEWEL_HITBOX.y - 152),
-      w: scale(YELLOW_JEWEL_HITBOX.w), h: scale(YELLOW_JEWEL_HITBOX.h) },
-    options: { x: x - 10, y: y + 9, w: 21, h: 8 } };
+  return { x: amulet.x + scale(x - 224), y: amulet.y + scale(y - 152), w: scale(w), h: scale(h) };
 }
 
 function disk(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string) {

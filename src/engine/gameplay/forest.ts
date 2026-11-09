@@ -7,7 +7,7 @@ import type { RoomAction } from "./roomScript";
 import type { RoomSnapshot, Vec2, InventoryItemId } from "../core/types";
 import type { CursorTrack, WorldRoom } from "./world";
 import { actorScaleAt } from '../characters/brandonFrames';
-import { YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
+import { isShadowrealmRoom, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
 
 export type ForestRoom = WorldRoom & {
   program: EmcProgram;
@@ -114,6 +114,27 @@ export const originalItem = (id: InventoryItemId | null) =>
 export const itemFromOriginal = (id: number): InventoryItemId | null =>
   id < 0 || id === 255 ? null : (items[id] ?? `item-${id}`);
 
+export const fireberryBush = (room: number) => room >= 187 && room <= 198 || [133, 137, 165, 173].includes(room);
+
+export function ageFireberry(item: InventoryItemId | null): InventoryItemId | null {
+  const id = originalItem(item);
+  return id >= 29 && id <= 32 ? id === 32 ? null : itemFromOriginal(id + 1) : item;
+}
+
+export function transformWisp(room: number, active: boolean): RoomAction[] {
+  const cave = isShadowrealmRoom(room);
+  const actions: RoomAction[] = [];
+  if (active && cave) actions.push({ op: 'music', command: 1, restart: false });
+  actions.push({ op: 'sfx', track: 0x6c }, { op: 'wisp', ms: 0 });
+  for (let index = 0; index < 16; index++) actions.push(
+    { op: 'heroFrame', clip: 'wisp', index: active ? index : 15 - index }, { op: 'wait', ms: 8000 / 60 });
+  actions.push({ op: 'heroFrame' }, { op: 'face', shape: 7, facing: 5 });
+  if (active) actions.push({ op: 'wisp', ms: cave ? 300_000 : 120_000 }, { op: 'flag', flag: 158, value: true });
+  if (room >= 118 && room <= 186) actions.push({ op: 'palette', start: 228, colors: specialPalettes[14].slice(0, 45), ms: 1200 });
+  if (active && cave) actions.push({ op: 'music', command: 17, restart: false });
+  return actions;
+}
+
 /** Execute original conditionals against a copy, then play the resulting actions.
  * State changes are applied by the same clock as dialogue, never on an interrupted trace. */
 export function traceForest(
@@ -151,7 +172,7 @@ export function traceForest(
     voiceMs = 0,
     voiceElapsed = 0,
     hand = originalItem(snapshot.itemInHand);
-  let poison = state.poison;
+  let poison = state.poison, wisp = !!snapshot.wispMs;
   const delays: Record<number, number> = { 0: snapshot.walkDelayTicks ?? 6, 1: 7, 2: 8 };
   const slots = new Map<number, string>();
   const emit = (action: RoomAction) => actions.push(action);
@@ -215,6 +236,7 @@ export function traceForest(
             entry = a[0] < 0 || a[1] < 0 ? undefined : { x: a[0], y: a[1] };
             return 0;
           case 0x2d:
+            if (room.id === 117 && a[0] === 117 && flags.has(179)) return 0; // The scroll already changed the river in place.
             emit({ op: "exit", target: a[0], entry });
             return 0;
           case 0x1d:
@@ -222,6 +244,22 @@ export function traceForest(
           case 0x5f:
             emit({ op: "death" });
             return 0;
+          case 0x5d: {
+            if (fireberryBush(room.id)) return 29;
+            const lights = [hand, ...snapshot.inventorySlots.map(originalItem), ...snapshot.sceneItems.map(item => originalItem(item.id))]
+              .filter(item => item >= 28 && item <= 32);
+            return lights.length ? Math.min(...lights) : -1;
+          }
+          case 0x5e: {
+            const palette = wisp && !fireberryBush(room.id) ? 14 : a[0] < 0 ? 12 : Math.max(8, Math.min(12, a[0] - 21));
+            emit({ op: 'palette', start: 228, colors: specialPalettes[palette].slice(0, 45), ms: 0 });
+            return 0;
+          }
+          case 0x7d:
+            emit({ op: 'blackout', active: !!a[0] });
+            return 0;
+          case 0x20:
+            return 0; // Darkness hides Brandon through 0x7d until the death sequence completes.
           case 0x64: {
             const answer = confirmations[confirmation++];
             if (answer) {
@@ -267,7 +305,24 @@ export function traceForest(
           case 0x13:
             return +(hand === -1);
           case 0x72:
-            return +(poison > 0 && !!(a[0] & 1));
+            return +((poison > 0 && !!(a[0] & 1)) || (wisp && !!(a[0] & 2)));
+          case 0x74:
+            if (room.id !== 117 || !a[0]) throw new Error('Unsupported winter scroll sequence');
+            for (let index = 0; index < 29; index++) {
+              if (index === 7) emit({ op: 'sfx', track: 0x20 });
+              if (index === 25) {
+                for (let slot = 0; slot < 8; slot++) {
+                  emit({ op: 'ambient', index: slot, enabled: false });
+                  emit({ op: 'ambient', index: slot, enabled: false, internal: true });
+                }
+                emit({ op: 'palette', start: 228, colors: specialPalettes[29].slice(0, 60), ms: 1200 });
+                wait(1200);
+              }
+              emit({ op: 'heroFrame', clip: 'winter', index });
+              wait(8000 / 60);
+            }
+            emit({ op: 'heroFrame' });
+            return 0;
           case 0x7a:
             return mouseState;
           case 0x71:
@@ -352,7 +407,7 @@ export function traceForest(
             if (a[0] > 0) {
               npc.shape = a[1];
               npcAction();
-            }
+            } else emit({ op: 'face', facing: actor.facing, shape: a[1] });
             return 0;
           case 0x50:
             if (a[0] > 0) {
@@ -368,7 +423,7 @@ export function traceForest(
             } else {
               actor.x = a[1] & ~3;
               actor.y = a[2] & ~1;
-              emit({ op: "actor", ...actor, visible: true });
+              emit({ op: "actor", ...actor, visible: a[1] >= 0 && a[2] >= 0 });
             }
             return 0;
           case 0x49:
@@ -566,6 +621,10 @@ export function traceForest(
             emit({ op: "noDrop", x: a[0], y: a[1], w: a[2], h: a[3] });
             return 0;
           case 0x00:
+            hand = a[1];
+            emit({ op: 'sfx', track: a[0] === 2 ? 0x5e : 0x37 });
+            emit({ op: 'hand', item: itemFromOriginal(hand) });
+            return 0;
           case 0x0e:
             hand = a[0];
             emit({ op: "hand", item: itemFromOriginal(hand) });
@@ -611,14 +670,17 @@ export function traceForest(
             }
             wait((a[0] * a[1] * 1000) / 60);
             return 0;
-          case 0x6c:
-            if (a[0] !== 1) throw new Error('Unsupported amulet jewel');
+          case 0x6c: {
+            const jewel = a[0] === 1 ? { name: 'yellow-jewel', flag: YELLOW_JEWEL_FLAG, pos: YELLOW_JEWEL_POS }
+              : a[0] === 3 ? { name: 'purple-jewel', flag: PURPLE_JEWEL_FLAG, pos: PURPLE_JEWEL_POS } : undefined;
+            if (!jewel) throw new Error('Unsupported amulet jewel');
             emit({ op: 'sfx', track: 0x5f });
-            for (let index = 0; index <= 10; index++) emit({ op: 'frame', clip: 'yellow-jewel', index,
-              ...YELLOW_JEWEL_POS, ms: 3 * 1000 / 60 });
-            setFlag(YELLOW_JEWEL_FLAG, true);
-            emit({ op: 'close', clip: 'yellow-jewel' });
+            for (let index = 0; index <= 10; index++) emit({ op: 'frame', clip: jewel.name, index,
+              ...jewel.pos, ms: 3 * 1000 / 60 });
+            setFlag(jewel.flag, true);
+            emit({ op: 'close', clip: jewel.name });
             return 0;
+          }
           case 0x66:
             emit({
               op: "sceneFile",
@@ -648,13 +710,17 @@ export function traceForest(
           case 0x17:
             emit({ op: "sfx", track: a[0] });
             return 0;
+          case 0x26:
+            if (wisp) {
+              wisp = false;
+              actions.push(...transformWisp(room.id, false));
+            }
+            return 0;
           // Engine configuration. Audio follows the original EMC calls.
           case 8:
           case 0x0f:
-          case 0x26:
           case 0x28:
           case 0x31:
-          case 0x32:
           case 0x33:
           case 0x36:
           case 0x37:
@@ -662,6 +728,7 @@ export function traceForest(
           case 0x44:
           case 0x46:
           case 0x54:
+          case 0x55: // LAVA prints a blank line over its death movie.
           case 0x56:
           case 0x57:
           case 0x78:
@@ -686,6 +753,9 @@ export function traceForest(
               colors: specialPalettes[a[0]].slice(0, a[2] * 3),
               ms: a[3] * 300,
             });
+            return 0;
+          case 0x32:
+            emit({ op: 'palette', start: a[1], colors: specialPalettes[a[0]].slice(0, a[2] * 3), ms: 0 });
             return 0;
           case 0x5b:
             return 0; // Column restoration is losslessly baked by the importer.

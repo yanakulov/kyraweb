@@ -34,10 +34,13 @@ export type GameConfig = {
   npcFrames?: Record<number, { xOffset: number; yOffset: number }>;
   amulet?: boolean;
   yellowJewel?: boolean;
+  purpleJewel?: boolean;
+  onWispExpire?: () => import("../gameplay/roomScript").RoomAction[];
   poisoned?: boolean;
   heroActions?: boolean;
   onPortalInteract?: (portal: RoomPortal, point: Vec2, snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[] | null;
-  onAmuletInteract?: (snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[];
+  portalOpen?: (portal: RoomPortal) => boolean;
+  onAmuletInteract?: (snapshot: RoomSnapshot, jewel: "yellow" | "purple") => import("../gameplay/roomScript").RoomAction[];
   portals?: RoomPortal[];
   onExit?: (portal: RoomPortal) => void;
   onLoadingChange?: (loading: boolean) => void;
@@ -49,7 +52,7 @@ export type GameConfig = {
 
 export type RoomPortal = { id: string; target: number; side: "north" | "east" | "south" | "west";
   rect: { x: number; y: number; w: number; h: number }; point: Vec2; entry?: Vec2 | null };
-export type RoomSnapshot = { pos: Vec2; facing?: number; walkDelayTicks?: number; inventorySlots: (InventoryItemId | null)[]; itemInHand: InventoryItemId | null;
+export type RoomSnapshot = { pos: Vec2; facing?: number; walkDelayTicks?: number; wispMs?: number; inventorySlots: (InventoryItemId | null)[]; itemInHand: InventoryItemId | null;
   sceneItems: SceneItem[]; overlays: SceneOverlayState[]; treeSpoken: boolean; runtime?: RoomRuntimeSnapshot };
 
 export type SavedNpc = { x: number; y: number; facing: number; shape: number; room: number };

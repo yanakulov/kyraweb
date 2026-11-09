@@ -84,6 +84,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     "DROPUP.WSA",
     "DROPDOWN.WSA",
     "FLUTE1.CPS", "FLUTE2.CPS", "HEALBR2.CPS", "POISON.CPS", "SHATTER.WSA",
+    "BRANWILL.CPS", "SNOW1A.CPS", "SNOW2A.CPS",
   ]);
   const get = (n) => {
     const b = resources.get(n);
@@ -112,7 +113,7 @@ export async function buildForest(root, out = "public/assets/forest") {
   const noteClip = { width: 194, height: 128, frames: [notePixels], palette: note.palette, transparentIndex: -1 };
   const npcProgram = parseEmc(get('_NPC.EMC')), npcVoices = readPak(get('CHAPTER1.VRM'));
   const flute = { program: npcProgram, durations: Object.fromEntries(
-    [...npcVoices].filter(([name]) => /^(100[01]|201[01]|700[0124]|904[123])\.VOC$/.test(name))
+    [...npcVoices].filter(([name]) => /^(100[01]|201[01]|700[0124]|904[123789])\.VOC$/.test(name))
       .map(([name, data]) => [parseInt(name, 10), vocDuration(data)])) };
   function selfActions(item, room = 0, readable = false) {
     const actions = [];
@@ -335,8 +336,9 @@ export async function buildForest(root, out = "public/assets/forest") {
   if (transparentAmulet === undefined) throw new Error('No transparent index for AMULET.WSA');
   const amuletPalette = decodeCps(get("GEMCUT.CPS"), get("PALETTE.COL")).palette;
   const jewels = decodeCps(get("JEWELS3.CPS"), get("PALETTE.COL"));
-  // JEWELS3 uses a 32 × 17 grid. Yellow is jewel 1 in the DOS HUD.
-  const yellowFrames = [359, 354, 349, 344, 339, 335, 340, 345, 350, 355, 324, 330].map(shape => {
+  // JEWELS3 uses the same 32 × 17 grid for the dormant and active jewels.
+  const jewelFrames = (jewel) => [359, 354, 349, 344, 339, 334 + jewel, 339 + jewel,
+    344 + jewel, 349 + jewel, 354 + jewel, 323 + jewel, 329 + jewel].map(shape => {
     const row = shape < 330 ? 0 : shape < 335 ? 6 : 1 + Math.floor((shape - 335) / 5);
     const column = shape < 330 ? shape - 324 : shape < 335 ? shape - 330 : (shape - 335) % 5;
     return Uint8Array.from({ length: 32 * 17 }, (_, i) => jewels.pixels[(row * 17 + Math.floor(i / 32)) * 320 + column * 32 + i % 32]);
@@ -344,7 +346,8 @@ export async function buildForest(root, out = "public/assets/forest") {
   await writeFile(
     join(out, "amulet.kyr.gz"),
     encodeScenePack({
-      "yellow-jewel": { width: 32, height: 17, frames: yellowFrames, palette: jewels.palette, transparentIndex: 0 },
+      "yellow-jewel": { width: 32, height: 17, frames: jewelFrames(1), palette: jewels.palette, transparentIndex: 0 },
+      "purple-jewel": { width: 32, height: 17, frames: jewelFrames(3), palette: jewels.palette, transparentIndex: 0 },
       "amulet-rest": {
         ...amulet,
         frames: [amulet.frames.at(-1)],
@@ -365,6 +368,12 @@ export async function buildForest(root, out = "public/assets/forest") {
     ['flute', [['FLUTE1', 0, 0, 12], ['FLUTE1', 75, 12, 1], ['FLUTE1', 75, 0, 13], ['FLUTE2', 0, 0, 10]], 24, 75],
     ['cure', [['HEALBR2', 0, 0, 12], ['HEALBR2', 48, 0, 12], ['HEALBR2', 96, 0, 6]], 24, 48],
     ['poison', [0, 48, 96, 144].map(y => ['POISON', y, 0, 5]), 64, 48],
+    ['wisp', [['BRANWILL', 0, 0, 8], ['BRANWILL', 48, 0, 8]], 40, 48],
+    ['wisp-float', [['BRANWILL', 96, 0, 8], ['BRANWILL', 125, 0, 2]], 40, 29],
+    ['winter', [['SNOW1A', 0, 1, 7],
+      ...[['SNOW1A', 66], ['SNOW1A', 132], ['SNOW2A', 0], ['SNOW2A', 66]].flatMap(([sheet, y]) =>
+        [0, 2, 4, 6].map(x => [sheet, y, x, 1])),
+      ['SNOW2A', 132, 0, 1], ['SNOW2A', 132, 2, 1], ['SNOW2A', 132, 3, 4]], 40, 66],
   ]) {
     const frames = sheets.flatMap(([sheet, y, first, count]) => {
       const { pixels } = decodeCps(get(`${sheet}.CPS`), get('PALETTE.COL'));

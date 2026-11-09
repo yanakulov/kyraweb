@@ -1,6 +1,6 @@
 # Forest regions
 
-The playable CD quest chain runs from Brandon’s home to the entrance to Shadowrealm. After Darm’s scroll, Timbermist includes the birthstone quest, the ruby tree and the confrontation with Malcolm at Serpent’s Grotto.
+The playable CD quest chain runs from Brandon’s home through Shadowrealm to the plateau. After Darm’s scroll, Timbermist includes the birthstone quest, the ruby tree and the confrontation with Malcolm at Serpent’s Grotto.
 
 | ID | Original resource | Location |
 | --- | --- | --- |
@@ -22,7 +22,8 @@ The playable CD quest chain runs from Brandon’s home to the entrance to Shadow
 | 15 | NWCLIFB | Tall cliff |
 | 16 | FGOWEST | Dark forest |
 | 17–36 | Timbermist Woods | CAVEB and the paths, huts, clearings, and landmarks beyond it |
-| 109 | ENTER | The mineral pool at the entrance to Shadowrealm |
+| 109–198 | Shadowrealm | The mineral pool, maze, iron grate, moonlight altar, chasm and volcanic river |
+| 37–38 | PLTCAVE / PLATEAU | The cave exit and the plateau before Faeriewood |
 
 Click the scene edges, doorways or lift to leave. An exit changes the desktop cursor's direction. Brandon walks to a reachable approach before the scene changes. The first attempt to leave home plays the original tree conversation, including when carrying an item. Returning home preserves its completion state.
 
@@ -34,7 +35,7 @@ npm run assets:world -- "C:\path\to\Legend of Kyrandia\DAT"
 
 `extractor/world.mjs` imports CPS backgrounds, MSC walk/priority masks and DAT animation/entrance metadata. It reads N/E/S/W connectivity from the DOS room table and traces EMC initialization for scene titles, initial scene shapes, special doorway rectangles, mask changes and actor scale. Unknown quest operations are outside this navigation importer. FORESTA uses original compression type 3 (RLE); the other backgrounds use LCW. Scene-local palette entries 228–247 remain intact. Initial WSA stills for Brynn's entrance and Herman are composited from original frames.
 
-Every room has a gzip indexed pack with its background and mask. Timbermist uses the script packs and shares artwork between original rooms with the same backdrop while retaining separate room state and exits. Lift rooms also include DROPUP/DROPDOWN or LIFTUP/LIFTDOWN, using the original positions, frame order and 5/6-tick waits. `world.json` stores room metadata and source hashes. No raw PAK, APK, CPS, MSC, DAT, EMC or speech archives are published.
+Rooms use gzip indexed packs with their background and mask. Timbermist and Shadowrealm share artwork between rooms with the same backdrop while retaining separate room state and exits. Two indexed cave packs serve the recurring maze rooms. Lift rooms also include DROPUP/DROPDOWN or LIFTUP/LIFTDOWN, using the original positions, frame order and 5/6-tick waits. `world.json` stores room metadata and source hashes. No raw PAK, APK, CPS, MSC, DAT, EMC or speech archives are published.
 
 The original west connection to room 24 opens only after the quest scripts select BRIDGE. Giving Herman the saw alone is insufficient; obtaining the amulet and his progress at the work site determine when repair completes. Brandon's depth scale at the bridge follows the original integer 192→256 interpolation between y=56 and y=92.
 
@@ -48,7 +49,7 @@ Failed transitions keep the current room and inventory and allow another click t
 
 Node tests check approach routes across all room exits, RLE decoding and depth scale. `tests/browser/world.html` drives the actual renderer through all 17 rooms and back, including both lift directions. It checks held items, inventory, picked overlays, dropped items, tree completion, the closed bridge, a deliberately failed transition/retry and cancellation during loading. Its gallery captures the original scenes for visual inspection.
 
-The CI budget for gameplay runtime files is 4.31 MB. The 3D book, speech, fallback effects, and optional audio banks have separate limits.
+The CI budget for gameplay runtime files is 4.8 MB. The 3D book, speech, fallback effects, and optional audio banks have separate limits.
 
 ## Quest scripts
 
@@ -57,6 +58,8 @@ Run `npm run assets:world -- "C:\path\to\DAT"` followed by `npm run assets:fores
 Brynn displays the original NOTEENG bitmap and waits for Continue. The home vase can store and return an item. Insisting on crossing the broken bridge plays the original fatal animation, then the book offers to restore the last autosave. In Timbermist, planting the three seeds awakens the yellow jewel. Clicking the jewel at the bird’s nest runs the original healing script, including the feather drop. Darm’s script accepts that feather and writes the magic scroll. The two variable birthstones, scattered stones, and remaining room crossings before poison takes effect are kept in the save. The grotto runs the original knife choice and flute scripts.
 
 `tests/browser/forest.html` traverses the quests with actual input, crosses the bridge in both directions, restores a bridge save from before Timbermist, and plays through the scroll. A separate button tests the warning, retreat and fatal crossing. Node tests cover both quest orders, frame and palette hashes, sampled hotspot and item combinations, DAT loops, and confirmation cancellation.
+
+In Shadowrealm, the original room scripts use the brightest carried or dropped fireberry to choose the cave palette. Carried berries lose a stage at room transitions, and dropped berries keep their stage. The Shadowrealm browser scenario starts at a chapter checkpoint, collects the five rocks and coin, opens the grate, exchanges the coin at the well, awakens the purple jewel, freezes the river, retrieves the gold key and reaches the plateau. It also checks the dark-cave death and reloading the wisp form.
 
 ## Pointer and touch controls
 

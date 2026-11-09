@@ -2,6 +2,7 @@ import processorUrl from './mt32-worklet.ts?worker&url';
 import adlibUrl from './adlib-worklet.ts?worker&url';
 import manifest from '../../../public/assets/music/manifest.json';
 import { withBase } from '../core/assets';
+import { isShadowrealmRoom } from '../core/constants';
 import { parseXmidi, type MidiTrack } from './xmidi';
 import { readRoms, storeRoms, readRomFiles, type Mt32Roms } from './romStorage';
 import { introCue, wanderCue, type MusicCue } from './cues';
@@ -356,7 +357,11 @@ export class MusicPlayer {
   intro(step: string) { const cue = introCue(step); if (cue) { this.command = -1; this.play(cue, true); } }
   beginGame() { this.command = -1; this.play({ file: 'KYRA1B', track: 0 }, true); }
   /** Older saves have no audio position. Restart the room's score, not the intro. */
-  restoreRoom(id: number) { this.command = -1; this.wander(({ 0: 41, 2: 5, 7: 3, 8: 7, 27: 12, 36: 4, 109: 3 } as Record<number, number>)[id] ?? (id >= 17 ? 11 : 2), true); }
+  restoreRoom(id: number, wisp = false) {
+    this.command = -1;
+    this.wander(({ 0: 41, 2: 5, 7: 3, 8: 7, 27: 12, 36: 4, 37: 21, 38: 21, 113: 18 } as Record<number, number>)[id] ??
+      (isShadowrealmRoom(id) ? wisp ? 17 : 3 : id >= 17 ? 11 : 2), true);
+  }
   wander(command: number, restart = false) {
     if (!restart && command === this.command) return;
     this.command = command;
