@@ -1,5 +1,4 @@
 import { createApp, nextTick } from 'vue';
-import App from '../../src/App.vue';
 import '../../src/styles.css';
 
 // Real App, resources and renderers; only the animation clock is controlled.
@@ -166,6 +165,8 @@ function add(label:string, action:()=>Promise<void>) {
 document.addEventListener('keydown',event=>{
   if(event.key.toLowerCase()==='h'&&!(event.target as HTMLElement).matches('input,select,textarea')) controls.hidden=!controls.hidden;
 });
+history.replaceState(null, '', '?book=3d');
+const { default: App } = await import('../../src/App.vue');
 createApp(App).mount('#app');
 add('Show book',readyBook);
 add('Open book',async()=>{await readyBook();await press('.book-open');});

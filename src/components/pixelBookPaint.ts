@@ -12,13 +12,13 @@ export const ILLUSTRATION = { x: 341, y: 69, w: 179, h: 199 };
 export const CHAPTER_FOCUS = [{ x: .44, y: .5 }, { x: .5, y: .5 }, { x: .54, y: .5 }, { x: .58, y: .5 }];
 export const RUBRIC = '#e5b97a', INK = '#e9d0ae', MUTED = '#b79674', FOIL = '#f1d198';
 export type Rect = { x: number; y: number; w: number; h: number };
-export type Art = Record<'desk' | 'spread' | 'cover' | 'retail' | 'title' | 'bookmark' | 'modern' | 'classic' | 'studio', HTMLImageElement>;
+export type Art = Record<'desk' | 'spread' | 'cover' | 'retail' | 'title' | 'bookmark' | 'modern' | 'classic' | 'studio' | 'scroll', HTMLImageElement>;
 type Point = { x: number; y: number };
 
 export async function loadBookArt(): Promise<Art> {
   const files = {
     desk: 'pixel-book/desk.webp', spread: 'pixel-book/spread.webp', cover: 'pixel-book/cover.webp', retail: 'book-cover.webp', title: 'kyrandia-title.webp',
-    bookmark: 'pixel-book/bookmark.webp',
+    bookmark: 'pixel-book/bookmark.webp', scroll: 'pixel-book/scroll.webp',
     modern: 'controls-modern.webp', classic: 'controls-classic.webp', studio: 'akulaflow-studio.webp',
   };
   const entries = await Promise.all(Object.entries(files).map(async ([key, file]) => {
@@ -176,7 +176,7 @@ export function frame(ctx: CanvasRenderingContext2D, r: Rect, bright = false) {
 }
 
 export function text(ctx: CanvasRenderingContext2D, label: string, x: number, y: number, size = 11, color = INK,
-  align: CanvasTextAlign = 'left', font = 'Georgia, serif', width = 200, weight = 400) {
+  align: CanvasTextAlign = 'left', font = 'Georgia, serif', width = 200, weight = 400, shadow = '#160e0b') {
   ctx.font = `${weight} ${size}px ${font}`;
   const minimum = Math.min(size, 9);
   while (size > minimum && ctx.measureText(label).width > width) ctx.font = `${weight} ${--size}px ${font}`;
@@ -187,10 +187,20 @@ export function text(ctx: CanvasRenderingContext2D, label: string, x: number, y:
   }
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#160e0b';
+  ctx.fillStyle = shadow;
   ctx.fillText(label, x, y + 1);
   ctx.fillStyle = color;
   ctx.fillText(label, x, y);
+}
+
+export function unroll(ctx: CanvasRenderingContext2D, sprite: HTMLImageElement, { x, y, w, h }: Rect, progress: number) {
+  const roller = Math.round(h * .12);
+  const spriteRoller = Math.round(sprite.height * .12);
+  const opening = Math.round((h - roller * 2) * progress);
+  const top = Math.round(y + (h - opening) / 2), bottom = top + opening;
+  if (opening) ctx.drawImage(sprite, 0, spriteRoller, sprite.width, sprite.height - spriteRoller * 2, x, top, w, opening);
+  ctx.drawImage(sprite, 0, 0, sprite.width, spriteRoller, x, top - roller, w, roller);
+  ctx.drawImage(sprite, 0, sprite.height - spriteRoller, sprite.width, spriteRoller, x, bottom, w, roller);
 }
 
 export function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string) {

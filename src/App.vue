@@ -1,13 +1,14 @@
 <template>
-  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane }"
+  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane, 'is-portrait': pixelBook && mobilePortrait }"
     :style="cinematicArt ? { '--cinematic-ratio': cinematicArt.w / cinematicArt.h } : undefined"
     ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()" @pointermove.capture="rememberMouse" @pointerover.capture="menuHover" @click.capture="menuClick">
-    <PixelBook v-if="pixelBook && (!bookOpened || bookSnapshot)" ref="openingBook"
+    <PixelBook v-if="pixelBook && (!bookOpened || bookSnapshot || mobilePortrait)" ref="openingBook"
       :options="!!bookSnapshot" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy"
       :returning="bookReturning" :message="bookMessage" :initial-view="bookInitialView" :setup="firstRun" :show-prologue="openingPrologue"
       :latest-save="!!latestSave" :location="locationName" :film-bounds="cinematicArt ?? undefined"
       :snapshot="bookSnapshot ?? openingSnapshot ?? undefined" :game-canvas="canvasRef ?? undefined" :game-stage="stageRef ?? undefined"
       :focus="bookFocus" :opening-ready="openingFrameReady || !!openingSnapshot || !!gameError" :portrait="mobilePortrait"
+      :orientation-only="bookOpened && !bookSnapshot"
       :slots="bookSlots" :dev-scene="activeDevScene" :dev-finished="devFinished"
       :walk-speed="walkSpeed" :control-mode="controlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen"
       :music="music" :music-state="musicState" @begin="beginOpening" @ready="bookOptionsReady"
@@ -28,7 +29,7 @@
         v-model:walk-speed="walkSpeed" :control-mode="controlMode" @update:control-mode="setControlMode" :fullscreen-available="fullscreenAvailable" :is-fullscreen="isFullscreen" :music-player="music" :music-state="musicState"
         @start-journey="startJourney" @page-turn="music.bookSound('page')" @read-prologue="readingHistory = true; music.bookSound('page')" @resume="resumeBook" @save="saveChapter" @load="loadChapter" @fullscreen="toggleFullscreen" @main-menu="leaveBook('menu')" @replay-intro="leaveBook('intro')" @dev-run="launchDevScene" @leave-dev="returnToStory" />
     </FantasyBook>
-    <div class="game-frame" :class="{ 'is-concealed': !bookOpened && !openingFrameReady && !openingSnapshot && !gameError }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot">
+    <div class="game-frame" :class="{ 'is-concealed': !bookOpened && !openingFrameReady && !openingSnapshot && !gameError }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot || mobilePortrait">
       <canvas ref="sceneBackdrop" class="scene-backdrop" :width="ROOM_ART.w" :height="ROOM_ART.h" aria-hidden="true"></canvas>
       <div class="stage" ref="stageRef" :class="{ 'cursor-controlled': gamePointerVisible || endingActive }" :aria-busy="loading"
         @pointerenter="handleMove" @pointermove="handleMove" @pointerleave="leaveStage"
@@ -52,7 +53,7 @@
         <p v-if="navigationError" class="scene-notice" role="status">{{ t(navigationError) }}</p>
       </div>
     </div>
-    <dialog v-if="mobilePortrait && (!pixelBook || bookOpened && !bookSnapshot)" ref="rotationDialog" class="rotation-dialog" aria-labelledby="rotation-title" aria-describedby="rotation-help" @cancel.prevent>
+    <dialog v-if="mobilePortrait && !pixelBook" ref="rotationDialog" class="rotation-dialog" aria-labelledby="rotation-title" aria-describedby="rotation-help" @cancel.prevent>
       <svg class="rotation-icon" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="5" y="5" width="15" height="26" rx="2" />
         <rect x="17" y="32" width="26" height="13" rx="2" />
@@ -72,7 +73,7 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 const FantasyBook = defineAsyncComponent(() => import('./components/FantasyBook.vue'));
 const PixelBook = defineAsyncComponent(() => import('./components/PixelBook.vue'));
-const pixelBook = new URLSearchParams(location.search).get('book') === '2d';
+const pixelBook = new URLSearchParams(location.search).get('book') !== '3d';
 import BookMenu from './components/BookMenu.vue';
 import BookPrologue from './components/BookPrologue.vue';
 import FirstRunLetter from './components/FirstRunLetter.vue';

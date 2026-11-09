@@ -4,7 +4,7 @@
 
 [English](README.md) · **Русский**
 
-[Играть в браузере](https://yanakulov.github.io/kyraweb/)
+[Играть в браузере](https://lok.akulaflow.ru/)
 
 KyraWeb — неофициальный веб-ремейк *The Legend of Kyrandia*, первой книги серии *Fables & Fiends* от Westwood Studios (1992). Пиксельная графика, анимации и сценарии взяты из игры, а меню и пролог оформлены как трёхмерная книга.
 

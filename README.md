@@ -4,7 +4,7 @@
 
 **English** · [Русский](README.ru.md)
 
-[Play in your browser](https://yanakulov.github.io/kyraweb/)
+[Play in your browser](https://lok.akulaflow.ru/)
 
 KyraWeb is an unofficial web remake of *The Legend of Kyrandia*, the first book of Westwood Studios’ *Fables & Fiends* series (1992). It pairs the original pixel art, animation, and game scripts with a new 3D storybook interface.
 

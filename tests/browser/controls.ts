@@ -1,5 +1,4 @@
 import { createApp, nextTick } from 'vue';
-import App from '../../src/App.vue';
 import { readAutosave, readSaveSlots, writeAutosave, writeSaveSlot } from '../../src/engine/gameplay/saveStorage';
 import { startGame } from '../../src/engine/gameplay/game';
 import { gemCutScene } from '../../src/engine/scenes/gemCut';
@@ -86,6 +85,8 @@ document.addEventListener('keydown', event => {
   const controls = document.querySelector('aside')!;
   controls.hidden = !controls.hidden;
 });
+history.replaceState(null, '', '?book=3d');
+const { default: App } = await import('../../src/App.vue');
 createApp(App).mount('#app');
 addCheck('Reach gameplay',async()=>{
   if (book()&&!document.querySelector('.journey-choice')) await closeOptions();

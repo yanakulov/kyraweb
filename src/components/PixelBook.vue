@@ -18,7 +18,7 @@ import { devHighlights, devIntroScenes, devVariants, type DevScene } from '../en
 import { prologue } from './prologue';
 import { roomFrameFocus } from './bookTransition';
 import { WIDTH, HEIGHT, SPREAD, COVER, ILLUSTRATION, CHAPTER_FOCUS, RUBRIC, FOIL, INK, MUTED,
-  loadBookArt, loadChapterFrame, printPicture, cropFrame, bookmarkPalette, coverBoard, surface, photoBounds, buttonPlate,
+  loadBookArt, loadChapterFrame, printPicture, cropFrame, bookmarkPalette, coverBoard, surface, photoBounds, buttonPlate, unroll,
   clamp, ease, mix, pixels, frame, text, sparkle, desk, bookShadow, spreadLight, turnLeaf, type Art, type Rect } from './pixelBookPaint';
 
 type WalkSpeed = 'slowest' | 'slow' | 'fast' | 'fastest';
@@ -28,6 +28,7 @@ const props = defineProps<{
   options: boolean; mainMenu: boolean; gameOver: boolean; canSave: boolean; busy: boolean; returning: boolean; message: string;
   initialView: 'main' | 'load' | 'dev'; setup: boolean; showPrologue: boolean; latestSave: boolean; location: string;
   snapshot?: HTMLCanvasElement; gameCanvas?: HTMLCanvasElement; gameStage?: HTMLElement; focus?: Vec2; openingReady: boolean; portrait: boolean;
+  orientationOnly: boolean;
   filmBounds?: Rect;
   slots: Slot[]; devScene: DevScene | null; devFinished: boolean;
   walkSpeed: WalkSpeed; controlMode: ControlMode; fullscreenAvailable: boolean; isFullscreen: boolean;
@@ -44,6 +45,9 @@ const credit = ref<HTMLCanvasElement>();
 const showCredit = ref(false);
 const creditStyle = ref({ top: '0px', width: '0px' });
 const SCENE_ZOOM_MS = 400;
+const SETUP_SCROLL = { x: 53, y: 22, w: 534, h: 320 };
+const ROTATE_SCROLL = { x: 60, y: 28, w: 520, h: 304 };
+const PARCHMENT_INK = '#3f2113', PARCHMENT_RED = '#672e21', PARCHMENT_SHADOW = '#f2cd8e80';
 const DISSOLVE_ORDER = [
   [0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5],
 ];
@@ -64,6 +68,7 @@ let bookmarks: HTMLCanvasElement[] = [];
 const bookmarkOffsets = pages.map(() => 0);
 let mountTime = 0, coverAt: number | null = null, finishAt: number | null = null, turnAt: number | null = null, storyAt = 0;
 let scenePosition = props.options ? 1 : 0, returnFrom = 0;
+let scrollAt: number | undefined, scrollPageAt = 0, rotateAt: number | undefined;
 let pendingEnter = false, openingStarted = false, closing = false, wasReturning = false, direction = true, ready = false, renderFrame = 0, alive = true;
 let openingMenu = false;
 let time = 0, hover = '', focus = '', lastHover = -Infinity, dragging: Hit | undefined, revealAll = false, loadFailed = false;
@@ -95,7 +100,10 @@ const LEFT_CENTER = LEFT + PAGE_W / 2, RIGHT_CENTER = RIGHT + PAGE_W / 2;
 const mainTitle = () => props.gameOver ? t("It didn't happen that way!") : tr('The Journey', 'Путешествие');
 const names = () => ({ main: mainTitle(), story: tr('The Chronicles', 'Летопись'), save: t('Save your story'),
   load: t('Saved chapters'), settings: t('Settings'), sound: t('Sound settings'), dev: 'Dev Menu', help: t('How to play'), setup: t('Choose your controls') });
-const pageY = (y: number) => Math.round(book.y + (y - SPREAD.y) * book.h / SPREAD.h);
+const onScroll = () => props.setup && !props.options;
+const pageY = (y: number) => onScroll() ? y : Math.round(book.y + (y - SPREAD.y) * book.h / SPREAD.h);
+const bodyInk = () => onScroll() ? PARCHMENT_INK : INK;
+const smallInk = () => onScroll() ? PARCHMENT_INK : MUTED;
 const illustration = () => ({ ...ILLUSTRATION, y: pageY(ILLUSTRATION.y), h: pageY(ILLUSTRATION.y + ILLUSTRATION.h) - pageY(ILLUSTRATION.y) });
 
 function add(id: string, label: string, area: Rect, action: Hit['action'], level?: number) {
@@ -109,6 +117,7 @@ function row(id: string, label: string, baseline: number, action: () => void, op
   const x = opts.x ?? LEFT, w = opts.w ?? PAGE_W;
   const hot = !opts.disabled && (hover === id || focus === id);
   const { kind, hint } = opts;
+  const onPaper = onScroll() && (kind === 'choice' || kind === 'toggle');
   const area = { x, y: y - 11, w, h: hint ? 29 : 22 };
   if (!kind) {
     buttonPlate(left, area, hot, opts.primary ? 'green' : opts.danger ? 'red' : 'leather', opts.disabled);
@@ -117,7 +126,7 @@ function row(id: string, label: string, baseline: number, action: () => void, op
     const field = kind === 'field' || kind === 'select';
     left.fillStyle = field ? hot ? '#2d2016' : '#211510' : hot || opts.marked ? '#89644034' : '#0000';
     left.fillRect(x, area.y, w, area.h);
-    left.fillStyle = hot ? '#d8ac6c' : '#96704d83';
+    left.fillStyle = onPaper ? '#7643208e' : hot ? '#d8ac6c' : '#96704d83';
     left.fillRect(x, area.y + area.h - 1, w, 1);
     if (field) left.fillRect(x, area.y, w, 1);
     if (kind === 'field') {
@@ -127,18 +136,18 @@ function row(id: string, label: string, baseline: number, action: () => void, op
       left.fillRect(x + w - 21, y - 7, 1, 14);
       text(left, '›', x + w - 11, y, 16, RUBRIC, 'center', textFont, 14);
     } else if (kind === 'choice' || kind === 'toggle') {
-      left.strokeStyle = hot ? FOIL : '#b38758';
+      left.strokeStyle = onPaper ? PARCHMENT_RED : hot ? FOIL : '#b38758';
       if (kind === 'choice') {
         left.beginPath();
         left.arc(x + 9.5, y, 4.5, 0, Math.PI * 2);
         left.stroke();
       } else left.strokeRect(x + 4.5, y - 4.5, 9, 9);
-      if (opts.marked) sparkle(left, x + 9, y, 3, '#c99856');
+      if (opts.marked) sparkle(left, x + 9, y, 3, onPaper ? PARCHMENT_RED : '#c99856');
     } else if (!opts.disabled) {
       text(left, '›', x + 8, y, 13, RUBRIC, 'center', textFont, 14);
     }
   }
-  const color = opts.disabled ? '#947d68' : hot || opts.primary ? '#ffe7af' : INK;
+  const color = onPaper ? opts.disabled ? '#80573c' : PARCHMENT_INK : opts.disabled ? '#947d68' : hot || opts.primary ? '#ffe7af' : INK;
   const font = opts.wrap || hint || kind === 'field' || kind === 'entry' || kind === 'select' || label.length === 1 ? textFont : menuFont;
   const inset = kind === 'select' ? 8 : 17;
   const labelWidth = w - inset - (kind === 'select' ? 24 : kind === 'choice' && hint ? 18 : 5);
@@ -152,21 +161,23 @@ function row(id: string, label: string, baseline: number, action: () => void, op
     left.restore();
   } else {
     text(left, label, opts.compact ? x + w / 2 : x + inset, hint ? y - 2 : y, opts.compact ? 10 : hint ? 12 : 11, color,
-      opts.compact ? 'center' : 'left', font, opts.compact ? w - 5 : labelWidth);
+      opts.compact ? 'center' : 'left', font, opts.compact ? w - 5 : labelWidth, 400, onPaper ? PARCHMENT_SHADOW : undefined);
   }
   if (hint) text(left, hint, x + inset, y + 10, 9, MUTED, 'left', textFont, labelWidth);
   if (!opts.disabled) add(id, label, area, action);
 }
 function heading(title: string, kicker: string, x = LEFT_CENTER) {
-  text(left, kicker, x, pageY(69), 8, MUTED, 'center', textFont, PAGE_W);
-  text(left, title, x, pageY(87), 24, RUBRIC, 'center', titleFont, PAGE_W, 700);
+  const shadow = onScroll() ? PARCHMENT_SHADOW : undefined;
+  text(left, kicker, x, pageY(69), 8, smallInk(), 'center', textFont, PAGE_W, 400, shadow);
+  text(left, title, x, pageY(87), 24, onScroll() ? PARCHMENT_RED : RUBRIC, 'center', titleFont, PAGE_W, 700, shadow);
   left.fillStyle = '#ab794d8a';
   left.fillRect(x - 65, pageY(100), 130, 1);
   sparkle(left, x, pageY(100), 2, '#b5844f');
 }
-function lines(value: string, x: number, y: number, width: number, size = 13, limit = Infinity, drop = false, bottom = 285, color = INK) {
+function lines(value: string, x: number, y: number, width: number, size = 13, limit = Infinity, drop = false, bottom = 285, color = bodyInk()) {
   y = pageY(y);
   bottom = pageY(bottom);
+  const shadow = onScroll() ? PARCHMENT_SHADOW : undefined;
   let wrapped: string[];
   for (;;) {
     left.font = `${size}px ${textFont}`;
@@ -189,7 +200,7 @@ function lines(value: string, x: number, y: number, width: number, size = 13, li
       const inset = Math.ceil(left.measureText(visible[0]).width) + 1;
       text(left, visible[0], x, y - 1, 22, '#e89770', 'left', titleFont, width, 700);
       text(left, visible.slice(1), x + inset, y, size, color, 'left', textFont, width - inset);
-    } else text(left, visible, x, y + index * (size + 3), size, color, 'left', textFont, width);
+    } else text(left, visible, x, y + index * (size + 3), size, color, 'left', textFont, width, 400, shadow);
     written += content.length + 1;
   }
 }
@@ -207,7 +218,8 @@ function flip(next: Page, change?: () => void, forward = pages.indexOf(next) >= 
   choosingDevice = false;
   change?.();
   storyAt = time; revealAll = false;
-  turnAt = reduced.matches ? null : time;
+  turnAt = reduced.matches || onScroll() ? null : time;
+  if (onScroll()) scrollPageAt = time;
   props.music.bookSound('page');
   if (page === 'dev') void loadRooms();
   if (page === 'story') readChapter();
@@ -315,7 +327,8 @@ function slider(id: string, label: string, enabled: boolean, value: number, y: n
   left.fillStyle = enabled ? '#b77a45' : '#61504a'; left.fillRect(area.x, area.y + 6, Math.round(area.w * value), 3);
   const focused = focus === id + '-level' || hover === id + '-level';
   sparkle(left, area.x + Math.round(area.w * value), area.y + 7, focused ? 4 : 3, RUBRIC);
-  text(left, Math.round(value * 100) + '%', LEFT + 150, area.y + 7, 9, MUTED);
+  text(left, Math.round(value * 100) + '%', LEFT + 150, area.y + 7, 9, smallInk(),
+    'left', textFont, 40, 400, onScroll() ? PARCHMENT_SHADOW : undefined);
   add(id + '-level', label + ' ' + Math.round(value * 100) + '%', area, x => update(clamp((x - area.x) / area.w)), value);
 }
 async function importAudio(rom: boolean) {
@@ -348,7 +361,8 @@ function sound() {
     if (count > 1) {
       if (devicePage > 0) listFade(114, 121);
       if (devicePage + 1 < count) listFade(233, 227);
-      text(left, (devicePage + 1) + ' / ' + count, LEFT_CENTER, pageY(264), 10, MUTED, 'center');
+      text(left, (devicePage + 1) + ' / ' + count, LEFT_CENTER, pageY(264), 10, smallInk(),
+        'center', textFont, 55, 400, onScroll() ? PARCHMENT_SHADOW : undefined);
       row('devices-prev', '‹', 264, () => devicePage--, { x: LEFT + 121, w: 29, compact: true, disabled: devicePage === 0 });
       row('devices-next', '›', 264, () => devicePage++, { x: LEFT + 159, w: 29, compact: true, disabled: devicePage + 1 === count });
     }
@@ -374,6 +388,7 @@ function sound() {
       props.music.stopPreview();
       emit('finishSetup', selectedMode);
       flip('story');
+      startCover();
       if (!props.showPrologue) enterMenu();
     },
       { x: RIGHT + 79, w: 104, primary: true, compact: true, disabled: state.busy || state.renderer === 'mt32' && !state.available });
@@ -381,14 +396,15 @@ function sound() {
     row('remove-roms', t('Remove ROMs'), FOOT, () => void props.music.forgetRoms(), { x: RIGHT, disabled: state.busy });
   }
   const message = state.soundFontProgress !== undefined ? t('Loading SoundFont…') + ' ' + state.soundFontProgress + '%' : t(state.message);
-  if (message) lines(message, RIGHT, 226, PAGE_W, 11, Infinity, false, 254, RUBRIC);
+  if (message) lines(message, RIGHT, 226, PAGE_W, 11, Infinity, false, 254, onScroll() ? PARCHMENT_RED : RUBRIC);
 }
 function setup() {
   heading(t('Controls'), tr('FIRST START  ·  I / II', 'ПЕРВЫЙ ЗАПУСК  ·  I / II'));
   row('modern', t('Modern'), 128, () => selectedMode = 'modern', { kind: 'choice', marked: selectedMode === 'modern' });
   row('classic', t('Classic'), 154, () => selectedMode = 'classic', { kind: 'choice', marked: selectedMode === 'classic' });
   lines(tr('You can switch modes later in the book settings.', 'Режим можно сменить в настройках книги.'), LEFT, 192, PAGE_W, 12);
-  row('setup-next', tr('Sound settings ›', 'Далее: звук ›'), FOOT, () => flip('sound'), { primary: true });
+  if (touch) lines(tr('Swipe to move the cursor. Tap to select.', 'Свайп ведёт курсор, тап выбирает.'), LEFT, 229, PAGE_W, 11);
+  row('setup-next', tr('Sound settings ›', 'Далее: звук ›'), FOOT, () => flip('sound'), { primary: true, compact: true });
 }
 function saveLoad() {
   const saving = page === 'save';
@@ -522,12 +538,8 @@ function picture() {
     heading(title, tr('PREVIEW', 'ПРИМЕР'), RIGHT_CENTER);
     const { x, w } = ILLUSTRATION, h = Math.round(w * image.height / image.width);
     const r = { x, y: pageY(168) - Math.round(h / 2), w, h };
-    let print = prints.get(image)?.canvas;
-    if (!print) {
-      print = printPicture(image, r.w, r.h);
-      prints.set(image, { canvas: print });
-    }
-    pixels(left, print, r);
+    frame(left, r, true);
+    pixels(left, image, r);
     lines(modern
       ? tr('Full scene. Inventory: right-click, I, two-finger tap or hold.', 'Вся сцена на экране. Инвентарь: ПКМ, I, тап двумя пальцами или удержание.')
       : tr('The original inventory and menu sit below the scene.', 'Инвентарь и меню под сценой, как в оригинале.'), RIGHT + 3, 228, PAGE_W - 5, 12, Infinity, false, 268);
@@ -626,6 +638,10 @@ function paintPages() {
 function coverImage(r: Rect) {
   pixels(ctx, coverFace, r);
 }
+function closedBook() {
+  bookShadow(ctx, { x: COVER.x + 7, y: COVER.y + 4, w: COVER.w - 15, h: COVER.h - 13 });
+  coverImage(COVER);
+}
 function notice() {
   if (noticeMessage !== props.message) {
     noticeMessage = props.message;
@@ -666,17 +682,16 @@ function notice() {
   ctx.fillText(label, x + (w + 19) / 2, y + 10.5, w - 35);
   ctx.restore();
 }
-function coverButton(id: string, label: string, area: Rect, action: () => void, primary = false) {
+function coverButton(id: string, label: string, area: Rect, action: () => void, primary = false, fontSize = 11) {
   const { x, y, w, h } = area;
   const hot = !props.busy && (hover === id || focus === id);
   buttonPlate(ctx, area, hot, primary ? 'green' : 'leather', props.busy);
   sparkle(ctx, x + 11, y + h / 2, hot ? 2 : 1, '#bd8c50');
-  text(ctx, label, x + w / 2 + 4, y + h / 2, 11, props.busy ? MUTED : hot ? '#ffedbe' : FOIL, 'center', menuFont, w - 28);
+  text(ctx, label, x + w / 2 + 4, y + h / 2, fontSize, props.busy ? MUTED : hot ? '#ffedbe' : FOIL, 'center', menuFont, w - 28);
   if (!props.busy) add(id, label, area, action);
 }
 function cover() {
-  bookShadow(ctx, { x: COVER.x + 7, y: COVER.y + 4, w: COVER.w - 15, h: COVER.h - 13 });
-  coverImage(COVER);
+  closedBook();
   if (!reduced.matches && time % 3800 < 300) sparkle(ctx, 331, 231, 2, '#a9e1a1');
   const resume = props.latestSave && !props.setup;
   coverButton('cover', t('Open the book'), { x: resume ? 150 : 230, y: 292, w: resume ? 163 : 180, h: 27 }, startCover, true);
@@ -793,13 +808,59 @@ function paint(now: number) {
   time = now;
   hits = [];
   paintBook();
-  if (touch && !pendingEnter && !props.returning && (!props.options || ready) && pointerArt.naturalWidth) {
+  if (touch && !props.portrait && !pendingEnter && !props.returning && (!props.options || ready) && pointerArt.naturalWidth) {
     pixels(ctx, pointerArt, { x: touchCursor.x - 2, y: touchCursor.y - 2, w: 16, h: 20 });
+  }
+}
+function setupScroll() {
+  closedBook();
+  ctx.fillStyle = '#21130e66';
+  ctx.fillRect(view.x - 1, view.y - 1, view.w + 2, view.h + 2);
+  scrollAt ??= time;
+  const progress = reduced.matches ? 1 : ease((time - scrollAt) / 340);
+  unroll(ctx, art!.scroll, SETUP_SCROLL, progress);
+  if (progress < .82) return;
+  left.clearRect(view.x, view.y, view.w, view.h);
+  if (page === 'sound') sound();
+  else { setup(); picture(); }
+  ctx.globalAlpha = reduced.matches ? 1 : Math.min(clamp((progress - .82) / .18), clamp((time - scrollPageAt) / 150));
+  ctx.drawImage(left.canvas, view.x, view.y, view.w, view.h);
+  ctx.globalAlpha = 1;
+  if (progress < 1) hits = [];
+}
+function rotationScroll() {
+  rotateAt ??= time;
+  const progress = reduced.matches ? 1 : ease((time - rotateAt) / 300);
+  ctx.fillStyle = '#170d136a';
+  ctx.fillRect(view.x - 1, view.y - 1, view.w + 2, view.h + 2);
+  unroll(ctx, art!.scroll, ROTATE_SCROLL, progress);
+  if (progress < .9) return;
+  ctx.strokeStyle = PARCHMENT_RED;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(279.5, 84.5, 24, 43);
+  ctx.strokeRect(318.5, 114.5, 43, 24);
+  ctx.beginPath();
+  ctx.arc(317, 103, 16, -Math.PI / 2, 0);
+  ctx.lineTo(327, 97);
+  ctx.moveTo(333, 103);
+  ctx.lineTo(339, 97);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  text(ctx, t('Turn your device'), 320, 166, 32, PARCHMENT_RED, 'center', titleFont, 402, 700, PARCHMENT_SHADOW);
+  const description = locale.value === 'ru'
+    ? ['В Кирандию удобнее играть', 'в горизонтальном положении и на весь экран.']
+    : ['Kyrandia plays best in landscape', 'and full screen.'];
+  description.forEach((line, index) => text(ctx, line, 320, 194 + index * 20, 18, PARCHMENT_INK, 'center', textFont, 424, 400, PARCHMENT_SHADOW));
+  if (props.fullscreenAvailable) {
+    const label = t(props.isFullscreen ? 'Exit full screen' : 'Full screen');
+    coverButton('rotate-fullscreen', label, { x: 163, y: 231, w: 314, h: 52 }, () => emit('fullscreen'), true, 16);
+  } else {
+    text(ctx, t('Full screen is unavailable in this browser.'), 320, 258, 13, PARCHMENT_INK, 'center', textFont, 398, 400, PARCHMENT_SHADOW);
   }
 }
 function paintBook() {
   if (!art) {
-    if (props.options && !loadFailed) return;
+    if ((props.options || props.orientationOnly) && !loadFailed) return;
     ctx.fillStyle = '#200f11'; ctx.fillRect(view.x - 1, view.y - 1, view.w + 2, view.h + 2);
     text(ctx, t(loadFailed ? 'Try again' : 'Preparing your story…'), 320, 177, 13, FOIL, 'center');
     if (loadFailed) add('retry', t('Try again'), { x: 220, y: 151, w: 200, h: 52 }, () => void prepare());
@@ -807,20 +868,23 @@ function paintBook() {
   }
   const motion = reduced.matches ? 0 : time;
   const openProgress = props.options ? 1 : coverAt === null ? 0 : reduced.matches ? 1 : clamp((time - coverAt) / 490);
-  desk(ctx, art, motion, view, openProgress);
-  showCredit.value = !props.options && coverAt === null && !props.portrait;
+  showCredit.value = !props.options && !onScroll() && coverAt === null && !props.portrait;
   if (props.portrait) {
-    const panel = { x: 139, y: 96, w: 362, h: 168 };
-    frame(ctx, panel, true);
-    text(ctx, t('Turn your device'), 320, 139, 25, FOIL, 'center', textFont, 325);
-    text(ctx, t('Kyrandia plays best in landscape and full screen.'), 320, 179, 13, FOIL, 'center', textFont, 330);
-    if (props.fullscreenAvailable) {
-      const label = t(props.isFullscreen ? 'Exit full screen' : 'Full screen');
-      const area = { x: 220, y: 204, w: 200, h: 36 };
-      coverButton('rotate-fullscreen', label, area, () => emit('fullscreen'), true);
+    ctx.clearRect(view.x - 1, view.y - 1, view.w + 2, view.h + 2);
+    if (!props.orientationOnly) {
+      ctx.save();
+      ctx.filter = 'blur(6px)';
+      desk(ctx, art, motion, view, openProgress);
+      if (openProgress === 1) pixels(ctx, art.spread, book);
+      else closedBook();
+      ctx.restore();
     }
+    rotationScroll();
     return;
   }
+  rotateAt = undefined;
+  desk(ctx, art, motion, view, openProgress);
+  if (onScroll()) { setupScroll(); return; }
   if (!props.options && coverAt === null) {
     cover();
     return;
@@ -889,6 +953,10 @@ watch(() => props.options, options => {
   ready = true;
   emit('ready');
 });
+watch(() => props.portrait, portrait => {
+  canvasLabel.value = portrait ? t('Turn your device') : onScroll() || coverAt !== null || props.options
+    ? names()[page] : t('Fables and Fiends, Book One');
+});
 onMounted(() => {
   function resize() {
     const target = canvas.value!;
@@ -911,7 +979,7 @@ onMounted(() => {
   resize();
   canvasSize = new ResizeObserver(resize);
   canvasSize.observe(canvas.value!);
-  canvasLabel.value = t('Fables and Fiends, Book One');
+  canvasLabel.value = props.portrait ? t('Turn your device') : onScroll() ? names().setup : t('Fables and Fiends, Book One');
   canvas.value!.focus({ preventScroll: true });
   renderFrame = requestAnimationFrame(paint);
   void prepare();
@@ -964,7 +1032,8 @@ function leave(event: PointerEvent) { if (event.pointerType === 'mouse') hover =
 function press(event: PointerEvent) {
   if (event.button !== 0) return;
   touch = event.pointerType !== 'mouse';
-  if (touch) {
+  if (touch && props.portrait) activate(point(event));
+  else if (touch) {
     if (!event.isPrimary) { cancelPress(); return; }
     touchDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, travel: 0 };
     canvas.value?.setPointerCapture(event.pointerId);
