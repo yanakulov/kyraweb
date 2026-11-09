@@ -1,9 +1,11 @@
 <template>
-  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane }" ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()" @pointermove.capture="rememberMouse" @pointerover.capture="menuHover" @click.capture="menuClick">
+  <main class="app" :class="{ 'book-is-closed': !bookOpened, 'is-modern': gameViewHeight === ROOM_VIEW_HEIGHT, 'is-cinematic': cinematicPlane }"
+    :style="cinematicArt ? { '--cinematic-ratio': cinematicArt.w / cinematicArt.h } : undefined"
+    ref="appRef" @pointerdown.capture="music.unlock()" @keydown.capture="music.unlock()" @pointermove.capture="rememberMouse" @pointerover.capture="menuHover" @click.capture="menuClick">
     <PixelBook v-if="pixelBook && (!bookOpened || bookSnapshot)" ref="openingBook"
       :options="!!bookSnapshot" :main-menu="kallakMenu" :game-over="gameOver" :can-save="canSave" :busy="bookBusy"
       :returning="bookReturning" :message="bookMessage" :initial-view="bookInitialView" :setup="firstRun"
-      :latest-save="!!latestSave" :seen-prologue="prologueSeen" :location="locationName"
+      :latest-save="!!latestSave" :location="locationName" :film-bounds="cinematicArt ?? undefined"
       :snapshot="bookSnapshot ?? openingSnapshot ?? undefined" :game-canvas="canvasRef ?? undefined"
       :focus="bookFocus" :opening-ready="openingFrameReady || !!openingSnapshot || !!gameError" :portrait="mobilePortrait"
       :slots="bookSlots" :dev-scene="activeDevScene" :dev-finished="devFinished"
@@ -288,8 +290,9 @@ const introSteps = buildIntroSteps();
 let introRunId = 0;
 let subtitleResizeObserver: ResizeObserver | null = null;
 const currentIntroStep = ref(introSteps[0]?.id ?? "");
+const cinematicArt = computed(() => introActive.value ? introArtBounds(currentIntroStep.value) : openingScene.value ? ROOM_ART : null);
 const cinematicPlane = computed(() => {
-  const art = introActive.value ? introArtBounds(currentIntroStep.value) : openingScene.value ? ROOM_ART : null;
+  const art = cinematicArt.value;
   return art ? { left: `${-art.x / art.w * 100}%`, top: `${-art.y / art.h * 100}%`,
     width: `${LOGICAL_WIDTH / art.w * 100}%`, height: `${gameViewHeight.value / art.h * 100}%` } : undefined;
 });

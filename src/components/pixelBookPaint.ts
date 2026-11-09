@@ -1,18 +1,21 @@
 import { withBase } from '../engine/core/assets';
+import { IndexedClip, loadScenePack } from '../engine/resources/scenePack';
+import { buildIndexedCanvas } from '../engine/rendering/indexedRenderer';
+import { ROOM_ART } from '../engine/core/constants';
 
 export const WIDTH = 640, HEIGHT = 360;
-export const SPREAD = { x: 42, y: 24, w: 548, h: 310 };
-export const COVER = { x: 212, y: 22, w: 216, h: 300 };
-export const ILLUSTRATION = { x: 343, y: 103, w: 184, h: 138 };
-export const GOLD = '#f0ca82', INK = '#e2c7a4', MUTED = '#ba9774';
+export const SPREAD = { x: 104, y: 42, w: 432, h: 264 };
+export const COVER = { x: 212, y: SPREAD.y, w: SPREAD.w / 2, h: SPREAD.h };
+export const ILLUSTRATION = { x: 339, y: 118, w: 165, h: 115 };
+export const RUBRIC = '#6b3625', INK = '#2b1b12', MUTED = '#5b4331', FOIL = '#f1d198';
 export type Rect = { x: number; y: number; w: number; h: number };
-export type Art = Record<'desk' | 'spread' | 'cover' | 'miniature' | 'bookmark' | 'title' | 'modern' | 'classic' | 'studio', HTMLImageElement>;
+export type Art = Record<'desk' | 'spread' | 'cover' | 'bookmark' | 'modern' | 'classic' | 'studio', HTMLImageElement>;
 type Point = { x: number; y: number };
 
 export async function loadBookArt(): Promise<Art> {
   const files = {
-    desk: 'pixel-book/desk.webp', spread: 'pixel-book/spread.webp', cover: 'pixel-book/cover.webp',
-    miniature: 'pixel-book/miniature.webp', bookmark: 'pixel-book/bookmark.webp', title: 'kyrandia-title.webp',
+    desk: 'pixel-book/desk.webp', spread: 'pixel-book/spread.webp', cover: 'book-cover.webp',
+    bookmark: 'pixel-book/bookmark.webp',
     modern: 'controls-modern.webp', classic: 'controls-classic.webp', studio: 'akulaflow-studio.webp',
   };
   const entries = await Promise.all(Object.entries(files).map(async ([key, file]) => {
@@ -24,13 +27,68 @@ export async function loadBookArt(): Promise<Art> {
   return Object.fromEntries(entries) as Art;
 }
 
-export function surface() {
-  const canvas = document.createElement('canvas');
-  canvas.width = WIDTH;
-  canvas.height = HEIGHT;
+export function surface(scale: number, canvas = document.createElement('canvas')) {
+  canvas.width = Math.round(WIDTH * scale);
+  canvas.height = Math.round(HEIGHT * scale);
   const ctx = canvas.getContext('2d')!;
+  ctx.scale(canvas.width / WIDTH, canvas.height / HEIGHT);
   ctx.imageSmoothingEnabled = false;
   return ctx;
+}
+
+const chapterFrames = [
+  ['shore', 'shore', 0],
+  ['tree2', 'tree2', 5],
+  ['kallak-room', 'room', 0],
+  ['kallak-writing', 'writing', 14],
+] as const;
+
+export async function loadChapterFrame(chapter: number) {
+  const [file, name, index] = chapterFrames[chapter];
+  const pack = await loadScenePack(withBase('assets/packs/' + file + '.kyr.gz'));
+  const clip = pack.clips[name];
+  if (!clip) throw new Error('Original chapter artwork is missing');
+  const image = buildIndexedCanvas(clip, new IndexedClip(pack, clip).frame(Math.min(index, clip.frames.length - 1)));
+  return file === 'kallak-room' ? cropFrame(image, ROOM_ART) : image;
+}
+
+export function cropFrame(source: HTMLCanvasElement | HTMLImageElement, bounds: Rect) {
+  const image = document.createElement('canvas');
+  image.width = bounds.w;
+  image.height = bounds.h;
+  image.getContext('2d')!.drawImage(source, bounds.x, bounds.y, bounds.w, bounds.h, 0, 0, bounds.w, bounds.h);
+  return image;
+}
+
+// Turn the original scene into a four-tone print. In the margins the real paper shows through.
+export function printPicture(source: HTMLImageElement | HTMLCanvasElement, width: number, height: number, focus?: Point) {
+  const print = document.createElement('canvas');
+  print.width = width;
+  print.height = height;
+  const ctx = print.getContext('2d', { willReadFrequently: true })!;
+  ctx.imageSmoothingEnabled = false;
+  photo(ctx, source, { x: 0, y: 0, w: width, h: height }, focus);
+  const image = ctx.getImageData(0, 0, width, height), pixels = image.data;
+  const tone = new Uint8Array(width * height);
+  let low = 255, high = 0;
+  for (let i = 0; i < tone.length; i++) {
+    const v = Math.round(pixels[i * 4] * .299 + pixels[i * 4 + 1] * .587 + pixels[i * 4 + 2] * .114);
+    tone[i] = v;
+    low = Math.min(low, v);
+    high = Math.max(high, v);
+  }
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = y * width + x, d = i * 4;
+    const value = tone[i], normalized = clamp((value - low) / Math.max(80, high - low));
+    const edge = Math.abs(value - (tone[i - 1] ?? value)) + Math.abs(value - (tone[i - width] ?? value));
+    const wash = Math.round((1 - normalized) * 4) / 4;
+    const margin = Math.min(x, y, width - x - 1, height - y - 1);
+    const feather = clamp((margin - ((x * 13 + y * 17) % 7) / 4) / 5);
+    pixels[d] = 58; pixels[d + 1] = 39; pixels[d + 2] = 28;
+    pixels[d + 3] = Math.round((wash * 196 + Math.min(59, edge)) * feather);
+  }
+  ctx.putImageData(image, 0, 0);
+  return print;
 }
 
 export function bookmarkPalette(source: HTMLImageElement) {
@@ -94,7 +152,7 @@ export function frame(ctx: CanvasRenderingContext2D, r: Rect, bright = false) {
 }
 
 export function text(ctx: CanvasRenderingContext2D, label: string, x: number, y: number, size = 11, color = INK,
-  align: CanvasTextAlign = 'left', font = 'Kyrandia, Georgia, serif', width = 200) {
+  align: CanvasTextAlign = 'left', font = 'Georgia, serif', width = 200) {
   ctx.font = `${size}px ${font}`;
   const minimum = Math.min(size, 9);
   while (size > minimum && ctx.measureText(label).width > width) ctx.font = `${--size}px ${font}`;
@@ -105,8 +163,6 @@ export function text(ctx: CanvasRenderingContext2D, label: string, x: number, y:
   }
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#140b0a';
-  ctx.fillText(label, x, y + 1);
   ctx.fillStyle = color;
   ctx.fillText(label, x, y);
 }
@@ -123,19 +179,19 @@ export function desk(ctx: CanvasRenderingContext2D, art: Art, time: number) {
   pixels(ctx, art.desk, { x: 0, y: 0, w: WIDTH, h: HEIGHT });
   const flame = Math.floor(time / 90);
   const flicker = Math.sin(flame * .85) + Math.sin(flame * 1.89);
-  const glow = ctx.createRadialGradient(48, 27, 3, 48, 27, 124);
-  glow.addColorStop(0, `rgba(255,180,78,${.20 + flicker * .035})`);
+  const glow = ctx.createRadialGradient(61, 73, 3, 61, 73, 112);
+  glow.addColorStop(0, `rgba(255,180,78,${.13 + flicker * .026})`);
   glow.addColorStop(1, '#f0913500');
   ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, 177, 152);
+  ctx.fillRect(0, 0, 176, 186);
   ctx.fillStyle = '#ffdc8b';
-  ctx.fillRect(48 + Math.round(flicker), 16 + Math.round(flicker), 2, 9 - Math.round(flicker));
+  ctx.fillRect(61 + Math.round(flicker), 66 + Math.round(flicker), 2, 7 - Math.round(flicker));
   ctx.fillStyle = '#fff0be';
-  ctx.fillRect(48, 23, 2, 5);
+  ctx.fillRect(60, 71, 2, 4);
   for (let i = 0; i < 5; i++) {
     const phase = ((time / 2800 + i * .183) % 1);
-    const x = 43 + i * 11 + Math.round(Math.sin(phase * 7 + i) * 6);
-    const y = 24 - Math.round(phase * 26);
+    const x = 49 + i * 6 + Math.round(Math.sin(phase * 7 + i) * 6);
+    const y = 70 - Math.round(phase * 24);
     ctx.globalAlpha = Math.sin(phase * Math.PI) * .58;
     ctx.fillStyle = i % 2 ? '#f0bf78' : '#ffdb95';
     ctx.fillRect(x, y, 1, 1);
@@ -154,11 +210,12 @@ export function bookShadow(ctx: CanvasRenderingContext2D, r: Rect) {
 
 // Strip projections keep the previous page's type and illustration attached to the turning leaf.
 export function turnLeaf(ctx: CanvasRenderingContext2D, outgoing: HTMLCanvasElement, incoming: HTMLCanvasElement, progress: number, forward: boolean) {
-  const hinge = 316, width = 232, top = 47, height = 243;
+  const hinge = WIDTH / 2, width = 192, top = SPREAD.y + 15, height = SPREAD.h - 31;
   const angle = progress * Math.PI, face = Math.cos(angle), arch = Math.sin(angle);
   const side = forward ? 1 : -1;
   const sourceSide = face >= 0 ? side : -side;
   const source = face >= 0 ? outgoing : incoming;
+  const sx = source.width / WIDTH, sy = source.height / HEIGHT;
   const direction = face >= 0 ? side : -side;
   ctx.fillStyle = `rgba(10,5,3,${arch * .42})`;
   ctx.fillRect(direction === 1 ? hinge : hinge - width, top, width, height);
@@ -169,7 +226,7 @@ export function turnLeaf(ctx: CanvasRenderingContext2D, outgoing: HTMLCanvasElem
     const shift = Math.round((bend * 14 + arch * 9) * u);
     const src = sourceSide === 1 ? hinge + offset : hinge - offset - 4;
     const x = direction === 1 ? dest : dest - destWidth;
-    ctx.drawImage(source, src, top, 4, height, x, top - shift, destWidth, height + shift * 2);
+    ctx.drawImage(source, src * sx, top * sy, 4 * sx, height * sy, x, top - shift, destWidth, height + shift * 2);
     ctx.fillStyle = `rgba(250,193,110,${arch * (.06 + u * .16)})`;
     ctx.fillRect(x, top - shift, destWidth, height + shift * 2);
   }
