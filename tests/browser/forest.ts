@@ -514,6 +514,10 @@ document.querySelector('#shadow')!.addEventListener('click', async () => {
     await reload(validateWorldSave(game.getSaveState()));
     if (!game.getSnapshot().wispMs) throw Error('A saved wisp reverted early');
 
+    await visit(113);
+    expectScore(18);
+    await travel(175);
+    expectScore(17);
     await visit(117);
     const beforeLava = validateWorldSave(game.getSaveState());
     await click(160, 6);

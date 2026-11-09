@@ -19,7 +19,7 @@ function environment(saved: string | null, delayed = false, host = 'localhost', 
     async close() { this.state = 'closed'; }
     async suspend() { this.state = 'suspended'; }
     createGain() { return { gain: { value: 0, setTargetAtTime() {} }, connect() { return this; }, disconnect() {} }; }
-    async decodeAudioData() { return { duration: 3 }; }
+    async decodeAudioData() { this.currentTime += .6; return { duration: 3 }; }
     createBufferSource() { return { connect() {}, disconnect() {}, stop() { audio.stopped++; }, start: (...args: number[]) => audio.clips.push(args) }; }
   }
   class FakeNode {
@@ -149,6 +149,13 @@ test('a fresh browser plays AdLib music and intro effects without ROMs or SF2', 
     for (let i = 0; i < 20 && env.audio.adlibTracks.length < 2; i++) await new Promise(resolve => setTimeout(resolve, 5));
     assert.deepEqual(env.audio.adlibTracks.at(-1), ['KYRA1B', 2]);
     assert.equal(env.audio.adlibTracks.length, 2, 'superseded cue never reaches the worklet');
+    player.restoreRoom(8);
+    for (let i = 0; i < 20 && env.audio.adlibTracks.length < 3; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    player.restoreRoom(10);
+    for (let i = 0; i < 20 && env.audio.adlibTracks.length < 4; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    player.fade(); player.wander(2);
+    for (let i = 0; i < 20 && env.audio.adlibTracks.length < 5; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.deepEqual(env.audio.adlibTracks.slice(2), [['KYRA1B', 4], ['KYRA1A', 3], ['KYRA1A', 3]]);
     assert.ok(env.audio.requests.every(url => !/\.ROM|\.sf2|\.xmi\./i.test(url)), 'AdLib only needs its own banks');
     player.intro('westwood'); player.setEnabled(false);
     player.effect(25);
@@ -177,7 +184,7 @@ test('the real AdLib WASM plays the title, forest and Timbermist score changes',
     for (let i = 0; i < 4; i++) synth.render(left, right);
     return Math.sqrt(left.reduce((sum, sample) => sum + sample * sample, 0) / left.length);
   }
-  const title = signal('INTRO', 2), forest = signal('KYRA1B', 2);
+  const title = signal('INTRO', 2), forest = signal('KYRA1A', 3);
   assert.ok(title > .002 && forest > .002 && title !== forest);
   const timbermist = [2, 3, 4, 6, 7, 2].map(track => signal('KYRA2A', track));
   assert.ok(timbermist.every(rms => rms > .002), 'the forest, Darm, songbird and Malcolm cues all reach the synth');

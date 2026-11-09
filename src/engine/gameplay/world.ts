@@ -3,7 +3,8 @@ import { loadImage, withBase } from "../core/assets";
 import { IndexedClip, loadScenePack, type ScenePack } from "../resources/scenePack";
 import { isWalkable } from "../scene/masks";
 import type { GameConfig, MaskData, RoomPortal, RoomSnapshot, SceneItem, SceneMeta, Vec2, WorldSave } from "../core/types";
-import { isShadowrealmRoom, isWorldRoomId, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
+import { isWorldRoomId, PURPLE_JEWEL_FLAG, PURPLE_JEWEL_POS, YELLOW_JEWEL_FLAG, YELLOW_JEWEL_POS } from '../core/constants';
+import { roomMusicCommand } from '../audio/cues';
 import type { RoomAction } from "./roomScript";
 import { createForestState, traceForest, applyForestState, loadForestData, originalItem, itemFromOriginal,
   ageFireberry, canScatterGemsIn, curePoison, poisonArrival, scatterGem, groveGems, transformWisp } from './forest';
@@ -11,7 +12,6 @@ import { validateWorldSave } from './saveStorage';
 import { findSpawnDestination } from './drops';
 
 export const SIDES = ["north", "east", "south", "west"] as const;
-const EXIT_FACING = { north: 0, east: 2, south: 4, west: 6 };
 const scatteredGemIds = new Set([...groveGems, 1, 8]);
 export type CursorTrack = Pick<RoomPortal, "side" | "rect">;
 export type WorldRoom = SceneMeta & { id: number; name: string; title: string; exits: (number | null)[];
@@ -98,6 +98,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   // Saves from before Timbermist have not initialized the four unpicked acorns.
   if (restored && !restored.rooms[31]) for (const flag of [72, 73, 74, 75]) quest.flags.add(flag);
   let active = true, busy = false, paused = config.paused ?? false, currentId = restored?.currentRoom ?? 0, current: RoomGame;
+  let pointer: Vec2 | null = null;
   let tokenCounter = 0, callbackOwner = 0;
   const saved = new Map<number, RoomSnapshot>(restored ? Object.entries(restored.rooms).map(([id, room]) => [Number(id), room]) : []);
   const settings = { atmosphere: restored?.settings.atmosphere ?? true, walkSpeed: restored?.settings.walkSpeed ?? "fast", interval: restored?.settings.animStepInterval ?? 1,
@@ -205,18 +206,16 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     if (from && from.id !== 'phase' && quest.poison) {
       entryActions = [...(entryActions ?? []), ...poisonArrival(quest.poison, snapshot.pos, forest.flute.durations)];
     }
-    // A destination cue wins. Otherwise use the departing room's EMC score or the shared forest theme.
+    // A room without its own cue returns to its area's score after special scenes.
     if (from && from.id !== 'phase' && previous !== undefined &&
         ![...setupActions, ...(entryActions ?? [])].some(action => action.op === 'music' && action.command !== 1)) {
-      const departing = roomSource(previous).questRoom;
-      const leaving = departing && shared && traceForest(departing, 5, quest, { ...shared, facing: EXIT_FACING[from.side] });
-      const score = leaving && leaving.actions.filter(action => action.op === 'music' && action.command !== 1).at(-1);
-      setupActions.push(score || { op: 'music',
-        command: id === 38 ? 21 : isShadowrealmRoom(id) ? snapshot.wispMs ? 17 : 3 : id >= 17 ? 11 : 2, restart: false });
+      setupActions.push({ op: 'music', command: roomMusicCommand(id, !!snapshot.wispMs), restart: false });
     }
     const token = ++tokenCounter, oldOwner = callbackOwner;
     callbackOwner = token;
     let game: RoomGame;
+    let ready = false;
+    const setupMusic: RoomAction[] = [];
     let transitionImage: HTMLCanvasElement | undefined;
     if (from?.id === 'phase') {
       transitionImage = document.createElement('canvas');
@@ -269,7 +268,16 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
         const healing = questRoom && traceForest(questRoom, 4, quest, snapshot);
         return [...pressed, ...(healing && healing.handled ? healing.actions : [say('Gee, this could come in handy if I get hurt.', 2003, 1810)])];
       },
-      onScriptAction: action=>{applyForestState(quest,action);if(action.op==='mask')changeMask(action);if(active&&callbackOwner===token)config.onScriptAction?.(action.op === 'say' && !action.voiceBank ? { ...action, voiceBank: meta.name } : action);},
+      onScriptAction: action => {
+        applyForestState(quest, action);
+        if (action.op === 'mask') changeMask(action);
+        if (!active || callbackOwner !== token) return;
+        if (!ready && action.op === 'music') setupMusic.push(action);
+        else config.onScriptAction?.(action.op === 'say' && !action.voiceBank ? { ...action, voiceBank: meta.name } : action);
+      },
+      onVoice: (bank, voiceId) => {
+        if (active && callbackOwner === token) return config.onVoice?.(bank, voiceId);
+      },
       onActorInteract: snapshot => {
         const { itemInHand, pos } = snapshot;
         if (itemInHand === 'item-55' || id === 117 && itemInHand === 'item-80') {
@@ -299,6 +307,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       } },
       onSubtitleChange: lines => { if (active && callbackOwner === token) config.onSubtitleChange?.(lines); }
     }); } catch (error) { callbackOwner = oldOwner; throw error; }
+    ready = true;
+    if (active) for (const action of setupMusic) config.onScriptAction?.(action);
     game.setAtmosphere(settings.atmosphere); game.setWalkSpeed(settings.walkSpeed);
     game.setAnimStepInterval(settings.interval); game.setDebug(settings.debug);
     if (unplaced.length) quest.scatteredGems[id] = unplaced;
@@ -313,6 +323,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
       const next = await load(portal.target, portal, currentId);
       if (!active) { next.game.stop(); return; }
       current.stop(); current = next.game; currentId = portal.target;
+      current.setControlMode(config.controlMode ?? 'classic');
+      current.setPointer(pointer);
       config.onLocationChange?.(next.meta.title, currentId, next.meta.name);
       config.onNavigationError?.("");
       prepareNeighbours(next.portals);
@@ -338,7 +350,7 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
   return {
     setTarget: point => { if (!busy && !paused) current.setTarget(point); },
     handleClick: point => busy || paused || current.handleClick(point),
-    setPointer: point => current.setPointer(point),
+    setPointer: point => { pointer = point; current.setPointer(point); },
     setControlMode: mode => { config.controlMode = mode; current.setControlMode(mode); },
     setInventoryOpen: value => !busy && current.setInventoryOpen(value),
     getInventoryOpen: () => current.getInventoryOpen(),

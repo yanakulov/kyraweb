@@ -596,8 +596,14 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           scene.uiMaskY + (modern ? -13 : 8), modern ? ROOM_ART.x + ROOM_ART.w : LOGICAL_WIDTH, statusSurface);
       }
       if (statusSurface) statusSurface.hidden = !statusText;
-      if (!heldOverRadial && state.itemInHand && state.pointer && !exitCursor(availablePortals(), state.pointer))
-        drawHeldItem(ctx, state.pointer, INVENTORY_ICON_SIZE);
+      if (!heldOverRadial && state.itemInHand && state.pointer && !exitCursor(availablePortals(), state.pointer, modern)) {
+        const bounds = modern ? ROOM_ART : { x: 0, y: 0, w: LOGICAL_WIDTH, h: LOGICAL_HEIGHT };
+        const half = INVENTORY_ICON_SIZE / 2;
+        drawHeldItem(ctx, {
+          x: Math.max(bounds.x + half, Math.min(bounds.x + bounds.w - half, state.pointer.x)),
+          y: Math.max(bounds.y + half, Math.min(bounds.y + bounds.h - half, state.pointer.y)),
+        }, INVENTORY_ICON_SIZE);
+      }
 
       if (debug.showMask && maskCanvas) {
         ctx.save();
@@ -766,8 +772,6 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
         const actions=config.onInteract?.(point,getSnapshot());
         if(actions){playScript(actions);return true;}
       }
-      // A blocked edge can still be a scripted hotspot, as on the ruined bridge.
-      if (exitCursor(availablePortals(), point) === 'blocked') { stopWalking(); return true; }
       const sceneItemIndex = point.y < scene.uiMaskY ? findSceneItemAt(point, state.sceneItems) : -1;
       if (sceneItemIndex === -1 && point.y < scene.uiMaskY && isPointOnBrandon(point)) {
         const actions = config.onActorInteract?.(getSnapshot());
@@ -805,6 +809,8 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           return true;
         }
       }
+      // Closed edges can still contain scripted hotspots and loose items.
+      if (exitCursor(availablePortals(), point, modern) === 'blocked') { stopWalking(); return true; }
       if (state.itemInHand) {
         stopWalking();
         if(noDropRegions.some(r=>point.x>=r.x&&point.x<r.x+r.w&&point.y>=r.y&&point.y<r.y+r.h)){soundEffect(54);return true;}
@@ -1021,6 +1027,11 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
       sequenceDone = done ?? null;
       config.onSequenceChange?.(true);
       sequence = new RoomScript(actions, { apply: applyScript, walking: () => state.moving || ambientWait !== null,
+        startVoice: line => {
+          const bank = line.voiceBank ?? (scene.opening && (backgroundName === 'trunk' || backgroundName === 'gem')
+            ? backgroundName.toUpperCase() : config.roomResource);
+          if (bank && !skippingOpening) return config.onVoice?.(bank, line.voiceId);
+        },
         movementTempo: () => state.walkDelayTicks / 6,
         frames: name => scriptRenderers.get(name)?.clip.info.frames.length ?? 0 });
       if (!paused && startImmediately) sequence.update(0);
@@ -1049,6 +1060,7 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
     }
 
     function setControlMode(mode: ControlMode) {
+      if (modern === (mode === 'modern')) return;
       modern = mode === 'modern';
       inventoryOpen = false;
       resizeCanvas();

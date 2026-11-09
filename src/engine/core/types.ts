@@ -27,6 +27,7 @@ export type GameConfig = {
   onInteract?: (point: Vec2, snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[] | null;
   onActorInteract?: (snapshot: RoomSnapshot) => import("../gameplay/roomScript").RoomAction[] | null;
   onScriptAction?: (action: import("../gameplay/roomScript").RoomAction) => void;
+  onVoice?: (bank: string, id: number) => Promise<void> | undefined;
   onDeath?:()=>void;
   onCheckpoint?: () => void;
   onContinueChange?: (waiting: boolean) => void;
