@@ -406,3 +406,64 @@ test("the note confirmation blocks later quest changes and cancellation cannot r
   script.update(10000);
   assert.ok(!applied.some((a) => a.op === "flag"));
 });
+
+test('Faeriewood uses fresh blueberries, the hidden cellar and the original potion recipes', () => {
+  const q = quest();
+  for (const flag of [159, 161, 165, 166, 169, 171]) q.state.flags.add(flag);
+  assert.equal(q.run('FALLS', 1, 248, 60).handled, true);
+  assert.equal(q.snapshot.itemInHand, 'item-40');
+  assert.ok(q.state.flags.has(189));
+  assert.ok(!q.state.flags.has(172));
+  assert.ok(q.run('POTION', 3).actions.some(action => action.op === 'say' && action.text === 'Zanthia?'));
+  q.run('POTION', 1, 188, 76);
+  assert.equal(q.state.cauldron, 2);
+  assert.equal(q.snapshot.itemInHand, null);
+  q.run('POTION', 1, 236, 112);
+  assert.ok(q.state.flags.has(194));
+  assert.ok(q.run('POTION', 1, 252, 114).actions.some(action => action.op === 'exit' && action.target === 80));
+  assert.ok(q.run('STUMP', 2).actions.some(action => action.op === 'frame' && action.clip === 'ctrap2'));
+  assert.ok(q.run('STUMP', 1, 184, 108).actions.some(action => action.op === 'exit' && action.target === 45));
+
+  q.run('LAGOON', 1, 80, 100);
+  assert.equal(q.snapshot.itemInHand, 'item-18');
+  q.snapshot.itemInHand = null;
+  q.run('SPRING', 1, 264, 86);
+  assert.equal(q.snapshot.itemInHand, 'item-17');
+
+  for (const [first, second, state, potion] of [
+    ['item-40', 'item-8', 3, 'item-62'],
+    ['item-18', 'item-6', 6, 'item-60'],
+    ['item-17', 'item-4', 9, 'item-64'],
+  ] as const) {
+    q.snapshot.itemInHand = first;
+    q.run('POTION', 1, 188, 76);
+    q.snapshot.itemInHand = second;
+    q.run('POTION', 1, 188, 76);
+    assert.equal(q.state.cauldron, state);
+    const initial = q.run('POTION', 0).actions;
+    assert.ok(initial.some(action => action.op === 'palette' && action.start === 241));
+    q.snapshot.itemInHand = 'item-78';
+    q.run('POTION', 1, 188, 76);
+    assert.equal(q.snapshot.itemInHand, potion);
+  }
+});
+
+test('the Crystals of Alchemy retain the first ingredient and clear both after a reaction', () => {
+  for (const [left, right, result] of [
+    ['item-60', 'item-62', 'item-68'],
+    ['item-60', 'item-64', 'item-67'],
+    ['item-62', 'item-64', 'item-66'],
+  ] as const) {
+    const q = quest();
+    q.snapshot.itemInHand = left;
+    q.run('MIX', 1, 146, 80);
+    assert.equal(q.snapshot.itemInHand, null);
+    assert.deepEqual(q.state.crystals, [Number(left.slice(5)), -1]);
+    assert.ok(q.run('MIX', 0).actions.some(action => action.op === 'shape'));
+    q.snapshot.itemInHand = right;
+    const mixing = q.run('MIX', 1, 180, 80).actions;
+    assert.ok(mixing.some(action => action.op === 'frame' && action.clip === 'mixrox'));
+    assert.equal(q.snapshot.itemInHand, result);
+    assert.deepEqual(q.state.crystals, [-1, -1]);
+  }
+});

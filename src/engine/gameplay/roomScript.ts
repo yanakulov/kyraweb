@@ -41,6 +41,8 @@ export type RoomAction =
   | { op: "flag"; flag: number; value: boolean }
   | { op: "scatterGem"; item: number; room: number }
   | { op: "poison"; crossings: number }
+  | { op: "cauldron"; state: number }
+  | { op: "crystal"; slot: 0 | 1; item: number }
   | { op: "wisp"; ms: number }
   | { op: "heroFrame"; clip?: string; index?: number }
   | { op: "ambientPosition"; index: number; x: number; y: number }

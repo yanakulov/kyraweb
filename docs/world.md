@@ -1,6 +1,6 @@
 # Forest regions
 
-The playable CD quest chain runs from Brandon’s home through Shadowrealm to Zanthia’s request for blueberries in Faeriewood.
+The playable CD quest chain runs from Brandon’s home through Shadowrealm to Zanthia’s cauldron and the Crystals of Alchemy in Faeriewood.
 
 | ID | Original resource | Location |
 | --- | --- | --- |
@@ -24,7 +24,8 @@ The playable CD quest chain runs from Brandon’s home through Shadowrealm to Za
 | 17–36 | Timbermist Woods | CAVEB and the paths, huts, clearings, and landmarks beyond it |
 | 109–198 | Shadowrealm | The mineral pool, maze, iron grate, moonlight altar, chasm and volcanic river |
 | 37–38 | PLTCAVE / PLATEAU | The cave exit and the plateau before Faeriewood |
-| 39–47, 53–65, 73 | Faeriewood | The falling branch, Zanthia’s laboratory, the Enchanted Fountain and the flaming tree |
+| 39–47, 53–65, 73 | Faeriewood | The falling branch, Zanthia’s laboratory, the Enchanted Fountain, the flaming tree and the blueberry waterfall |
+| 49, 52, 75, 80–108 | Deeper Faeriewood | The woods behind the laboratory, the tropical lagoon and the Crystals of Alchemy |
 
 Click the scene edges, doorways or lift to leave. An exit changes the desktop cursor's direction. Brandon walks to a reachable approach before the scene changes. The first attempt to leave home plays the original tree conversation, including when carrying an item. Returning home preserves its completion state.
 

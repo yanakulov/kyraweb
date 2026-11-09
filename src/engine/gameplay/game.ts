@@ -41,7 +41,8 @@ const jewels = [
   { color: 'purple', clip: 'purple-jewel', flag: PURPLE_JEWEL_FLAG, pos: PURPLE_JEWEL_POS, hit: PURPLE_JEWEL_HITBOX },
   { color: 'blue', clip: 'blue-jewel', flag: BLUE_JEWEL_FLAG, pos: BLUE_JEWEL_POS, hit: BLUE_JEWEL_HITBOX },
 ] as const;
-const behindActors = (clip: string) => clip === 'face' || clip === 'face2' || clip === 'songbird-rest';
+const backgroundClips = new Set(['face', 'face2', 'songbird-rest', 'carpet', 'zandoord', 'zandooru', 'ctrap1', 'ctrap2', 'mixrox']);
+const behindActors = (clip: string) => backgroundClips.has(clip);
 const STATUS_MESSAGE_MS = 2400;
 const LOCATION_SIGN_TRANSITION_MS = 180;
 
@@ -921,6 +922,16 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           break;
         }
         case 'poison': poisoned = action.crossings > 0; break;
+        case 'crystal': {
+          if (action.item !== -1) break;
+          const [x, y] = action.slot === 0 ? [133, 70] : [174, 71];
+          const painted = questShapes.findIndex(shape => shape.x === x && shape.y === y);
+          if (painted !== -1) questShapes.splice(painted, 1);
+          // MIXROX's final, neutral frame is identical to the untouched room.
+          permanentLayers.delete('mixrox');
+          foregroundFrames.clear();
+          break;
+        }
         case 'wisp': wispMs = action.ms; break;
         case 'heroFrame': {
           const animation = action.clip && scriptRenderers.get(`hero-${action.clip}`);
