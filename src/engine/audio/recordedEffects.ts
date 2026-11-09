@@ -36,7 +36,8 @@ export class RecordedEffects {
   }
 
   play(file: string, track: number) {
-    const clip = clips[`${file === 'INTRO' ? 'intro' : 'rooms'}:${track}`];
+    const clip = (file === 'KYRAMISC' ? clips[`finale:${track}`] : undefined)
+      ?? clips[`${file === 'INTRO' ? 'intro' : 'rooms'}:${track}`];
     if (clip && this.buffer) this.playBuffer(this.buffer, clip[0], clip[1]);
   }
 

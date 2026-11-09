@@ -20,6 +20,7 @@ KyraWeb is an unofficial web remake of *The Legend of Kyrandia*, the first book 
 - Continue into Faeriewood, meet Zanthia, restore the Enchanted Fountain and awaken the blue jewel. Pick fresh blueberries, explore the woods behind Zanthia’s laboratory and mix potions at the Crystals of Alchemy. Bargain with the Faun for the Royal Chalice and fly as Pegasus to the island of Castle Kyrandia. Meet Queen Katherine’s ghost, sneak past the gargoyles and face Malcolm in the castle entry hall.
 - Explore the castle’s halls and kitchen, solve the library’s book puzzle and ride the revolving fireplace. Break the catacomb barrier with the blue jewel, light the tunnels in wisp form and recover the first gold key.
 - Climb to the upper floor, deal with Herman and play the Music Room bells to reveal the second key. Open the Royal Foyer with both keys and place the regalia to open the Kyragem chamber.
+- Face Malcolm in the Kyragem chamber. Reflect his spell, restore the Kyragem and watch the original CD epilogue and scrolling credits.
 
 The game has English and Russian text and original English CD voices.
 

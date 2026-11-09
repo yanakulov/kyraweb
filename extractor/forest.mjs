@@ -15,6 +15,7 @@ import { parseEmc, runEmc } from "./emc.mjs";
 import { decodeDat, decodeMask, REGION, restoreBackgroundColumns } from "./world.mjs";
 import { encodeScenePack } from "./scene_pack.mjs";
 import { vocDuration } from "./opening.mjs";
+import { importFinale } from "./finale.mjs";
 
 // These are the rooms used by the first forest's original quest scripts.
 const ROOMS = {
@@ -174,6 +175,11 @@ export async function buildForest(root, out = "public/assets/forest") {
         transparentIndex: -1,
       },
     };
+    if (name === 'KYRAGEM') {
+      const finale = await importFinale(root, image.palette);
+      Object.assign(clips, finale.clips);
+      data.reunion = finale.reunion;
+    }
     const program = programs[name],
       durations = {};
     let title = base.title;
@@ -319,7 +325,7 @@ export async function buildForest(root, out = "public/assets/forest") {
     };
   await writeFile(
     join(out, "forest.json.gz"),
-    gzipSync(JSON.stringify({ rooms: data.rooms, letter, self, caveSelf, flute }), { level: 9 }),
+    gzipSync(JSON.stringify({ rooms: data.rooms, letter, self, caveSelf, flute, reunion: data.reunion }), { level: 9 }),
   );
   await mkdir("tests/fixtures", { recursive: true });
   await writeFile(

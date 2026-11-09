@@ -1,6 +1,6 @@
 # Forest regions
 
-The playable CD quest chain runs from Brandon’s home through Shadowrealm and Faeriewood to the opening of the Kyragem chamber in Castle Kyrandia.
+The playable CD quest chain runs from Brandon’s home through Shadowrealm and Faeriewood to the final battle, reunion and credits.
 
 | ID | Original resource | Location |
 | --- | --- | --- |
@@ -29,6 +29,7 @@ The playable CD quest chain runs from Brandon’s home through Shadowrealm and F
 | 199–205 | Castle island and entrance | The landing, misty grave, woods, bluff, gargoyle gate and entry hall |
 | 206–208, 211–215 | Castle ground floor | Great Hall, library, kitchen and connecting corridors |
 | 209 | FOYER | Royal Foyer and the door to the Kyragem chamber |
+| 210 | KYRAGEM | Kyragem chamber and the final encounter |
 | 216–228 | Castle upper floor | Staircase, balcony, corridors, bedrooms and the Music Room |
 | 229–245 | CATACOM | Catacombs, magical barrier and the hidden gold key |
 
@@ -56,7 +57,7 @@ Failed transitions keep the current room and inventory and allow another click t
 
 Node tests check approach routes across all room exits, RLE decoding and depth scale. `tests/browser/world.html` drives the actual renderer through all 17 rooms and back, including both lift directions. It checks held items, inventory, picked overlays, dropped items, tree completion, the closed bridge, a deliberately failed transition/retry and cancellation during loading. Its gallery captures the original scenes for visual inspection.
 
-The CI budget for gameplay runtime files is 6.665 MB. The 3D book, speech, fallback effects, and optional audio banks have separate limits.
+The CI budget for gameplay runtime files is 6.86 MB. The 3D book, speech, fallback effects, and optional audio banks have separate limits.
 
 ## Quest scripts
 
@@ -73,6 +74,8 @@ In Faeriewood, the fountain's original EMC switches room 42 between the FOUNTN a
 In the castle library, the original EMC runs the four-book puzzle and the two directions of the fireplace ride. The browser route continues through the kitchen and Great Hall, restores a save mid-puzzle, then tests the blue jewel, wisp lighting, the hidden key and the return to the library.
 
 The upper castle browser route checks both stair movies, Herman’s warning, his fatal attack and the yellow jewel. The music room keeps click input with the original EMC while the bells are active. Each note plays its DOS score cue. The two keys share one original item ID. The first turns one lock and the second opens the Royal Foyer. Saves preserve which regalia sit on the three cushions and retain the open chamber door after Malcolm’s scene.
+
+The final encounter runs on the room clock, leaving Brandon free to walk and use the amulet until Malcolm fires. The reflection check uses the original mirror bounds and invisibility state. A loss returns to the book with the chamber entrance available as a checkpoint. Victory plays the original indexed movies, reunion sequence and English CD voices. The credits use the DOS CD text and font on the original chalet backdrop.
 
 ## Pointer and touch controls
 

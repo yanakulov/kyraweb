@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { loadMt32, Mt32Synth } from '../src/engine/audio/mt32';
+import { loadAdlib } from '../src/engine/audio/adlib';
 import { MidiPlayback } from '../src/engine/audio/midiPlayback';
 import { parseXmidi, XmidiSequencer, type MidiTrack } from '../src/engine/audio/xmidi';
 
@@ -42,6 +43,14 @@ function record(track: MidiTrack) {
 }
 
 const seen = new Map<string, [number, number]>();
+function append(bank: string, id: number, wave: Buffer): [number, number] {
+  const cue: [number, number] = [start / rate, wave.length / 2 / rate];
+  cues[`${bank}:${id}`] = cue;
+  const padding = Buffer.alloc(2400 * 2);
+  buffers.push(wave, padding);
+  start += (wave.length + padding.length) / 2;
+  return cue;
+}
 for (const [bank, tracks] of [['intro', intro], ['rooms', rooms]] as const) {
   for (const [id, track] of tracks.entries()) {
     if (id < 22 || !track.some(event => event.status >> 4 === 9) || bank === 'rooms' && id === 92) continue;
@@ -50,12 +59,26 @@ for (const [bank, tracks] of [['intro', intro], ['rooms', rooms]] as const) {
     if (existing) { cues[`${bank}:${id}`] = existing; continue; }
     const wave = record(track);
     if (!wave) continue;
-    const cue: [number, number] = [start / rate, wave.length / 2 / rate];
-    seen.set(key, cue); cues[`${bank}:${id}`] = cue;
-    const padding = Buffer.alloc(2400 * 2);
-    buffers.push(wave, padding);
-    start += (wave.length + padding.length) / 2;
+    seen.set(key, append(bank, id, wave));
   }
+}
+// The final spell's low tracks are not part of the common MT-32 effect set.
+const opl = await loadAdlib(Uint8Array.from(readFileSync('public/assets/audio/adlib.wasm')).buffer, rate);
+const finale = Uint8Array.from(gunzipSync(readFileSync('public/assets/music/kyramisc.adl.gz'))).buffer;
+for (const id of [11, 12, 13, 14]) {
+  opl.play(finale, 'KYRAMISC', id);
+  const wave = Buffer.alloc(rate * 4 * 2);
+  let lastSignal = 0;
+  for (let i = 0; i < rate * 4; i += left.length) {
+    opl.render(left, right);
+    for (let j = 0; j < Math.min(left.length, rate * 4 - i); j++) {
+      const sample = Math.round(Math.max(-1, Math.min(1, (left[j] + right[j]) / 2)) * 32767);
+      wave.writeInt16LE(sample, (i + j) * 2);
+      if (Math.abs(sample) > 18) lastSignal = i + j;
+    }
+  }
+  if (!lastSignal) throw new Error(`Finale AdLib effect ${id} is silent`);
+  append('finale', id, wave.subarray(0, (lastSignal + 600) * 2));
 }
 const encoded = spawnSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-f', 's16le', '-ar', String(rate), '-ac', '1', '-i', 'pipe:0', '-codec:a', 'libmp3lame', '-q:a', '7', '-y', 'public/assets/audio/effects.mp3'], { input: Buffer.concat(buffers), stdio: ['pipe', 'inherit', 'inherit'] });
 if (encoded.error || encoded.status !== 0) throw encoded.error ?? new Error('ffmpeg could not encode the effects');

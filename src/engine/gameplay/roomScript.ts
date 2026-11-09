@@ -79,6 +79,10 @@ export type RoomAction =
   | { op: "vase"; item: number }
   | { op: "exit"; target: number; side?: import("../core/types").RoomPortal["side"]; entry?: { x: number; y: number } }
   | { op: "death" }
+  | { op: "finalBattle"; command: "summon" | "dispel" }
+  | { op: "ending"; stage: "film" | "credits" }
+  | { op: "shade"; opacity: number; ms: number }
+  | { op: "shuffle" }
   | { op: "shake"; ms: number }
   | { op: "palette"; start: number; colors: number[]; ms: number }
   | { op: "fadeIn"; ms: number }
@@ -236,7 +240,7 @@ export class RoomScript {
       else if (action.op === "wait") this.wait = this.skipTalkAnimation && !action.movement ? 0 : action.ms * (action.movement ? (this.host.movementTempo?.() ?? 1) : 1);
       else {
         this.host.apply(action);
-        if (action.op === "frame" || action.op === "palette" || action.op === "fadeIn" || action.op === "shake")
+        if (action.op === "frame" || action.op === "palette" || action.op === "fadeIn" || action.op === "shake" || action.op === "shade")
           this.wait = action.op === 'frame' && this.skipTalkAnimation ? 0 : action.ms;
         if (action.op === 'clearText') { this.lineActive = false; this.skipTalkAnimation = false; }
         if (action.op === "say") {

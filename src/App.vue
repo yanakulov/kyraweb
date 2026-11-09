@@ -15,7 +15,7 @@
     </FantasyBook>
     <div class="game-frame" :class="{ 'is-concealed': !bookOpened && !openingFrameReady && !openingSnapshot && !gameError }" :aria-hidden="!bookOpened" :inert="!bookOpened || !!bookSnapshot">
       <canvas ref="sceneBackdrop" class="scene-backdrop" :width="ROOM_ART.w" :height="ROOM_ART.h" aria-hidden="true"></canvas>
-      <div class="stage" ref="stageRef" :class="{ 'cursor-controlled': gamePointerVisible }" :aria-busy="loading"
+      <div class="stage" ref="stageRef" :class="{ 'cursor-controlled': gamePointerVisible || endingActive }" :aria-busy="loading"
         @pointerenter="handleMove" @pointermove="handleMove" @pointerleave="leaveStage"
         @pointerdown="handlePointerDown" @pointerup="handlePointerUp" @pointercancel="cancelGesture" @contextmenu.prevent="handleContextMenu">
         <div class="scene-plane" :style="cinematicPlane">
@@ -28,7 +28,7 @@
           <img :src="`${baseUrl}assets/cursors/${cursorExit ?? 'pointer'}.svg`" alt="" />
         </div>
         <div v-if="noteVisible && locale === 'ru'" class="translated-letter" :style="{ transform: `scale(${subtitleScale}, ${subtitleScaleY})` }"><p>{{ t('Dear Brynn:') }}</p><p>{{ t('Malcolm has broken free. Soon he will come for me. Please help Brandon. Direct him toward the Amulet. Use the lavender rose to key the spells.') }}</p><p>{{ t("Darm and Zanthia should be able to help. Be careful, he'll try to get all of us.") }}</p><p>— {{ t('Kallak') }}</p></div>
-        <button v-if="controlMode === 'classic' && !introActive && !gameError && !sequenceActive && !loading" class="hud-options" :style="optionsStyle" type="button" :aria-label="t('Options')" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
+        <button v-if="controlMode === 'classic' && !introActive && !endingActive && !gameError && !sequenceActive && !loading" class="hud-options" :style="optionsStyle" type="button" :aria-label="t('Options')" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
         </div>
         <button v-if="awaitingContinue" class="pixel-button continue-button" type="button" @click="game?.handleClick({ x: 160, y: 100 })">{{ t('Continue') }}</button>
         <div v-if="gameError" class="game-error" role="alert"><p>{{ t(gameError) }}</p><button class="pixel-button" type="button" @click="boot">{{ t('Try again') }}</button><button v-if="latestSave" class="pixel-button" type="button" @click="showBookOptions('load')">{{ t('Load game') }}</button></div>
@@ -149,10 +149,11 @@ import SubtitleOverlay from "./components/SubtitleOverlay.vue";
 import { exitCursor } from "./engine/gameplay/navigation";
 import type { ControlMode, RoomPortal, InventoryItemId, Vec2 } from "./engine/core/types";
 const portals = ref<RoomPortal[]>([]);
+const endingActive = ref(false);
 const cursor = ref<Vec2>({ x: 160, y: 100 });
 const stageRef = ref<HTMLElement | null>(null);
 const pointerInStage = ref(false);
-const gamePointerVisible = computed(() => !introActive.value && !gameError.value && !overlayOpen.value &&
+const gamePointerVisible = computed(() => !introActive.value && !endingActive.value && !gameError.value && !overlayOpen.value &&
   (pointerInStage.value || touchPointer.value));
 const cursorExit = computed(() => sequenceActive.value || loading.value || controlMode.value === 'classic' && isOptionsPoint(cursor.value) ? undefined
   : exitCursor(portals.value, cursor.value, gameViewHeight.value === ROOM_VIEW_HEIGHT));
@@ -205,7 +206,7 @@ function isOptionsPoint(point: Vec2) {
 function interact(point: Vec2) {
   if (!game || loading.value || gameError.value || bookSnapshot.value) return;
   // Touch aims a persistent cursor; activating the original HUD must use it too.
-  if (controlMode.value === 'classic' && !sequenceActive.value && isOptionsPoint(point)) { showSettings(); return; }
+  if (controlMode.value === 'classic' && !endingActive.value && !sequenceActive.value && isOptionsPoint(point)) { showSettings(); return; }
   game.setPointer(point);
   if (!game.handleClick(point)) game.setTarget(point);
   syncControls();
@@ -286,6 +287,7 @@ const subtitleScaleY = ref(1);
 const config = {
   onOptions: showSettings,
   onDeath: () => { gameOver.value = true; music.stop(); showBookOptions(); },
+  onEnding: openMenu,
   onCheckpoint: scheduleAutosave,
   onContinueChange: (waiting: boolean) => { awaitingContinue.value = waiting; },
   onNoteChange: (visible: boolean) => { noteVisible.value = visible; },
@@ -296,6 +298,7 @@ const config = {
   onScriptAction: (action: import('./engine/gameplay/roomScript').RoomAction) => {
     if (action.op === 'music') music.wander(action.command, action.restart);
     else if (action.op === 'sfx') music.effect(action.track);
+    else if (action.op === 'ending') { endingActive.value = true; if (action.stage === 'film') music.prepareVoice('REUNION'); }
     else if (action.op === 'clearText' && action.stopVoice) music.stopSpeech();
   },
   onLoadingChange: (value: boolean) => { if (value) music.stopSpeech(); loading.value = value; queueMicrotask(syncControls); },
@@ -410,7 +413,7 @@ async function restoreChapter(record: SaveRecord) {
     introRunId++;
     intro?.stop(); intro = null; game?.stop(); gameLoadController?.abort();
     gameLoadController = controller; game = candidate; committed = true;
-    introActive.value = openingScene.value = false; kallakMenu.value = false; noteVisible.value = false;
+    introActive.value = openingScene.value = endingActive.value = false; kallakMenu.value = false; noteVisible.value = false;
     const { currentRoom, rooms, quest } = record.state;
     const hermanAwake = currentRoom === 218 && quest.flags.includes(255) && !quest.flags.includes(256);
     music.stop(); music.restoreRoom(currentRoom, !!rooms[currentRoom].wispMs, hermanAwake ? 42 : undefined);
@@ -480,6 +483,7 @@ async function startIntro(startIndex: number, autoStartGame: boolean) {
   introActive.value = true;
   openingScene.value = false;
   gameOver.value = false;
+  endingActive.value = false;
   music.stop();
   music.prepareVoice('INTRO');
   kallakMenu.value = false; noteVisible.value = false;

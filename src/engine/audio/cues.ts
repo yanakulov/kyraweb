@@ -18,7 +18,7 @@ export function introCue(step: string): MusicCue | undefined {
   return track === undefined ? undefined : { file: 'INTRO', track };
 }
 
-const roomCommands: Record<number, number> = { 0: 41, 2: 5, 7: 3, 8: 7, 27: 12, 36: 4, 45: 22, 48: 27, 113: 18 };
+const roomCommands: Record<number, number> = { 0: 41, 2: 5, 7: 3, 8: 7, 27: 12, 36: 4, 45: 22, 48: 27, 113: 18, 210: 50 };
 export function roomMusicCommand(room: number, wisp = false) {
   return roomCommands[room] ?? (isCastleRoom(room) ? (room >= 205 ? 39 : 31) : isFaeriewoodRoom(room) ? 21 : isShadowrealmRoom(room) ? (wisp ? 17 : 3) : room >= 17 ? 11 : 2);
 }

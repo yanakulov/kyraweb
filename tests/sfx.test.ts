@@ -13,6 +13,7 @@ import { RoomScript, type RoomAction } from '../src/engine/gameplay/roomScript';
 import type { DropAnim, SceneItem } from '../src/engine/core/types';
 import type { MidiTrack } from '../src/engine/audio/xmidi';
 import opening from '../public/assets/packs/opening.json';
+import recordedCues from '../src/engine/audio/effects.json';
 
 const effect: MidiTrack = [
   { delta: 0, status: 0xba, data: [110, 127] },
@@ -102,6 +103,10 @@ test('opening, tree and forest EMC retain real SFX instructions in the script cl
   const forest = JSON.parse(gunzipSync(readFileSync('public/assets/forest/forest.json.gz')).toString()) as ForestData;
   const snapshot = { pos: { x: 160, y: 110 }, inventorySlots: [], itemInHand: null, sceneItems: [], overlays: [], treeSpoken: false };
   assert.ok(traceForest(forest.rooms.BROKEN, 0, createForestState(), snapshot).actions.some(a => a.op === 'sfx' && a.track === 74));
+  for (const id of [11, 12, 13, 14]) {
+    const [start, duration] = (recordedCues as Record<string, number[]>)[`finale:${id}`];
+    assert.ok(start > 0 && duration > 0);
+  }
   const sent: number[] = [];
   const sequence = new RoomScript([{ op: 'wait', ms: 100 }, { op: 'sfx', track: 53 }], { apply: a => { if (a.op === 'sfx') sent.push(a.track); }, walking: () => false, frames: () => 0 });
   sequence.update(99); assert.equal(sent.length, 0); sequence.update(1); assert.deepEqual(sent, [53]); sequence.stop(); sequence.update(100); assert.deepEqual(sent, [53]);
