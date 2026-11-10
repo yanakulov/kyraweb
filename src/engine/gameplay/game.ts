@@ -1160,7 +1160,9 @@ export async function startRoom(canvas: HTMLCanvasElement, config: GameConfig) {
           if (action.clip === 'song1' && scriptLayers.delete('songbird-rest')) foregroundFrames.clear();
           const animation = scriptRenderers.get(action.clip);
           if (!animation) throw new Error(`Missing script animation ${action.clip}`);
-          const pixels=animation.clip.frame(action.index);
+          const frame = animation.clip.frame(action.index);
+          // The CD note prints English in palette index 215. Restore the parchment underneath.
+          const pixels = action.clip === 'note' && locale.value === 'ru' ? frame.map(index => index === 215 ? 204 : index) : frame;
           if(action.permanent || behindActors(action.clip)) foregroundFrames.clear();
           if(action.permanent){scriptLayers.delete(action.clip);permanentLayers.set(action.clip,{image:buildIndexedCanvas(animation.clip.info,pixels),index:action.index,x:action.x,y:action.y});}
           else {scriptLayers.delete(action.clip);scriptLayers.set(action.clip, { image: animation.renderer.render(pixels), index:action.index, x: action.x, y: action.y, shapes: action.shapes });}

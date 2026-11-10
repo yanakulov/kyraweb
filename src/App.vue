@@ -45,10 +45,12 @@
         <div v-if="gamePointerVisible && (cursorExit || !heldItem)" class="game-cursor" :style="cursorStyle" aria-hidden="true">
           <img :src="`${baseUrl}assets/cursors/${cursorExit ?? 'pointer'}.svg`" alt="" />
         </div>
-        <div v-if="noteVisible && locale === 'ru'" class="translated-letter" :style="{ transform: `scale(${subtitleScale}, ${subtitleScaleY})` }"><p>{{ t('Dear Brynn:') }}</p><p>{{ t('Malcolm has broken free. Soon he will come for me. Please help Brandon. Direct him toward the Amulet. Use the lavender rose to key the spells.') }}</p><p>{{ t("Darm and Zanthia should be able to help. Be careful, he'll try to get all of us.") }}</p><p>— {{ t('Kallak') }}</p></div>
+        <div v-if="noteVisible && locale === 'ru'" class="translated-letter" :style="{ top: `${15 / gameViewHeight * 100}%`, transform: `scale(${subtitleScale}, ${subtitleScaleY})` }"><p>{{ t('Dear Brynn:') }}</p><p>{{ t('Malcolm has broken free. Soon he will come for me. Please help Brandon. Direct him toward the Amulet. Use the lavender rose to key the spells.') }}</p><p>{{ t("Darm and Zanthia should be able to help. Be careful, he'll try to get all of us.") }}</p><p>— {{ t('Kallak') }}</p></div>
         <button v-if="controlMode === 'classic' && !introActive && !endingActive && !gameError && !sequenceActive && !loading" class="hud-options" :style="optionsStyle" type="button" :aria-label="t('Options')" @click="activateOptions"><span class="sr-only">{{ t('Options') }}</span></button>
+        <button v-if="awaitingContinue" class="pixel-button continue-button" type="button"
+          :style="{ top: `${72 / gameViewHeight * 100}%` }" @pointerdown.stop @pointerup.stop
+          @click.stop="game?.handleClick({ x: 160, y: 100 })">{{ t('Continue') }}</button>
         </div>
-        <button v-if="awaitingContinue" class="pixel-button continue-button" type="button" @click="game?.handleClick({ x: 160, y: 100 })">{{ t('Continue') }}</button>
         <div v-if="gameError" class="game-error" role="alert"><p>{{ t(gameError) }}</p><button class="pixel-button" type="button" @click="boot">{{ t('Try again') }}</button><button v-if="latestSave" class="pixel-button" type="button" @click="showBookOptions('load')">{{ t('Load game') }}</button></div>
         <p class="sr-only" role="status">{{ gameHint }}</p>
         <p v-if="navigationError" class="scene-notice" role="status">{{ t(navigationError) }}</p>

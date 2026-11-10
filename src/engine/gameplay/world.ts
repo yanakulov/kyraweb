@@ -183,7 +183,8 @@ export async function startWorldGame(canvas: HTMLCanvasElement, config: GameConf
     if (returningThroughFireplace) planned.flags.add(225);
     if (descendingStairs) planned.flags.add(216);
     let setupActions:RoomAction[]=!questRoom && !restoring ? meta.entryMusic ?? [] : [];
-    const facing=restoring ? state!.facing ?? 5 : from?({north:0,east:3,south:4,west:5}[from.side]):5;
+    const facing = restoring || from?.id === 'phase' ? state?.facing ?? 5
+      : from ? ({ north: 0, east: 3, south: 4, west: 5 }[from.side]) : 5;
     if (restoring) arrival = { ...state!.pos };
     const carried = shared ?? resume;
     const ageBerries = from && from.id !== 'phase' && previous !== id;

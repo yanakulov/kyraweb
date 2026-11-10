@@ -2,9 +2,21 @@
 
 ![The Legend of Kyrandia](public/assets/interface/kyrandia-title.webp)
 
-[Play](https://lok.akulaflow.ru/) · [Engine wiki](https://lok.akulaflow.ru/howitworks/en/) · [Русский README](README.ru.md)
+[Play](https://lok.akulaflow.ru/) · [English wiki](https://lok.akulaflow.ru/howitworks/en/) · [Русский README](README.ru.md)
 
 This project brings the first *Legend of Kyrandia* to the browser. The adventure is playable from the opening lift to the original CD ending and credits. The game uses Westwood’s art, animation, scripts and sound data. **WebKyra** is the TypeScript engine that runs them.
+
+## Screenshots
+
+![Brandon’s home in modern mode](docs/screenshots/modern-scene.png)
+
+![The radial inventory in modern mode](docs/screenshots/modern-inventory.png)
+
+![The game menu inside the pixel-art book](public/howitworks/media/book-menu.png)
+
+Original DOS interface. [Screenshot from the ScummVM gallery](https://www.scummvm.org/screenshots/westwood/kyra/).
+
+![The original DOS interface, with the inventory bar beneath the scene](docs/screenshots/original-dos.png)
 
 ## Playing
 
