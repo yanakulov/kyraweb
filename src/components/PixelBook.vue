@@ -560,13 +560,14 @@ function picture() {
     const modern = selectedMode === 'modern', image = art![selectedMode];
     const title = t(modern ? 'Modern' : 'Classic');
     heading(title, tr('PREVIEW', 'ПРИМЕР'), RIGHT_CENTER);
-    const { x, w } = ILLUSTRATION, h = Math.round(w * image.height / image.width);
-    const r = { x, y: pageY(168) - Math.round(h / 2), w, h };
+    const preview = { x: ILLUSTRATION.x, y: 112, w: ILLUSTRATION.w, h: 112 };
+    const r = photoBounds(image, preview, undefined, true);
     frame(left, r, true);
     pixels(left, image, r);
     lines(modern
       ? tr('Full scene. Inventory: right-click, I, two-finger tap or hold.', 'Вся сцена на экране. Инвентарь: ПКМ, I, тап двумя пальцами или удержание.')
-      : tr('The original inventory and menu sit below the scene.', 'Инвентарь и меню под сценой, как в оригинале.'), RIGHT + 3, 228, PAGE_W - 5, 12, Infinity, false, 268);
+      : tr('The original inventory and menu sit below the scene.', 'Инвентарь и меню под сценой, как в оригинале.'),
+      RIGHT + 3, preview.y + preview.h + 17, PAGE_W - 5, 12, Infinity, false, FOOT);
     return;
   }
   const activeSlot = hover.startsWith('slot-') ? hover : focus;
