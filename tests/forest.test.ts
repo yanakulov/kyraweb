@@ -126,6 +126,27 @@ function quest() {
   return { state, snapshot, run, enter, all };
 }
 
+test('the two startup gems choose their regions independently', t => {
+  const rolls = [0, 0, 0, 0, .99, 0];
+  t.mock.method(Math, 'random', () => rolls.shift() ?? 0);
+  assert.deepEqual(createForestState().scatteredGems, { 9: [8], 17: [1] });
+});
+
+test('the glade scatters its gems once after the third seed is planted', () => {
+  const q = quest();
+  q.enter('DEAD');
+  for (const seed of ['item-26', 'item-27'] as const) {
+    q.snapshot.itemInHand = seed;
+    q.run('DEAD', 1, 204, 111);
+  }
+  assert.deepEqual(Object.values(q.state.scatteredGems).flat().sort(), [1, 8]);
+  q.snapshot.itemInHand = 'item-25';
+  q.run('DEAD', 1, 204, 111);
+  q.enter('DEAD');
+  assert.deepEqual(Object.values(q.state.scatteredGems).flat().sort((a, b) => a - b),
+    [0, 1, 2, 3, 5, 7, 8, 9, 10, 11]);
+});
+
 test('Darm and Brandywine use separate dialogue anchors and the original Darm talk animation', () => {
   const q = quest();
   q.enter('SPELL');

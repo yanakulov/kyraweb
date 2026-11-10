@@ -69,8 +69,11 @@ export function createForestState(): ForestState {
     merith: { x: -16, y: 126, facing: 3, shape: 41, room: -1 },
     herman: { x: 224, y: 94, facing: 5, shape: 88, room: 7 },
   };
-  const region = Math.floor(Math.random() * 2);
-  for (const item of [8, 1]) applyForestState(state, scatterGem(item, region, 0));
+  // _STARTUP.EMC rolls a region separately for the sapphire and the amethyst.
+  for (const item of [8, 1]) {
+    const region = Math.floor(Math.random() * 2);
+    applyForestState(state, scatterGem(item, region, 0));
+  }
   return state;
 }
 export const groveGems = [0, 3, 5, 7, 9, 10, 11, 2];
