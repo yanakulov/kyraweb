@@ -2,9 +2,21 @@
 
 ![The Legend of Kyrandia](public/assets/interface/kyrandia-title.webp)
 
-[Играть](https://lok.akulaflow.ru/) · [Вики движка](https://lok.akulaflow.ru/howitworks/) · [English README](README.md)
+[Играть](https://lok.akulaflow.ru/) · [Вики движка](https://lok.akulaflow.ru/howitworks/) · [Английская вики](https://lok.akulaflow.ru/howitworks/en/) · [English README](README.md)
 
 Проект переносит первую *The Legend of Kyrandia* в браузер. Игру можно пройти целиком, от подъёмника у дома Брендона до финала и титров CD-издания. Графика, анимации, сценарии и звуковые данные взяты из игры Westwood. **WebKyra** исполняет их своим кодом на TypeScript.
+
+## Скриншоты
+
+![Дом Брендона в современном режиме](docs/screenshots/modern-scene.png)
+
+![Круговой инвентарь в современном режиме](docs/screenshots/modern-inventory.png)
+
+![Игровое меню в пиксельной книге](public/howitworks/media/book-menu.png)
+
+Оригинальный интерфейс DOS. [Кадр из галереи ScummVM](https://www.scummvm.org/screenshots/westwood/kyra/).
+
+![Оригинальный интерфейс DOS с инвентарём под сценой](docs/screenshots/original-dos.png)
 
 ## Как играть
 
