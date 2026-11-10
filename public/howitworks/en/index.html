@@ -24,7 +24,7 @@
     </a>
     <nav class="site-nav" aria-label="Project links">
       <a class="play" href="../../">Play</a>
-      <a href="https://github.com/yanakulov/webkyr">GitHub</a>
+      <a href="https://github.com/yanakulov/WebKyra">GitHub</a>
       <a class="language-link" href="../" hreflang="ru" lang="ru" aria-label="Читать на русском">RU</a>
     </nav>
   </div>
@@ -75,7 +75,7 @@
       <tr><td><code>ADL / XMI / VOC</code></td><td>AdLib and Roland scores, plus recorded dialogue in the CD edition.</td><td>Original banks for synthesis and MP3 dialogue banks.</td></tr>
     </tbody>
   </table></div>
-  <p class="note"><a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/indexed_resources.mjs">Resource importer</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/world.ts">World loading</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/engine/kyra_lok.cpp">LoK in ScummVM</a></p>
+  <p class="note"><a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/indexed_resources.mjs">Resource importer</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/world.ts">World loading</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/engine/kyra_lok.cpp">LoK in ScummVM</a></p>
 </section>
 
 <section id="palette">
@@ -104,7 +104,7 @@
     <img id="cave-image" src="../media/cave-bright.png" width="304" height="128" alt="GEN_CAV with the selected palette">
     <figcaption id="cave-caption" aria-live="polite">GEN_CAV, palette 8. All three states use the same bitmap. Twenty palette entries change.</figcaption>
   </figure>
-  <p class="note"><a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/rendering/indexedRenderer.ts">Indexed renderer</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/forest.ts">Palette selection in EMC</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/graphics/screen.cpp">Palettes and drawing in ScummVM</a></p>
+  <p class="note"><a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/rendering/indexedRenderer.ts">Indexed renderer</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/forest.ts">Palette selection in EMC</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/graphics/screen.cpp">Palettes and drawing in ScummVM</a></p>
 </section>
 
 <section id="size">
@@ -138,7 +138,7 @@
     </tbody>
   </table></div>
   <p>These are sizes on disk. The game loads room packs and dialogue as you play. GeneralUser GS downloads when you select it. In the installed DOS CD edition, the <code>.VRM</code> files directly under <code>DAT</code> take 75.77 MB out of 82.71 MB. A comparison with the floppy release needs the total size of the disks in a specific edition. A single floppy holds 1.44 MB.</p>
-  <p class="note"><a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/scene_pack.mjs">KYR1 writer</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/check_asset_budget.mjs">Build size breakdown</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/graphics/wsamovie.cpp">WSA decoder in ScummVM</a></p>
+  <p class="note"><a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/scene_pack.mjs">KYR1 writer</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/check_asset_budget.mjs">Build size breakdown</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/graphics/wsamovie.cpp">WSA decoder in ScummVM</a></p>
 </section>
 
 <section id="depth">
@@ -171,7 +171,7 @@
     <div><h3>Drawing order in DOS</h3><p>The engine draws characters, items, and animations over the prepared background. Before redrawing, it can restore rectangles of the background. The height of the character’s feet and the terrain priority determine what appears in front.</p></div>
     <div><h3>Foreground in WebKyra</h3><p>After drawing a character, Canvas restores the part of the character’s rectangle where <code>priority &gt; actorLayer</code>. The appropriate decorations join that layer. NPCs and items also sort by Y. Dropped items have an extra visibility check at the foreground edge.</p></div>
   </div>
-  <p class="note"><a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/graphics/screen.cpp">Shape drawing and skips</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/scene/masks.ts">WebKyra masks</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/game.ts">Scene composition</a></p>
+  <p class="note"><a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/graphics/screen.cpp">Shape drawing and skips</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/scene/masks.ts">WebKyra masks</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/game.ts">Scene composition</a></p>
 </section>
 
 <section id="motion">
@@ -203,7 +203,7 @@
     <figure><img src="../media/lift-9.png" width="80" height="80" alt="Resulting frame 9"><figcaption>Frame 9</figcaption></figure>
   </div>
   <p class="note">1,467 of 6,400 indices change between these frames. The middle image uses a highlight color to show them. After LCW decompression, the WSA decoder applies XOR to the previous frame. Skip commands leave unchanged areas alone.</p>
-  <p class="note"><a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/scene/sceneAnims.ts">DAT in WebKyra</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/characters/brandonFrames.ts">Brandon’s frames and head shapes</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/intro_timeline.mjs">Extracting the opening timeline</a></p>
+  <p class="note"><a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/scene/sceneAnims.ts">DAT in WebKyra</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/characters/brandonFrames.ts">Brandon’s frames and head shapes</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/intro_timeline.mjs">Extracting the opening timeline</a></p>
 </section>
 
 <section id="runtime">
@@ -222,7 +222,7 @@
   <p>At import time, WebKyra extracts some opening commands from the CD edition’s EMC scripts. During play, scripts check items and flags to decide what happens next. The engine finds paths to exits using the walkability mask. Walking uses a grid with steps of 4 pixels on X and 2 on Y and checks a strip at the character’s feet. Walk speed changes that pace. Dialogue and scripted frames have their own timing.</p>
   <p>Classic mode shows a logical 320×200 frame with the interface. Modern mode uses the 304×128 play area. Both axes scale equally, scene colors fill the remaining space, and pointer coordinates map back to the game.</p>
   <p>A transition holds the current frame until the next room is ready. A save stores the current room, inventory, flags, items, visited room state, and format version. The browser edition adds the book, radial inventory, and control modes. They share the same game state.</p>
-  <p class="note"><a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/emc.mjs">Stack machine</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/roomScript.ts">Action queue</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/pathfinding.ts">Pathfinding</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/saveStorage.ts">Save format</a></p>
+  <p class="note"><a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/emc.mjs">Stack machine</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/roomScript.ts">Action queue</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/pathfinding.ts">Pathfinding</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/saveStorage.ts">Save format</a></p>
 </section>
 
 <section id="audio">
@@ -264,7 +264,7 @@
     <li><strong>Transitions.</strong> The scene issues its own music commands first. When a route has none, the room supplies a fallback theme. Changing banks clears the previous scene’s audio queue.</li>
     <li><strong>Default levels.</strong> WebKyra starts with music at 50%, effects at 25%, and speech at 60%. The browser allows audio after the player interacts. Opening the pause book or hiding the tab affects playback.</li>
   </ul>
-  <p class="note"><a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/audio/cues.ts">Music cue table</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/audio/midiPlayback.ts">Music and effects on one clock</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/adlib/opl.cpp">AdLib build</a> <a href="https://github.com/nukeykt/Nuked-OPL3">Nuked OPL3</a> <a href="https://github.com/munt/munt">Munt</a> <a href="https://github.com/schellingb/TinySoundFont">TinySoundFont</a></p>
+  <p class="note"><a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/audio/cues.ts">Music cue table</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/audio/midiPlayback.ts">Music and effects on one clock</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/adlib/opl.cpp">AdLib build</a> <a href="https://github.com/nukeykt/Nuked-OPL3">Nuked OPL3</a> <a href="https://github.com/munt/munt">Munt</a> <a href="https://github.com/schellingb/TinySoundFont">TinySoundFont</a></p>
 </section>
 
 <section id="translation">
@@ -284,7 +284,7 @@
   "cards": { "intro.malcolm.title": "Малколм на свободе" }
 }</pre>
   <p>This is a proposed format. A separate catalog could be replaced on the server and read the next time the game loads. A translation needs checks for substitutions, long lines, narrow screens, and new alphabets. The script still supplies speaker color, position, timing, voice clips, and animation. Voice acting in another language needs recordings in that language.</p>
-  <p class="note"><a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/i18n.ts">Current dictionary</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/locales/ru-game.json">Russian dialogue</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/components/prologue.ts">Prologue</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/src/components/SubtitleOverlay.vue">Subtitle placement</a></p>
+  <p class="note"><a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/i18n.ts">Current dictionary</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/locales/ru-game.json">Russian dialogue</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/components/prologue.ts">Prologue</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/src/components/SubtitleOverlay.vue">Subtitle placement</a></p>
 </section>
 
 <section id="art">
@@ -324,7 +324,7 @@
   <h2>Sources and measurements</h2>
   <p>The measurements use WebKyra commit <code>955202ef3473</code>. The screenshots of the home, bridge, Kyragem chamber, and book come from WebKyra. The other graphics examples use original DOS CD resources and published game packs. Masks and deltas use illustrative colors. Sizes are in bytes or decimal MB. The SHA-256 below identifies the <code>LIFTUP.WSA</code> file used for the measurement.</p>
   <pre><code>9f3c082e6ec740bd8e9e61f459c7e6be9c59250786e2d29febe30a3e7dfb4da4</code></pre>
-  <p class="note"><a href="https://github.com/yanakulov/webkyr">WebKyra repository</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/docs/world.md">Playable areas and verification</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/docs/music.md">Audio pipeline details</a> <a href="https://github.com/yanakulov/webkyr/blob/955202ef34731107569c45b630e0788fd7a481cf/public/assets/packs/manifest.json">Imported resource sizes and hashes</a> <a href="https://github.com/scummvm/scummvm/tree/master/engines/kyra">Kyra engine in ScummVM</a></p>
+  <p class="note"><a href="https://github.com/yanakulov/WebKyra">WebKyra repository</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/docs/world.md">Playable areas and verification</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/docs/music.md">Audio pipeline details</a> <a href="https://github.com/yanakulov/WebKyra/blob/955202ef34731107569c45b630e0788fd7a481cf/public/assets/packs/manifest.json">Imported resource sizes and hashes</a> <a href="https://github.com/scummvm/scummvm/tree/master/engines/kyra">Kyra engine in ScummVM</a></p>
 </section>
   </article>
 </main>
