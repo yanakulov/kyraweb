@@ -120,7 +120,35 @@ button, select, summary { cursor: pointer; }
   line-height: 1.4;
 }
 
-.continue-button { position:absolute; z-index:4; left:81.25%; right:3.25%; transform:translateY(-50%); padding:6px 2px; font-size:clamp(7px,1.2cqw,14px); border-color:#b88752; text-shadow:1px 1px #15140f; }
+.continue-button {
+  position: absolute;
+  z-index: 4;
+  left: 81.25%;
+  right: 3.25%;
+  min-height: 44px;
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: #ffe7af;
+  font-size: clamp(7px, 1.2cqw, 14px);
+  text-shadow: 1px 1px #15140f;
+}
+.continue-button::before, .continue-button::after {
+  content: "";
+  position: absolute;
+  clip-path: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px),
+    calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
+}
+.continue-button::before { inset: 0; z-index: -2; background: #b88752; }
+.continue-button::after {
+  inset: 1px;
+  z-index: -1;
+  background: linear-gradient(#344d42, #202e29);
+  box-shadow: inset 0 0 0 2px #c1945f50;
+}
+.continue-button:is(:hover, :focus-visible)::before { background: #f0ce8b; }
+.continue-button:hover::after { background: linear-gradient(#476457, #202e29); }
+.continue-button:active::after { background: #202e29; }
 
 @media (hover: hover) and (pointer: fine) {
   .pixel-button:hover { background: #425943; color: #fff3d2; border-color: #edd591; }
