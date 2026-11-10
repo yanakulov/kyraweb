@@ -1,6 +1,6 @@
 # Browser interface
 
-KyraWeb preserves the original Kyrandia scenes, logo and pixel font. The browser controls support the existing Vue canvas game; they are not a replacement visual identity. Keep original game assets authoritative when extending the interface.
+WebKyra preserves the original Kyrandia scenes, logo and pixel font. The browser controls support the existing Vue canvas game; they are not a replacement visual identity. Keep original game assets authoritative when extending the interface.
 
 ## Scene geometry
 

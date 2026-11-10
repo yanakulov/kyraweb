@@ -13,7 +13,7 @@ await mkdir('public/assets/audio', { recursive: true });
 const response = await fetch(base + 'wasm/tsf.js'); if (!response.ok) throw new Error(response.status);
 const loader = await response.text(), factory = loader.match(/var (\w+) = \(\(\) =>/)[1];
 if (createHash('sha1').update(`blob ${Buffer.byteLength(loader)}\0`).update(loader).digest('hex') !== 'b31bd1c3001852f0f5fd1ed97b208b92071caade') throw new Error('TSF loader integrity failed');
-await writeFile('public/assets/audio/tsf.js', loader + `\n// KyraWeb ESM export.\nexport default ${factory};\n`);
+await writeFile('public/assets/audio/tsf.js', loader + `\n// WebKyra ESM export.\nexport default ${factory};\n`);
 await get(base + 'wasm/tsf.wasm', 'public/assets/audio/tsf.wasm', 'cf8c489979653cd830e55d1049c6e8998b9131d0');
 await get(base + 'vendor/TinySoundFont/LICENSE', 'public/assets/audio/TinySoundFont-LICENSE.txt', '533da73eb51d65d6c34d4baf3420d770c3570a5e');
 // The complete source is already distributed in mt32-source.tar.gz from this revision.

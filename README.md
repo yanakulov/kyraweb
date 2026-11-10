@@ -1,10 +1,10 @@
-# KyraWeb
+# WebKyra
 
 ![The Legend of Kyrandia](public/assets/interface/kyrandia-title.webp)
 
 [Play](https://lok.akulaflow.ru/) · [Engine wiki](https://lok.akulaflow.ru/howitworks/en/) · [Русский README](README.ru.md)
 
-KyraWeb brings the first *Legend of Kyrandia* to the browser. The adventure is playable from the opening lift to the original CD ending and credits. The game uses Westwood’s art, animation, scripts and sound data. **WebKyr** is the TypeScript engine that runs them.
+This project brings the first *Legend of Kyrandia* to the browser. The adventure is playable from the opening lift to the original CD ending and credits. The game uses Westwood’s art, animation, scripts and sound data. **WebKyra** is the TypeScript engine that runs them.
 
 ## Playing
 

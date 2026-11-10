@@ -18,5 +18,5 @@ if (typeof exports === 'object' && typeof module === 'object')
 else if (typeof define === 'function' && define['amd'])
   define([], () => createMt32EmuModule);
 
-// KyraWeb: expose the unmodified factory to the AudioWorklet module bundler.
+// WebKyra: expose the unmodified factory to the AudioWorklet module bundler.
 export default createMt32EmuModule;

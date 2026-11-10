@@ -1,5 +1,5 @@
 // Portable, project-scoped MU50 build environment. No admin/system installation.
-// Usage: node extractor/mu50/setup.mjs D:\KyraWeb-build
+// Usage: node extractor/mu50/setup.mjs D:\WebKyra-build
 import { mkdir, readFile, writeFile, access, readdir, rename } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';

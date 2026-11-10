@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
-// KyraWeb: a bounded virtual MIDI-in port for the dedicated MU50 WASM build.
+// WebKyra: a bounded virtual MIDI-in port for the dedicated MU50 WASM build.
 // This replaces the no-MIDI provider only in the external build checkout.
 // It does not synthesize anything: bytes enter MAME's real MU50 serial interface.
 #include "midi_module.h"
