@@ -132,6 +132,39 @@ export function bookmarkPalette(source: HTMLImageElement) {
   });
 }
 
+// Tile the leather grain instead of stretching the old narrow bookmark sprite.
+export function bookmarkRibbon(ctx: CanvasRenderingContext2D, texture: HTMLCanvasElement, r: Rect,
+  selected: boolean, hot: boolean, vertical = false) {
+  const { x, y, w, h } = r;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  if (vertical) {
+    ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x + w / 2, y + h - 6); ctx.lineTo(x, y + h);
+  } else {
+    ctx.lineTo(x + w, y); ctx.lineTo(x + w - 5, y + h / 2);
+    ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h);
+  }
+  ctx.closePath();
+  ctx.shadowColor = '#100807a0'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 2;
+  ctx.fillStyle = '#30231d'; ctx.fill();
+  ctx.shadowBlur = ctx.shadowOffsetY = 0;
+  ctx.clip();
+  for (let ty = y; ty < y + h; ty += 8) for (let tx = x; tx < x + w; tx += 24) {
+    ctx.drawImage(texture, 8, 6, 24, 8, tx, ty, 24, 8);
+  }
+  ctx.fillStyle = selected ? '#cf9d4930' : hot ? '#e9c89112' : '#130d134c';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = selected || hot ? '#e6c085' : '#987146';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.setLineDash([1, 2]);
+  ctx.strokeStyle = selected ? '#e6c0859c' : '#bd975563';
+  ctx.strokeRect(x + 3.5, y + 3.5, w - 10, h - 7);
+  ctx.restore();
+}
+
 export const clamp = (value: number) => Math.max(0, Math.min(1, value));
 export const ease = (t: number) => (1 - Math.cos(Math.PI * clamp(t))) / 2;
 export const mix = (from: Rect, to: Rect, t: number): Rect => ({
