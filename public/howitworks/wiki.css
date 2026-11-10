@@ -39,6 +39,7 @@ li + li { margin-top: .4em; }
 .site-nav a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; color: #f4eee1; font-weight: 600; font-size: 14px; }
 .site-nav .play { padding-inline: 17px; background: #e9c27d; color: #2a2014; border-radius: 5px; text-decoration: none; }
 .site-nav .play:hover { background: #f7d999; }
+.site-nav .language-link { color: #e9c27d; }
 .skip { position: absolute; z-index: 2; top: 8px; left: 8px; padding: 8px 14px; background: var(--paper); transform: translateY(-150%); }
 .skip:focus { transform: none; }
 
@@ -104,7 +105,8 @@ audio { display: block; width: min(100%, 420px); height: 42px; margin: 10px 0; }
 .credits-tech ul, .credits-links { display: flex; flex-wrap: wrap; gap: 12px 18px; list-style: none; margin: 0; padding: 0; }
 .credits-tech li { margin: 0; display: flex; align-items: center; gap: 7px; font-size: 13px; color: #e0d7c8; }
 .credits-tech img { width: 20px; height: 20px; }
-.credits-bottom { border-top: 1px solid #51493c; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px 28px; padding-block: 17px 23px; color: #d5cbb9; font-size: 13px; }
+.credits-bottom { border-top: 1px solid #51493c; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 28px; padding-block: 17px 23px; color: #d5cbb9; font-size: 13px; }
+.credits-links li { margin: 0; }
 .credits-links a { color: #f5e8cd; }
 
 @media (max-width: 860px) {

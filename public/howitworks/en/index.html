@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A guide to The Legend of Kyrandia and its browser engine WebKyr, with interactive examples of palettes, sprite layering, animation, scripts, and sound.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How Kyrandia Works | WebKyr">
+<meta property="og:description" content="Graphics, scripts, and sound in the original Kyrandia and its browser engine, WebKyr.">
+<meta property="og:image" content="https://lok.akulaflow.ru/assets/interface/kyrandia-share.png">
+<meta property="og:url" content="https://lok.akulaflow.ru/howitworks/en/">
+<link rel="canonical" href="https://lok.akulaflow.ru/howitworks/en/">
+<link rel="alternate" hreflang="ru" href="https://lok.akulaflow.ru/howitworks/">
+<link rel="alternate" hreflang="en" href="https://lok.akulaflow.ru/howitworks/en/">
+<title>How Kyrandia Works | WebKyr</title>
+<link rel="stylesheet" href="../wiki.css">
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="site-header">
+  <div class="wrap masthead">
+    <a class="game-brand" href="../../" aria-label="The Legend of Kyrandia, home">
+      <img src="../../assets/interface/kyrandia-title.webp" alt="The Legend of Kyrandia" width="256" height="85">
+    </a>
+    <nav class="site-nav" aria-label="Project links">
+      <a class="play" href="../../">Play</a>
+      <a href="https://github.com/yanakulov/kyraweb">GitHub</a>
+      <a class="language-link" href="../" hreflang="ru" lang="ru" aria-label="Читать на русском">RU</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap layout" id="content" tabindex="-1">
+  <div class="intro">
+    <div>
+      <h1>How Kyrandia Works</h1>
+      <p class="deck">A guide to Westwood’s original game and WebKyr, the engine behind the browser remake. Take apart a room, change a cave’s palette, or listen to the AdLib soundtrack.</p>
+    </div>
+    <figure>
+      <img src="../media/brandon-home.png" width="320" height="200" alt="Brandon beside the petrified Kallak, with the classic inventory bar below">
+      <figcaption>Brandon’s home in WebKyr’s classic mode.</figcaption>
+    </figure>
+  </div>
+  <nav class="toc" aria-labelledby="toc-title">
+    <p id="toc-title">Contents</p>
+    <ul>
+      <li><a href="#architecture">Resources and engine</a></li>
+      <li><a href="#palette">Color indices and palettes</a></li>
+      <li><a href="#size">Sizes and compression</a></li>
+      <li><a href="#depth">Transparency and depth</a></li>
+      <li><a href="#motion">Animation</a></li>
+      <li><a href="#runtime">Scripts and game state</a></li>
+      <li><a href="#audio">Music and sound</a></li>
+      <li><a href="#translation">Localization</a></li>
+      <li><a href="#art">Preparing artwork</a></li>
+      <li><a href="#hof">Hand of Fate</a></li>
+      <li><a href="#sources">Sources and measurements</a></li>
+    </ul>
+  </nav>
+  <article>
+<section id="architecture">
+  <h2>Resources and engine</h2>
+  <p>Kyr refers here to the engine of the first Kyrandia. ScummVM calls the game <code>LoK</code> and shortens Hand of Fate to <code>HoF</code>. WebKyr runs the game with its own code. We use the DOS version and ScummVM source to check room behavior and file formats.</p>
+  <div class="pair">
+    <div><h3>Original DOS CD edition</h3><p>Archives store backgrounds, masks, shapes, animations, scripts, and audio as separate resources. When you enter a room, the engine assembles the scene and applies the script’s commands. Video memory holds color indices. The palette gives those indices their colors.</p></div>
+    <div><h3>WebKyr in the browser</h3><p>The importer reads a local CD installation and produces <code>KYR1</code> packs, room tables, and scripts. The game runs in TypeScript. Canvas 2D composes the frame, WebGL2 processes some layers, and Web Audio handles sound.</p></div>
+  </div>
+  <div class="table-wrap" role="region" tabindex="0" aria-label="Resource formats"><table>
+    <thead><tr><th>Resource</th><th>Role in the original</th><th>In WebKyr</th></tr></thead>
+    <tbody>
+      <tr><td><code>PAK / APK</code></td><td>Directory of names and offsets inside a container.</td><td>The importer selects the resources it needs.</td></tr>
+      <tr><td><code>CPS / COL</code></td><td>Indexed bitmap and palette. Some CPS files contain their own palette.</td><td>The bitmap and resulting RGB palette go in the pack.</td></tr>
+      <tr><td><code>MSC / DAT</code></td><td>Walkability and depth masks, coordinates, room palette, shapes, and local animations.</td><td>Masks and room data. The engine reads DAT commands.</td></tr>
+      <tr><td><code>SHP / WSA</code></td><td>Character shapes and a series of frames or changes within a rectangle.</td><td>Shape atlases, keyframes, and differences between frames.</td></tr>
+      <tr><td><code>EMC</code></td><td>Bytecode for scenes, interactions, and quests.</td><td>Stack interpreter and LoK command handlers.</td></tr>
+      <tr><td><code>ADL / XMI / VOC</code></td><td>AdLib and Roland scores, plus recorded dialogue in the CD edition.</td><td>Original banks for synthesis and MP3 dialogue banks.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note"><a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/indexed_resources.mjs">Resource importer</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/world.ts">World loading</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/engine/kyra_lok.cpp">LoK in ScummVM</a></p>
+</section>
+
+<section id="palette">
+  <h2>Color indices and palettes</h2>
+  <p>Each pixel in a 320×200 VGA bitmap takes one byte. A value of <code>42</code> means “use entry 42 in the current palette.” A palette holds up to 256 entries, each with red, green, and blue components. The DOS files store component values from 0 to 63. WebKyr multiplies each value by four on import and keeps the indices as they are.</p>
+  <div class="panel">
+    <div class="controls" role="group" aria-label="Pixel grid display">
+      <button type="button" data-sample="color" aria-pressed="true">Colors</button>
+      <button type="button" data-sample="index" aria-pressed="false">Indices</button>
+    </div>
+    <div class="mini">
+      <figure><div id="sample-grid" class="sample" data-index-label="Index" role="img" aria-label="An eight by eight pixel sample from Brandon’s home"></div><figcaption>8×8 sample from GEMCUT at <code>x=207, y=45</code>.</figcaption></figure>
+      <figure><img class="palette16" src="../media/gemcut-palette.png" width="160" height="160" alt="The room’s palette as 256 swatches"><figcaption>256 palette entries, 16 per row.</figcaption></figure>
+    </div>
+  </div>
+  <div class="pair">
+    <div><h3>Changing colors in DOS</h3><p>The engine can swap colors while leaving every pixel index in place. That’s how it dims rooms and handles some lighting and magic effects. In GEMCUT, the DAT file sets colors 228 through 247. In caves, the script picks a palette according to the brightest fireberry the player carries or has left on the ground.</p></div>
+    <div><h3>Palettes in the browser</h3><p>The GPU reads a byte from an <code>R8UI</code> texture and looks up its color in a 256×1 palette. When WebGL2 is unavailable, the CPU does the lookup and writes the result to <code>ImageData</code>. The room background and the pixels that cover the character use the same updated colors. Scaling uses nearest-neighbor sampling.</p></div>
+  </div>
+  <figure class="panel">
+    <div class="controls" role="group" data-figure aria-label="Cave palette">
+      <button type="button" data-image="../media/cave-bright.png" data-caption="GEN_CAV, palette 8. All three states use the same bitmap. Twenty palette entries change." aria-pressed="true">Bright berry</button>
+      <button type="button" data-image="../media/cave-fading.png" data-caption="GEN_CAV, palette 11. All three states use the same bitmap. Twenty palette entries change." aria-pressed="false">Fading berry</button>
+      <button type="button" data-image="../media/cave-dark.png" data-caption="GEN_CAV, palette 12. All three states use the same bitmap. Twenty palette entries change." aria-pressed="false">No berry</button>
+    </div>
+    <img id="cave-image" src="../media/cave-bright.png" width="304" height="128" alt="GEN_CAV with the selected palette">
+    <figcaption id="cave-caption" aria-live="polite">GEN_CAV, palette 8. All three states use the same bitmap. Twenty palette entries change.</figcaption>
+  </figure>
+  <p class="note"><a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/rendering/indexedRenderer.ts">Indexed renderer</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/forest.ts">Palette selection in EMC</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/graphics/screen.cpp">Palettes and drawing in ScummVM</a></p>
+</section>
+
+<section id="size">
+  <h2>Sizes and compression</h2>
+  <p>A 320×200 indexed bitmap takes 64,000 bytes, plus 768 bytes if it has its own palette. The same bitmap needs 256,000 bytes in uncompressed RGBA. Westwood saved more space by limiting updates to the rectangles that change. The engine draws the background once. A flame, an arm, or a lift updates only its part of the screen.</p>
+  <div class="duo stack-mobile">
+    <figure><img src="../media/gemcut-cps.png" width="320" height="200" alt="Full GEMCUT.CPS bitmap with a strip of shapes below the visible scene"><figcaption>The decoded GEMCUT.CPS. DAT refers to shapes by their coordinates in the strip at the bottom. The visible room starts at (8, 8) and measures 304×128.</figcaption></figure>
+    <div class="tile"><b>Compression in DOS</b><ul><li>RLE encodes a run of identical values in one command.</li><li>LCW, also called Frame4, can refer back to data it has already decoded.</li><li>WSA stores changes from the preceding frame. A skip command leaves part of the buffer alone.</li></ul><p class="note">GEMCUT.CPS is <strong>20,746 bytes</strong> in the installed CD edition. Its DAT file is <strong>329 bytes</strong>.</p></div>
+  </div>
+  <div class="table-wrap" role="region" tabindex="0" aria-label="LIFTUP frame sizes"><table>
+    <thead><tr><th>LIFTUP · 30 frames at 80×80</th><th>Bytes</th><th>Measurement</th></tr></thead>
+    <tbody>
+      <tr><td>Uncompressed RGBA frames</td><td class="num">768,000</td><td>30 × 80 × 80 × 4.</td></tr>
+      <tr><td>Uncompressed indices and one palette</td><td class="num">192,768</td><td>30 × 80 × 80 + 768.</td></tr>
+      <tr><td>30 separate PNGs</td><td class="num">169,120</td><td>One PNG per decoded frame, encoded in Chromium. The size depends on the encoder.</td></tr>
+      <tr><td>Original LIFTUP.WSA</td><td class="num">30,225</td><td>File from the installed DOS CD edition.</td></tr>
+      <tr><td>Standalone WebKyr KYR1 clip, gzipped</td><td class="num">21,502</td><td>The same frames, including the palette, header, and frame table.</td></tr>
+    </tbody>
+  </table></div>
+  <p>A WebKyr keyframe stores every index. Frames between keyframes store runs of changes with an <code>offset + length + XOR bytes</code>. The importer writes a full frame when it takes less space than the delta. Seeking starts at the previous keyframe, at most 63 frames back. Gzip compresses the whole pack. The savings in the table are for this clip and depend on how much of the frame changes.</p>
+  <h3>Web build sizes at the time of measurement</h3>
+  <div class="table-wrap" role="region" tabindex="0" aria-label="Web build sizes"><table>
+    <thead><tr><th scope="col">Part of the build</th><th scope="col">Size</th></tr></thead>
+    <tbody>
+      <tr><td>Game code, rooms, and in-game interface</td><td class="num">6.86 MB</td></tr>
+      <tr><td>2D book menu</td><td class="num">0.72 MB</td></tr>
+      <tr><td>Optional 3D book</td><td class="num">2.76 MB</td></tr>
+      <tr><td>CD dialogue banks</td><td class="num">7.73 MB</td></tr>
+      <tr><td>GeneralUser GS SoundFont</td><td class="num">32.32 MB</td></tr>
+      <tr><td>Whole build excluding this guide</td><td class="num">52.00 MB</td></tr>
+    </tbody>
+  </table></div>
+  <p>These are sizes on disk. The game loads room packs and dialogue as you play. GeneralUser GS downloads when you select it. In the installed DOS CD edition, the <code>.VRM</code> files directly under <code>DAT</code> take 75.77 MB out of 82.71 MB. A comparison with the floppy release needs the total size of the disks in a specific edition. A single floppy holds 1.44 MB.</p>
+  <p class="note"><a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/scene_pack.mjs">KYR1 writer</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/check_asset_budget.mjs">Build size breakdown</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/graphics/wsamovie.cpp">WSA decoder in ScummVM</a></p>
+</section>
+
+<section id="depth">
+  <h2>Transparency and depth</h2>
+  <p>An ordinary character shape encodes skips in its data. A nonzero index draws a pixel. The pair <code>00 N</code> leaves the next N destination pixels alone, so you can see the background between the character’s legs and in the corners. In the browser, a keyed shape can decode to <code>alpha=0</code> or <code>alpha=255</code>.</p>
+  <div class="sprite-demo">
+    <figure><img src="../media/brandon-shape.png" alt="Enlarged Brandon sprite on a checkerboard"><figcaption>Transparent areas in shape 7.</figcaption></figure>
+    <div><h3>When zero means transparent</h3><p>The same index can be a color in an opaque background. Some WSA clips are transparent overlays. Others contain opaque rectangles with part of the background already drawn. <code>KYR1</code> specifies a transparency key for each clip. A value of <code>−1</code> marks an opaque image. The original engine also combines indices through lookup tables for some effects.</p></div>
+  </div>
+  <p>If the engine always drew Brandon last, he would cover the tree completely. Kyr stores an <code>MSC</code> mask with one byte per point. The high bit <code>0x80</code> marks an obstacle. The lowest three bits <code>0x07</code> encode depth priority. The position of Brandon’s feet and a table of Y thresholds determine his layer. Each foreground pixel can then cover the part of the sprite that falls behind it.</p>
+  <figure class="panel">
+    <div class="controls" role="group" data-figure aria-label="Forest scene layers">
+      <button type="button" data-image="../media/foresta.png" data-caption="FORESTA. The background and both masks use the same coordinates." aria-pressed="true">Background</button>
+      <button type="button" data-image="../media/foresta-walk.png" data-caption="FORESTA walk mask. Green marks points where bit 0x80 is clear. Red marks obstacles." aria-pressed="false">Walkability</button>
+      <button type="button" data-image="../media/foresta-priority.png" data-caption="FORESTA depth. Colors represent the lowest three bits of each MSC byte." aria-pressed="false">Depth priority</button>
+    </div>
+    <img id="mask-image" src="../media/foresta.png" width="304" height="128" alt="FORESTA with the selected background or mask">
+    <figcaption id="mask-caption" aria-live="polite">FORESTA. The background and both masks use the same coordinates.</figcaption>
+    <div class="legend">
+      <span><i style="background:#299473"></i>walkable</span><span><i style="background:#aa2f3a"></i>obstacle</span>
+      <span>Priority</span><span><i style="background:#3c4a82"></i>1</span><span><i style="background:#367994"></i>2</span><span><i style="background:#3ca18e"></i>3</span><span><i style="background:#70c17c"></i>4</span><span><i style="background:#e1cc5b"></i>5</span><span><i style="background:#f08d50"></i>6</span><span><i style="background:#ef5468"></i>7</span>
+    </div>
+  </figure>
+  <div class="duo">
+    <figure><img src="../media/brandon-over-tree.png" width="304" height="128" alt="Brandon drawn entirely in front of the tree"><figcaption>Brandon drawn over the background.</figcaption></figure>
+    <figure><img src="../media/brandon-behind-tree.png" width="304" height="128" alt="The same scene with the foreground covering part of Brandon"><figcaption>Pixels nearer the viewer cover Brandon.</figcaption></figure>
+  </div>
+  <p class="note">This example uses the original bitmap, mask, and character shape. Brandon’s feet are at (48, 92), on layer 2, in both images. The mask covers 259 of the shape’s 648 opaque pixels.</p>
+  <div class="pair">
+    <div><h3>Drawing order in Kyr</h3><p>The engine draws characters, items, and animations over the prepared background. Before redrawing, it can restore rectangles of the background. The height of the character’s feet and the terrain priority determine what appears in front.</p></div>
+    <div><h3>Foreground in WebKyr</h3><p>After drawing a character, Canvas restores the part of the character’s rectangle where <code>priority &gt; actorLayer</code>. The appropriate decorations join that layer. NPCs and items also sort by Y. Dropped items have an extra visibility check at the foreground edge.</p></div>
+  </div>
+  <p class="note"><a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/graphics/screen.cpp">Shape drawing and skips</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/scene/masks.ts">WebKyr masks</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/game.ts">Scene composition</a></p>
+</section>
+
+<section id="motion">
+  <h2>Animation</h2>
+  <ul class="tiles">
+    <li><b>Character shapes</b>The engine chooses walking frames by direction and can mirror the same shapes. Each frame has offsets that keep the feet anchored. Scaling by Y gives the scene perspective.</li>
+    <li><b>Room loops</b>DAT specifies the shape rectangles, where to draw them, how long to wait, and when to loop. The fire in Brandon’s home can cycle through three small frames while he walks.</li>
+    <li><b>Scripted animation</b>WSA holds frames and deltas. The calling script decides their order and timing. The lift, the talking tree, and scenes with Malcolm use this format.</li>
+  </ul>
+  <figure>
+    <img src="../media/brandon-walk.png" width="236" height="119" alt="Three rows of Brandon’s original walking frames with a common baseline">
+    <figcaption>Frames from the WebKyr atlas. From top to bottom, Brandon walks sideways (shapes 8–14), toward the viewer (29–34), and away (35–40). The marks show the baseline.</figcaption>
+  </figure>
+  <div class="pair">
+    <div><h3>DAT commands</h3><p>The GEMCUT fire uses three 8×8 shapes from the strip in the CPS. <code>FF88</code> selects the shape and position, <code>FF8A</code> sets the delay in ticks, and <code>FF8B</code> loops the sequence. When Brandon speaks, the engine combines body shape 16 with separate head shapes.</p></div>
+    <div><h3>Timing in WebKyr</h3><p><code>sceneAnims.ts</code> runs DAT commands. <code>RoomScript</code> waits for walking, frames, and dialogue. The opening uses a timeline extracted from DOS with positions and color indices. Skipping a line ends the wait while the script still applies the intended poses and actions.</p></div>
+  </div>
+  <div class="strip" aria-label="Five LIFTUP frames">
+    <figure><img src="../media/lift-0.png" width="80" height="80" alt="LIFTUP frame 0"><figcaption>Frame 0</figcaption></figure>
+    <figure><img src="../media/lift-7.png" width="80" height="80" alt="LIFTUP frame 7"><figcaption>Frame 7</figcaption></figure>
+    <figure><img src="../media/lift-14.png" width="80" height="80" alt="LIFTUP frame 14"><figcaption>Frame 14</figcaption></figure>
+    <figure><img src="../media/lift-21.png" width="80" height="80" alt="LIFTUP frame 21"><figcaption>Frame 21</figcaption></figure>
+    <figure><img src="../media/lift-29.png" width="80" height="80" alt="LIFTUP frame 29"><figcaption>Frame 29</figcaption></figure>
+  </div>
+  <p class="note">Five of the 30 frames in LIFTUP.WSA. The rectangle sits at (192, 56) in the scene. These frames are shown without interpolation.</p>
+  <div class="delta" aria-label="Difference between adjacent lift frames">
+    <figure><img src="../media/lift-8.png" width="80" height="80" alt="Starting frame 8"><figcaption>Frame 8</figcaption></figure>
+    <figure><img src="../media/lift-delta.png" width="80" height="80" alt="Only the changed pixels are marked in gold"><figcaption>Changes</figcaption></figure>
+    <figure><img src="../media/lift-9.png" width="80" height="80" alt="Resulting frame 9"><figcaption>Frame 9</figcaption></figure>
+  </div>
+  <p class="note">1,467 of 6,400 indices change between these frames. The middle image uses a highlight color to show them. After LCW decompression, the WSA decoder applies XOR to the previous frame. Skip commands leave unchanged areas alone.</p>
+  <p class="note"><a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/scene/sceneAnims.ts">DAT in WebKyr</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/characters/brandonFrames.ts">Brandon’s frames and head shapes</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/intro_timeline.mjs">Extracting the opening timeline</a></p>
+</section>
+
+<section id="runtime">
+  <h2>Scripts and game state</h2>
+  <p>EMC stores script commands. A virtual machine with a stack and registers reads them. A command can ask the engine to check a flag, move Brandon, play a WSA clip, or change the music. The same commands take different arguments in different rooms.</p>
+  <ol class="flow" aria-label="From player input to game state">
+    <li><b>Input</b>Click, held item, position, room, and current flags.</li>
+    <li><b>EMC</b>The stack VM follows a branch and calls game commands.</li>
+    <li><b>RoomScript</b>The queue coordinates walking, animation, confirmations, and waits.</li>
+    <li><b>State</b>The flag, item, or room transition takes effect at the scripted moment.</li>
+  </ol>
+  <div class="duo">
+    <figure><img src="../media/broken-bridge.png" width="320" height="200" alt="Broken bridge in a cave"><figcaption>The broken bridge in WebKyr. The walkable route changes when the script selects the BRIDGE variant.</figcaption></figure>
+    <figure><img src="../media/kyragem-chamber.png" width="320" height="200" alt="The Kyragem chamber in the finale"><figcaption>The Kyragem chamber in WebKyr. The player keeps control while Malcolm prepares his spell.</figcaption></figure>
+  </div>
+  <p>At import time, WebKyr extracts some opening commands from the CD edition’s EMC scripts. During play, scripts check items and flags to decide what happens next. The engine finds paths to exits using the walkability mask. Walking uses a grid with steps of 4 pixels on X and 2 on Y and checks a strip at the character’s feet. Walk speed changes that pace. Dialogue and scripted frames have their own timing.</p>
+  <p>Classic mode shows a logical 320×200 frame with the interface. Modern mode uses the 304×128 play area. Both axes scale equally, scene colors fill the remaining space, and pointer coordinates map back to the game.</p>
+  <p>A transition holds the current frame until the next room is ready. A save stores the current room, inventory, flags, items, visited room state, and format version. The browser edition adds the book, radial inventory, and control modes. They share the same game state.</p>
+  <p class="note"><a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/emc.mjs">Stack machine</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/roomScript.ts">Action queue</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/pathfinding.ts">Pathfinding</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/gameplay/saveStorage.ts">Save format</a></p>
+</section>
+
+<section id="audio">
+  <h2>Music and sound</h2>
+  <p>A DOS script issues a music command. A game table maps it to a bank and track. Command 7 selects track 4 in <code>KYRA1B</code> for the Lake of Sorrow. The score describes notes, durations, instruments, and control events. The device synthesizes the audio as the game runs, which takes far less storage than recordings of the same length.</p>
+  <ol class="flow" aria-label="Audio pipeline">
+    <li><b>Game event</b>Entering a room, speaking a line, or running a DAT or EMC action.</li>
+    <li><b>Source</b>An ADL or XMI track, a sound effect by number, or a voice clip by bank and number.</li>
+    <li><b>Audio samples</b>The synth generates PCM. Recorded dialogue decodes to PCM.</li>
+    <li><b>Mix</b>Music, effects, and voices each have their own volume.</li>
+  </ol>
+  <div class="table-wrap" role="region" tabindex="0" aria-label="Audio modes"><table>
+    <thead><tr><th>Mode</th><th>How it works</th><th>In WebKyr</th></tr></thead>
+    <tbody>
+      <tr><td>AdLib (OPL2)</td><td>The driver reads ADL commands and sets the Yamaha operators. One operator modulates another, and envelopes shape the sound. There is no instrument ROM to supply.</td><td>The WASM build combines an adapted Westwood driver from AdPlug with Nuked OPL3 in compatibility mode. WebKyr ticks the driver at 72 Hz and reads PCM in blocks. This is the default mode.</td></tr>
+      <tr><td>Roland MT-32 / CM-32L</td><td>XMIDI contains MIDI events with durations and loops. Miles commands, including SysEx, load instruments. Roland’s LA synthesis combines synthesized partials with PCM waveforms.</td><td>The Munt/libmt32emu WASM build reads a compatible Control ROM and PCM ROM pair. The Control ROM holds data and tables. The PCM ROM holds recorded waveforms. The player supplies the ROMs, and the browser stores them locally.</td></tr>
+      <tr><td>SoundFont SF2</td><td>A bank contains samples, note ranges, and instrument settings.</td><td>TinySoundFont in WASM plays XMI by mapping MT-32 programs to General MIDI. The mapping is approximate because Roland patches and GM instruments differ.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="pair">
+    <div><h3>How WebKyr connects sound to the game</h3><p>WebKyr chooses the original banks and tracks, reads XMIDI, converts timing to sample positions, applies control commands, and sends buffers to an AudioWorklet. It also manages room cues, ROM and SoundFont loading, device changes, and mixing.</p></div>
+    <div><h3>Synthesis engines</h3><p>Nuked OPL3 handles OPL, Munt emulates Roland, and TinySoundFont plays SF2. WebKyr builds and runs those components in the browser. ScummVM serves as a reference for Kyr’s behavior.</p></div>
+  </div>
+  <figure class="panel">
+    <svg class="wave" viewBox="0 0 640 124" role="img" aria-label="Waveform of three seconds of Lake of Sorrow in AdLib">
+      <path d="M24 58H616 M24 18V98 M221 18V98 M419 18V98 M616 18V98" fill="none" stroke="#39434a"/>
+      <path d="M24.0 55.4V59.9 M26.5 55.3V59.7 M29.0 55.4V60.0 M31.4 56.0V60.6 M33.9 56.4V60.7 M36.4 55.8V60.4 M38.9 55.5V59.8 M41.3 55.5V59.7 M43.8 55.7V60.3 M46.3 55.5V60.6 M48.8 55.5V60.6 M51.2 55.5V60.5 M53.7 55.6V60.4 M56.2 55.6V60.4 M58.7 55.6V60.4 M61.2 55.7V60.3 M63.6 55.7V60.3 M66.1 55.7V60.3 M68.6 55.8V60.2 M71.1 55.2V60.8 M73.5 55.2V60.8 M76.0 55.3V60.8 M78.5 55.2V60.7 M81.0 55.2V60.6 M83.4 55.3V60.6 M85.9 55.4V60.6 M88.4 55.4V60.6 M90.9 55.4V60.6 M93.4 55.4V60.5 M95.8 56.7V59.3 M98.3 56.7V59.3 M100.8 56.8V59.3 M103.3 56.8V59.3 M105.7 56.8V59.2 M108.2 56.8V59.2 M110.7 56.8V59.2 M113.2 56.8V59.2 M115.6 56.8V59.2 M118.1 56.8V59.2 M120.6 56.8V59.2 M123.1 55.2V60.8 M125.6 55.3V60.7 M128.0 55.3V60.8 M130.5 55.3V60.7 M133.0 55.3V60.6 M135.5 55.4V60.6 M137.9 55.4V60.6 M140.4 55.4V60.6 M142.9 55.5V60.6 M145.4 55.5V60.6 M147.8 55.4V60.6 M150.3 55.4V60.6 M152.8 55.4V60.6 M155.3 55.4V60.6 M157.8 55.5V60.6 M160.2 55.5V60.5 M162.7 55.6V60.4 M165.2 55.6V60.4 M167.7 55.6V60.4 M170.1 55.7V60.4 M172.6 55.2V60.8 M175.1 55.2V60.7 M177.6 55.2V60.7 M180.1 55.3V60.7 M182.5 55.3V60.7 M185.0 55.4V60.7 M187.5 55.4V60.6 M190.0 55.4V60.6 M192.4 55.4V60.6 M194.9 55.5V60.6 M197.4 56.8V59.3 M199.9 56.8V59.2 M202.3 56.8V59.2 M204.8 56.8V59.2 M207.3 56.8V59.2 M209.8 56.8V59.2 M212.3 56.8V59.2 M214.7 56.8V59.2 M217.2 56.9V59.1 M219.7 56.9V59.1 M222.2 55.2V60.8 M224.6 55.3V60.8 M227.1 55.3V60.7 M229.6 55.3V60.7 M232.1 55.4V60.6 M234.5 55.4V60.6 M237.0 55.4V60.6 M239.5 55.4V60.6 M242.0 55.4V60.5 M244.5 55.5V60.4 M246.9 55.5V60.5 M249.4 55.6V60.5 M251.9 55.6V60.4 M254.4 55.6V60.4 M256.8 55.7V60.3 M259.3 55.7V60.3 M261.8 55.8V60.2 M264.3 55.8V60.2 M266.7 55.9V60.2 M269.2 55.9V60.1 M271.7 55.2V60.8 M274.2 55.3V60.8 M276.7 55.3V60.7 M279.1 55.3V60.7 M281.6 55.4V60.6 M284.1 55.4V60.6 M286.6 55.4V60.6 M289.0 55.4V60.6 M291.5 55.4V60.5 M294.0 55.5V60.5 M296.5 55.5V60.5 M298.9 55.4V60.6 M301.4 55.4V60.6 M303.9 55.4V60.6 M306.4 55.5V60.6 M308.9 55.5V60.6 M311.3 55.5V60.5 M313.8 55.6V60.4 M316.3 55.6V60.4 M318.8 55.6V60.4 M321.2 55.6V60.4 M323.7 55.2V60.8 M326.2 55.3V60.8 M328.7 55.3V60.7 M331.1 55.3V60.7 M333.6 55.3V60.7 M336.1 55.3V60.7 M338.6 55.4V60.6 M341.1 55.4V60.6 M343.5 55.4V60.6 M346.0 55.4V60.5 M348.5 56.6V59.9 M351.0 56.7V59.4 M353.4 56.7V59.3 M355.9 56.7V59.3 M358.4 56.8V59.3 M360.9 56.8V59.2 M363.3 56.8V59.2 M365.8 56.8V59.2 M368.3 56.8V59.2 M370.8 56.8V59.2 M373.3 55.2V60.8 M375.7 55.3V60.8 M378.2 55.3V60.7 M380.7 55.3V60.7 M383.2 55.3V60.7 M385.6 55.3V60.6 M388.1 55.4V60.6 M390.6 55.4V60.6 M393.1 55.4V60.6 M395.5 55.5V60.5 M398.0 55.8V59.3 M400.5 56.8V59.3 M403.0 56.8V59.3 M405.5 56.8V59.2 M407.9 56.8V59.2 M410.4 56.8V59.2 M412.9 56.8V59.2 M415.4 56.8V59.2 M417.8 56.8V59.2 M420.3 56.9V59.1 M422.8 55.3V60.8 M425.3 55.3V60.8 M427.7 55.3V60.7 M430.2 55.3V60.7 M432.7 55.3V60.7 M435.2 55.4V60.6 M437.7 55.4V60.6 M440.1 55.5V60.6 M442.6 55.5V60.6 M445.1 55.5V60.5 M447.6 55.4V60.7 M450.0 55.4V60.7 M452.5 55.4V60.6 M455.0 55.4V60.6 M457.5 55.5V60.5 M459.9 55.5V60.5 M462.4 55.5V60.5 M464.9 55.6V60.5 M467.4 55.6V60.5 M469.9 55.6V60.4 M472.3 55.6V60.3 M474.8 55.2V60.8 M477.3 55.3V60.7 M479.8 55.3V60.7 M482.2 55.3V60.7 M484.7 55.3V60.7 M487.2 55.3V60.6 M489.7 55.4V60.6 M492.2 55.4V60.6 M494.6 55.4V60.6 M497.1 55.4V60.6 M499.6 56.0V59.5 M502.1 56.7V59.3 M504.5 56.7V59.3 M507.0 56.8V59.2 M509.5 56.8V59.2 M512.0 56.8V59.2 M514.4 56.8V59.2 M516.9 56.8V59.2 M519.4 56.8V59.2 M521.9 56.9V59.2 M524.4 55.3V60.8 M526.8 55.3V60.7 M529.3 55.3V60.7 M531.8 55.3V60.7 M534.3 55.3V60.7 M536.7 55.3V60.7 M539.2 55.4V60.6 M541.7 55.4V60.6 M544.2 55.4V60.6 M546.6 55.5V60.6 M549.1 55.5V60.5 M551.6 55.6V60.4 M554.1 55.7V60.4 M556.6 55.7V60.3 M559.0 55.8V60.2 M561.5 55.8V60.2 M564.0 55.8V60.2 M566.5 55.9V60.1 M568.9 55.9V60.1 M571.4 56.0V60.0 M573.9 55.3V60.7 M576.4 55.3V60.7 M578.8 55.3V60.7 M581.3 55.3V60.7 M583.8 55.3V60.7 M586.3 55.4V60.6 M588.8 55.4V60.6 M591.2 55.5V60.6 M593.7 55.4V60.6 M596.2 55.4V60.5 M598.7 55.4V60.6 M601.1 56.8V59.3 M603.6 56.8V59.2 M606.1 56.8V59.2 M608.6 56.8V59.2 M611.0 56.8V59.2 M613.5 56.8V59.2 M616.0 56.8V59.2" fill="none" stroke="#e8bc7a" stroke-width="1.25"/>
+      <g fill="currentColor" font-size="11" font-family="monospace"><text x="24" y="114">0 s</text><text x="212" y="114">1 s</text><text x="410" y="114">2 s</text><text x="594" y="114">3 s</text></g>
+    </svg>
+    <svg class="wave" viewBox="0 0 640 104" role="img" aria-label="XMIDI notes for the same theme"><path d="M24 16V78 M221 16V78 M419 16V78 M616 16V78 M24 78H616" fill="none" stroke="#39434a"/><rect x="25.6" y="38.2" width="46.0" height="4" fill="#e8bc7a"/><rect x="71.7" y="27.0" width="49.3" height="4" fill="#e8bc7a"/><rect x="121.0" y="14.2" width="49.3" height="4" fill="#e8bc7a"/><rect x="170.4" y="27.0" width="49.3" height="4" fill="#e8bc7a"/><rect x="219.7" y="15.8" width="49.3" height="4" fill="#e8bc7a"/><rect x="269.0" y="27.0" width="49.3" height="4" fill="#e8bc7a"/><rect x="318.4" y="19.0" width="49.3" height="4" fill="#e8bc7a"/><rect x="367.7" y="27.0" width="49.3" height="4" fill="#e8bc7a"/><rect x="417.0" y="35.0" width="49.3" height="4" fill="#e8bc7a"/><rect x="466.4" y="27.0" width="49.3" height="4" fill="#e8bc7a"/><rect x="515.7" y="20.6" width="49.3" height="4" fill="#e8bc7a"/><rect x="565.0" y="27.0" width="49.3" height="4" fill="#e8bc7a"/><rect x="614.4" y="19.0" width="3.0" height="4" fill="#e8bc7a"/><g fill="currentColor" font-size="11" font-family="monospace"><text x="24" y="97">0 s</text><text x="212" y="97">1 s</text><text x="410" y="97">2 s</text><text x="594" y="97">3 s</text></g></svg>
+    <audio controls preload="none" src="../media/lake-of-sorrow.wav" aria-label="Lake of Sorrow synthesized with AdLib"></audio>
+    <figcaption>The first three seconds of <code>KYRA1B / 4</code>, recorded from AdLib in WebKyr. The upper plot shows the left channel’s minimum and maximum every 12.5 ms. The lower plot shows notes from the XMI version of the same theme. Bar length represents duration and height represents MIDI note number. The sample is 24 kHz mono. The whole KYRA1B bank takes 8,910 bytes in gzipped ADL and 9,406 bytes in gzipped XMI.</figcaption>
+  </figure>
+  <p>The Yamaha MU50 emulator is in development separately. It is not selectable in the game yet.</p>
+  <h3>Effects, speech, and volume</h3>
+  <ul>
+    <li><strong>Effects.</strong> In Roland mode, one music sequence and up to three effects share the synth. The Miles layer assigns and frees MIDI parts so an effect cannot change the instruments used by the music. AdLib and SF2 modes use a small bank of effects recorded from CM-32L synthesis. Book sounds are stored separately.</li>
+    <li><strong>Speech.</strong> The CD stores VOC clips in VRM archives. WebKyr converts the selected clips to MP3. The line number gives the engine the clip’s offset and length in the bank. The script determines the voice clip and its timing independently of the translated text.</li>
+    <li><strong>Transitions.</strong> The scene issues its own music commands first. When a route has none, the room supplies a fallback theme. Changing banks clears the previous scene’s audio queue.</li>
+    <li><strong>Default levels.</strong> WebKyr starts with music at 50%, effects at 25%, and speech at 60%. The browser allows audio after the player interacts. Opening the pause book or hiding the tab affects playback.</li>
+  </ul>
+  <p class="note"><a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/audio/cues.ts">Music cue table</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/engine/audio/midiPlayback.ts">Music and effects on one clock</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/extractor/adlib/opl.cpp">AdLib build</a> <a href="https://github.com/nukeykt/Nuked-OPL3">Nuked OPL3</a> <a href="https://github.com/munt/munt">Munt</a> <a href="https://github.com/schellingb/TinySoundFont">TinySoundFont</a></p>
+</section>
+
+<section id="translation">
+  <h2>Localization</h2>
+  <p>WebKyr currently translates dialogue through <code>ru-game.json</code> and adds strings from <code>i18n.ts</code> and the item list. Some book components choose their strings directly, and the prologue lives separately. Dialogue keys often match the normalized English text. The same English line can need different keys when it appears in different situations.</p>
+  <div class="pair">
+    <div><h3>One catalog for translators</h3><p>The proposed <code>lang/ru.json</code> would group interface strings, dialogue, items, locations, and the prologue. The game could read it when the player selects a language. Editing the text would leave the keys intact. Dialogue keys could identify a scene and script line, with voice clips stored separately. A missing key would fall back to the original text.</p></div>
+    <div><h3>Text in images</h3><p>The Options button and Malcolm’s title card currently use localized images. To make them translatable through JSON, we would separate the background from the text and have the engine draw letters inside a defined rectangle. The font needs the language’s glyphs, and each string needs checks for wrapping and width.</p></div>
+  </div>
+  <pre aria-label="Sample Russian catalog format">{
+  "schema": 1,
+  "locale": "ru",
+  "ui": { "book.menu": "Меню", "game.options": "Настройки" },
+  "items": { "item.saw": "Пила" },
+  "locations": { "room.gemcut": "Дом Брендона" },
+  "dialogue": { "wise.cough.first": "Кхе-кхе…" },
+  "cards": { "intro.malcolm.title": "Малколм на свободе" }
+}</pre>
+  <p>This is a proposed format. A separate catalog could be replaced on the server and read the next time the game loads. A translation needs checks for substitutions, long lines, narrow screens, and new alphabets. The script still supplies speaker color, position, timing, voice clips, and animation. Voice acting in another language needs recordings in that language.</p>
+  <p class="note"><a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/i18n.ts">Current dictionary</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/locales/ru-game.json">Russian dialogue</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/components/prologue.ts">Prologue</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/src/components/SubtitleOverlay.vue">Subtitle placement</a></p>
+</section>
+
+<section id="art">
+  <h2>Preparing artwork</h2>
+  <div class="duo stack-mobile">
+    <div><p>Use transparent PNGs or an Aseprite source file with an export. Before animating, record the frame size, room palette, foot or attachment anchor, direction, and the shapes the clip replaces. For a room effect, also record its position, depth priority, and how long each frame lasts.</p>
+    <p>Artists can work on a new sprite in RGBA. When importing to an indexed layer, map each visible pixel to the room palette and assign transparent pixels the key reserved for that clip. Check the sprite against the background before and after palette changes. An existing RGBA character atlas can keep its alpha channel and use updated frame coordinates.</p></div>
+    <figure><img class="bookshot" src="../media/book-menu.png" width="1280" height="800" alt="WebKyr pixel book with bookmarks and an illustration of Kallak"><figcaption>The 2D book menu. Its artwork counts separately from room graphics.</figcaption></figure>
+  </div>
+  <p>For a new clip, check the first and last frames, facing changes, contact with the ground, objects passing in front, skipping a line or scene, and leaving and re-entering the room. Compare files with the same dimensions, frame count, and visible image when measuring size.</p>
+</section>
+
+<section id="hof">
+  <h2>Hand of Fate</h2>
+  <p>Hand of Fate can reuse the renderer, import tools, and audio pipeline. The sequel has its own script commands, dialogue, and potion rules, so it needs a separate game layer. The differences below come from ScummVM’s HoF implementation.</p>
+  <div class="table-wrap" role="region" tabindex="0" aria-label="Hand of Fate engine requirements"><table>
+    <thead><tr><th>Subsystem</th><th>Reusable from WebKyr</th><th>Needed for HoF</th></tr></thead>
+    <tbody>
+      <tr><td>Graphics and packing</td><td>Indexed bitmaps, Canvas and WebGL, KYR1, gzip, and on-demand loading.</td><td>WSA v2 decoding with coordinate offsets, room palette import from COL, Zanthia’s shapes, and rules for scaling and depth.</td></tr>
+      <tr><td>Scripts</td><td>The EMC stack interpreter as a starting point, action logging, and transition tests.</td><td>Bytecode checks, HoF’s own command table, special scripts, and game state. For example, host call <code>0x00</code> deals with the held item in LoK and changes the character’s facing in HoF.</td></tr>
+      <tr><td>Dialogue and cutscenes</td><td>Text placement, colors, audio timing, and cancelable waits.</td><td>Dialogue objects with positions and colors, TIM for beginning, loop, and end, TLK banks for CD speech, and a separate intro and finale.</td></tr>
+      <tr><td>Music</td><td>WASM emulators, AudioWorklet, volume controls, and storage for player-supplied banks.</td><td>HoF bank extraction, driver and track table checks, effect routing, and transition checks.</td></tr>
+      <tr><td>Interface and saves</td><td>Book, controls, save slots, debug menu, and the string catalog once implemented.</td><td>Zanthia’s items and inventory, potion rules, quest state, separate saves, and new dialogue.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Testing what carries over</h3>
+  <ol>
+    <li>Pick a specific DOS CD edition and extract CPS, MSC, COL, EMC, Zanthia’s shapes, and one WSA v2 for the first two rooms.</li>
+    <li>Compare frames, palettes, spawn position, depth, and transitions in both directions with the original. That shows which graphics adapters the games can share.</li>
+    <li>Implement a conversation with TIM and TLK, an item interaction, a music change, and a save. That small slice gives an estimate of the work needed on HoF commands.</li>
+  </ol>
+  <p>So far, the HoF work covers formats and commands. The second game is not playable in WebKyr yet.</p>
+  <p class="note"><a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/engine/scene_hof.cpp">HoF room resources and scripts</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/script/script_hof.cpp">HoF host commands</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/text/text_hof.cpp">HoF dialogue</a> <a href="https://github.com/scummvm/scummvm/blob/master/engines/kyra/graphics/wsamovie.cpp">WSA v1/v2</a></p>
+</section>
+
+<section id="sources">
+  <h2>Sources and measurements</h2>
+  <p>The measurements use WebKyr commit <code>955202ef3473</code>. The screenshots of the home, bridge, Kyragem chamber, and book come from WebKyr. The other graphics examples use original DOS CD resources and published game packs. Masks and deltas use illustrative colors. Sizes are in bytes or decimal MB. The SHA-256 below identifies the <code>LIFTUP.WSA</code> file used for the measurement.</p>
+  <pre><code>9f3c082e6ec740bd8e9e61f459c7e6be9c59250786e2d29febe30a3e7dfb4da4</code></pre>
+  <p class="note"><a href="https://github.com/yanakulov/kyraweb">WebKyr repository</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/docs/world.md">Playable areas and verification</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/docs/music.md">Audio pipeline details</a> <a href="https://github.com/yanakulov/kyraweb/blob/955202ef34731107569c45b630e0788fd7a481cf/public/assets/packs/manifest.json">Imported resource sizes and hashes</a> <a href="https://github.com/scummvm/scummvm/tree/master/engines/kyra">Kyr engine family in ScummVM</a></p>
+</section>
+  </article>
+</main>
+<footer class="site-footer">
+  <div class="wrap credits">
+    <div>
+      <a class="credits-brand" href="https://akulaflow.ru/" aria-label="AkulaFlow, home">
+        <img src="../credits/akulaflow.svg" alt="AkulaFlow" width="1315" height="148">
+      </a>
+      <p>Design, code, and motion.<br>Made by one team.</p>
+    </div>
+    <div class="credits-tech">
+      <h2>Built with</h2>
+      <ul>
+        <li><img src="../credits/vuedotjs.svg" alt="" width="20" height="20">Vue</li>
+        <li><img src="../credits/typescript.svg" alt="" width="20" height="20">TypeScript</li>
+        <li><img src="../credits/threedotjs.svg" alt="" width="20" height="20">Three.js</li>
+      </ul>
+    </div>
+  </div>
+  <div class="wrap credits-bottom">
+    <p>Original game © 1992 Westwood Studios. Browser remake by Yan Akulov (AkulaFlow).</p>
+    <nav aria-label="AkulaFlow">
+      <ul class="credits-links">
+        <li><a href="https://akulaflow.ru/lab/kyraweb">About the project</a></li>
+        <li><a href="https://akulaflow.ru/works">Work</a></li>
+        <li><a href="https://akulaflow.ru/blog">Blog</a></li>
+      </ul>
+    </nav>
+  </div>
+</footer>
+<script src="../wiki.js" defer></script>
+</body>
+</html>
