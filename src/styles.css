@@ -120,7 +120,7 @@ button, select, summary { cursor: pointer; }
   line-height: 1.4;
 }
 
-.continue-button { position:absolute; z-index:4; bottom:4%; left:50%; transform:translateX(-50%); }
+.continue-button { position:absolute; z-index:4; left:81.25%; right:3.25%; transform:translateY(-50%); padding:6px 2px; font-size:clamp(7px,1.2cqw,14px); border-color:#b88752; text-shadow:1px 1px #15140f; }
 
 @media (hover: hover) and (pointer: fine) {
   .pixel-button:hover { background: #425943; color: #fff3d2; border-color: #edd591; }
@@ -144,7 +144,7 @@ button:disabled { cursor: default; }
 .game-cursor { position: absolute; width: 3.75%; height: 8%; pointer-events: none; z-index: 7; }
 .game-cursor img { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 .fantasy-book, .fantasy-book button, .fantasy-book input, .fantasy-book a, .fantasy-book [role="option"] { cursor: url('/assets/cursors/book-pointer.svg') 2 2, auto !important; }
-.translated-letter { position:absolute; left:22.1875%; top:7.5%; width:180px; height:113px; transform-origin:top left; z-index:4; background:#cdaa54; color:#665005; padding:0 2px; font:7px/8px Kyrandia,monospace; pointer-events:none; overflow:hidden; }
+.translated-letter { position:absolute; left:22.1875%; width:180px; height:113px; transform-origin:top left; z-index:4; color:#685004; padding:0 2px; font:7px/8px Kyrandia,monospace; pointer-events:none; overflow:hidden; }
 .translated-letter p { margin:0 0 3px; }
 .translated-letter p:last-child { text-align:right; padding-right:12px; }
 .game-error {

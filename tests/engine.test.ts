@@ -1058,6 +1058,18 @@ test('world saves restore visited props, quest files, NPCs and inventory without
       assert.equal(signShown, shown, `location sign on entry to room ${target}`);
     }
     forestWalk.stop();
+    let willowResource = "", facingBeforeHeal: number | undefined;
+    const willow = await startGame(h.canvas, { ...config, devRoom: { room: 4 },
+      onLocationChange: (_, __, resource) => { willowResource = resource ?? ""; },
+      onLoadingChange: value => { if (value) facingBeforeHeal = willow.getSnapshot().facing; } });
+    games.push(willow);
+    willow.runSequence([{ op: "hand", item: "teardrop" }, { op: "face", facing: 3, shape: 7 }]);
+    tick();
+    willow.handleClick({ x: 152, y: 76 });
+    await until(() => willowResource === "WILLOW", "healed willow did not load");
+    assert.equal(facingBeforeHeal, 3);
+    assert.equal(willow.getSnapshot().facing, facingBeforeHeal, "an in-place scene change preserves Brandon’s facing");
+    willow.stop();
     const game = await startGame(h.canvas, config); games.push(game);
     game.handleClick({ x: 248, y: 82 }); game.handleClick({ x: 100, y: 165 });
     assert.equal(game.getSnapshot().inventorySlots[0], 'ruby');
