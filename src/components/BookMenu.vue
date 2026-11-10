@@ -53,7 +53,7 @@
             <button type="button" @click="mainMenu ? $emit('replayIntro') : askLeave()">{{ t('Replay intro') }}</button>
             <button type="button" @click="$emit('readPrologue')">{{ t('The story so far') }}</button>
             <div v-if="confirmAction" class="folio-confirm"><p>{{ t('Leave this adventure? Unsaved progress will be lost.') }}</p><div class="folio-inline"><button type="button" @click="leave">{{ t('Continue') }}</button><button type="button" @click="cancelLeave">{{ t('Stay here') }}</button></div></div>
-            <p class="folio-credits">{{ t('Original tale © 1992 Westwood Studios') }}<br /><a href="https://github.com/yanakulov/kyraweb" target="_blank" rel="noopener noreferrer">{{ t('Reimagined by AkulaFlow · Yan Akulov') }}</a></p>
+            <p class="folio-credits">{{ t('Original tale © 1992 Westwood Studios') }}<br /><a href="https://github.com/yanakulov/webkyr" target="_blank" rel="noopener noreferrer">{{ t('Reimagined by AkulaFlow · Yan Akulov') }}</a></p>
           </template>
           <MusicSettings v-else-if="settingsPage === 'audio' && musicPlayer && musicState" :player="musicPlayer" :state="musicState" />
           <section v-else-if="settingsPage === 'dev'" class="folio-dev">

@@ -30,7 +30,7 @@ All SDKs, source checkouts, downloads and large temporary files stay in the
 explicitly supplied build directory. Existing unrecognized directories are refused.
 
 ```powershell
-node extractor/mu50/setup.mjs "D:\KyraWeb-build"
+node extractor/mu50/setup.mjs "D:\WebKyra-build"
 ```
 
 The setup creates an ownership/stage manifest and prepares portable w64devkit,
@@ -48,7 +48,7 @@ A downloaded SDK/source checkout alone is not a completed MU50 emulator.
 After setup, the dedicated build command is:
 
 ```powershell
-npm run mu50:build -- "D:\KyraWeb-build" 2
+npm run mu50:build -- "D:\WebKyra-build" 2
 ```
 
 It obtains portable CMake/Ninja, prepares SDL3 ports, injects the bounded virtual

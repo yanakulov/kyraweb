@@ -1,10 +1,10 @@
-# KyraWeb
+# WebKyra
 
 ![The Legend of Kyrandia](public/assets/interface/kyrandia-title.webp)
 
 [Играть](https://lok.akulaflow.ru/) · [Вики движка](https://lok.akulaflow.ru/howitworks/) · [English README](README.md)
 
-KyraWeb переносит первую *The Legend of Kyrandia* в браузер. Игру можно пройти целиком, от подъёмника у дома Брендона до финала и титров CD-издания. Графика, анимации, сценарии и звуковые данные взяты из игры Westwood. **WebKyr** исполняет их своим кодом на TypeScript.
+Проект переносит первую *The Legend of Kyrandia* в браузер. Игру можно пройти целиком, от подъёмника у дома Брендона до финала и титров CD-издания. Графика, анимации, сценарии и звуковые данные взяты из игры Westwood. **WebKyra** исполняет их своим кодом на TypeScript.
 
 ## Как играть
 

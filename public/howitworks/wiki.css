@@ -25,7 +25,7 @@ code, pre { font-family: var(--mono); }
 code { color: #65332a; overflow-wrap: anywhere; }
 pre { overflow: auto; margin: 18px 0; padding: 14px 16px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; }
 ol, ul { padding-inline-start: 1.4em; }
-li + li { margin-top: .4em; }
+article li + li { margin-top: .4em; }
 ::selection { color: #292018; background: #e9d3a8; }
 
 .wrap { width: min(1180px, calc(100% - 64px)); margin-inline: auto; }
@@ -106,7 +106,6 @@ audio { display: block; width: min(100%, 420px); height: 42px; margin: 10px 0; }
 .credits-tech li { margin: 0; display: flex; align-items: center; gap: 7px; font-size: 13px; color: #e0d7c8; }
 .credits-tech img { width: 20px; height: 20px; }
 .credits-bottom { border-top: 1px solid #51493c; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 28px; padding-block: 17px 23px; color: #d5cbb9; font-size: 13px; }
-.credits-links li { margin: 0; }
 .credits-links a { color: #f5e8cd; }
 
 @media (max-width: 860px) {
