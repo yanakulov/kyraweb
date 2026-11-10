@@ -1,5 +1,12 @@
 # Original opening: DOS CD
 
+## Book navigation — 2026-11-10
+
+- The book uses a 56×14 PNG strip with four centered 14×14 bookmark icons.
+  Imagegen drew the open book, wax-sealed scroll, emerald cog, and key over a
+  sapphire diamond in DOS VGA pixel art. The import trims each icon to its
+  alpha bounds, fits it with nearest-neighbor scaling, and keeps hard alpha edges.
+
 ## Music — 2026-11-07
 
 - Added the real TinySoundFont WASM renderer alongside Munt, selectable SF2 banks,

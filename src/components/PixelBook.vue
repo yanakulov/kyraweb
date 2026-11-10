@@ -22,7 +22,7 @@ import { WIDTH, HEIGHT, SPREAD, COVER, ILLUSTRATION, CHAPTER_FOCUS, RUBRIC, FOIL
   clamp, ease, mix, pixels, frame, text, sparkle, desk, bookShadow, spreadLight, turnLeaf, type Art, type Rect } from './pixelBookPaint';
 
 type WalkSpeed = 'slowest' | 'slow' | 'fast' | 'fastest';
-type Page = 'main' | 'story' | 'save' | 'load' | 'settings' | 'sound' | 'dev' | 'help' | 'setup';
+type Page = 'main' | 'story' | 'saves' | 'settings' | 'sound' | 'dev' | 'help' | 'setup';
 type Slot = { index: number; error?: string | null } & Partial<SaveRecord>;
 const props = defineProps<{
   options: boolean; mainMenu: boolean; gameOver: boolean; canSave: boolean; busy: boolean; returning: boolean; message: string;
@@ -59,10 +59,13 @@ const STUDIO_MARK = { x: 13, y: 74, w: 300, h: 54 };
 const CREDIT_TOP = 342;
 const canvasLabel = ref('');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-const pages: Page[] = ['main', 'story', 'save', 'load', 'settings', 'sound', 'dev'];
-const initial = props.options ? props.initialView : props.setup ? 'setup' : 'story';
+const pages: Page[] = ['main', 'story', 'saves', 'settings', 'sound', 'help', 'dev'];
+const sideTabs = ['main', 'saves', 'settings'] as const;
+const initialPage = () => props.initialView === 'load' ? 'saves' : props.initialView;
+const initial = props.options ? initialPage() : props.setup ? 'setup' : 'story';
 let page: Page = initial, selectedMode = props.controlMode, chapter = 0, devPage = 0, query = '', saveName = '';
 let selectedSlot: number | undefined, chapterAction: 'replace' | 'delete' | null = null;
+let parameterPage: 'game' | 'sound' = 'game';
 let confirmIntro = false, editing: 'query' | 'save' | null = null;
 let art: Art | undefined, coverFace: HTMLCanvasElement;
 let ctx: CanvasRenderingContext2D, left: CanvasRenderingContext2D, outgoing: CanvasRenderingContext2D;
@@ -101,9 +104,12 @@ const textFont = 'Georgia, serif';
 const menuFont = 'Kyrandia, Georgia, serif', titleFont = '"Cormorant Garamond", Georgia, serif';
 const LEFT = 113, RIGHT = 339, PAGE_W = 192, PAGE_TOP = 108, FOOT = 273;
 const LEFT_CENTER = LEFT + PAGE_W / 2, RIGHT_CENTER = RIGHT + PAGE_W / 2;
-const mainTitle = () => props.gameOver ? t("It didn't happen that way!") : tr('The Journey', 'Путешествие');
-const names = () => ({ main: mainTitle(), story: tr('The Chronicles', 'Летопись'), save: t('Save your story'),
-  load: t('Saved chapters'), settings: t('Settings'), sound: t('Sound settings'), dev: 'Dev Menu', help: t('How to play'), setup: t('Choose your controls') });
+const mainTitle = () => props.gameOver ? t("It didn't happen that way!") : t('Menu');
+const savesTitle = () => tr('Saves', 'Сохранения');
+const parametersTitle = () => tr('Settings', 'Параметры');
+const names = () => ({ main: mainTitle(), story: tr('The Chronicles', 'Летопись'), saves: savesTitle(),
+  settings: parametersTitle(), sound: t('Sound settings'), dev: 'Dev Menu', help: t('How to play'), setup: t('Choose your controls') });
+const soundPage = () => page === 'sound' || page === 'settings' && parameterPage === 'sound';
 const onScroll = () => props.setup && !props.options;
 const directTouch = () => props.portrait || props.installHelp;
 const pageY = (y: number) => onScroll() ? y : Math.round(book.y + (y - SPREAD.y) * book.h / SPREAD.h);
@@ -116,7 +122,7 @@ function add(id: string, label: string, area: Rect, action: Hit['action'], level
 }
 function row(id: string, label: string, baseline: number, action: () => void, opts: {
   x?: number; w?: number; disabled?: boolean; marked?: boolean; primary?: boolean; compact?: boolean; wrap?: boolean;
-  kind?: 'field' | 'select' | 'choice' | 'toggle' | 'entry'; hint?: string; danger?: boolean;
+  kind?: 'field' | 'select' | 'choice' | 'toggle' | 'entry'; hint?: string; danger?: boolean; font?: string;
 } = {}) {
   const y = pageY(baseline);
   const x = opts.x ?? LEFT, w = opts.w ?? PAGE_W;
@@ -153,7 +159,7 @@ function row(id: string, label: string, baseline: number, action: () => void, op
     }
   }
   const color = onPaper ? opts.disabled ? '#80573c' : PARCHMENT_INK : opts.disabled ? '#947d68' : hot || opts.primary ? '#ffe7af' : INK;
-  const font = opts.wrap || hint || kind === 'field' || kind === 'entry' || kind === 'select' || label.length === 1 ? textFont : menuFont;
+  const font = opts.font ?? (opts.wrap || hint || kind === 'field' || kind === 'entry' || kind === 'select' || label.length === 1 ? textFont : menuFont);
   const inset = kind === 'select' ? 8 : 17;
   const labelWidth = w - inset - (kind === 'select' ? 24 : kind === 'choice' && hint ? 18 : 5);
   left.font = `9.5px ${font}`;
@@ -215,8 +221,9 @@ function flip(next: Page, change?: () => void, forward = pages.indexOf(next) >= 
   outgoing.clearRect(view.x, view.y, view.w, view.h);
   outgoing.drawImage(left.canvas, view.x, view.y, view.w, view.h);
   direction = forward;
-  if (page === 'sound' && next !== 'sound') props.music.stopPreview();
+  if (soundPage()) props.music.stopPreview();
   page = next;
+  parameterPage = 'game';
   canvasLabel.value = names()[page];
   visiblePrint = previousPrint = undefined;
   editing = null; focus = ''; hover = ''; selectedSlot = undefined; chapterAction = null; confirmIntro = false;
@@ -292,9 +299,9 @@ function main() {
     options.push(['autosave', 'Continue from autosave', () => emit('load', AUTOSAVE_SLOT), !props.slots.some(slot => slot.index === AUTOSAVE_SLOT && slot.savedAt)],
       ['new', 'Start a new journey', () => emit('leave', 'menu')]);
   } else if (props.mainMenu) options.push(['start', 'Start Journey', () => emit('start')]);
-  else options.push(['resume', 'Resume', () => emit('resume')], ['save', 'Save game', () => flip('save'), !props.canSave]);
-  options.push(['load', 'Load game', () => flip('load'), !props.slots.some(slot => slot.savedAt || slot.error)],
-    ['settings', 'Settings', () => flip('settings')], ['help', 'How to play', () => flip('help')]);
+  else options.push(['resume', 'Resume', () => emit('resume')]);
+  options.push(['saves', savesTitle(), () => flip('saves')], ['settings', parametersTitle(), () => flip('settings')],
+    ['help', 'How to play', () => flip('help')]);
   options.forEach(([id, label, action, disabled], index) => {
     row(id, t(label), 125 + index * 26, action, { disabled, primary: index === 0 });
   });
@@ -305,27 +312,36 @@ function select<T extends string>(id: string, label: string, values: readonly T[
   row(id, labels[index], y + 2, () => set(values[(index + 1) % values.length]), { kind: 'select', disabled });
 }
 function settings() {
-  heading(t('Settings'), tr('THE SCRIBE’S DESK', 'СТОЛ ПИСЦА'));
+  heading(parametersTitle(), tr('THE SCRIBE’S DESK', 'СТОЛ ПИСЦА'));
   if (confirmIntro) {
     lines(t('Leave this adventure? Unsaved progress will be lost.'), LEFT, 125, PAGE_W, 13);
     row('leave-confirm', t('Continue'), 211, () => emit('leave', 'intro'), { danger: true });
     row('leave-cancel', t('Stay here'), 242, () => confirmIntro = false);
     return;
   }
-  select('language', t('Language'), ['en', 'ru'], ['English', 'Русский'], locale.value, 126, setLocale);
-  select('speed', t('Walk speed'), speedValues, speedLabels.map(t), props.walkSpeed, 165, value => emit('speed', value));
-  select('controls', t('Controls'), ['modern', 'classic'], [t('Modern'), t('Classic')], props.controlMode, 204, value => emit('control', value));
+  (['game', 'sound'] as const).forEach((id, index) => {
+    row('parameter-' + id, t(id === 'game' ? 'Game' : 'Sound'), 117, () => {
+      if (id === parameterPage) return;
+      props.music.stopPreview();
+      choosingDevice = false;
+      parameterPage = id;
+    }, { x: LEFT + index * 98, w: 94, compact: true, primary: parameterPage === id });
+  });
+  if (parameterPage === 'sound') { sound(); return; }
+  select('language', t('Language'), ['en', 'ru'], ['English', 'Русский'], locale.value, 152, setLocale);
+  select('speed', t('Walk speed'), speedValues, speedLabels.map(t), props.walkSpeed, 185, value => emit('speed', value));
+  select('controls', t('Controls'), ['modern', 'classic'], [t('Modern'), t('Classic')], props.controlMode, 218, value => emit('control', value));
   if (props.fullscreenAvailable) {
     const label = props.canInstall ? props.isFullscreen ? tr('Exit screen', 'Свернуть') : tr('Full screen', 'Весь экран')
       : t(props.isFullscreen ? 'Exit full screen' : 'Full screen');
-    row('fullscreen', label, 236, () => emit('fullscreen'),
+    row('fullscreen', label, 248, () => emit('fullscreen'),
       { w: props.canInstall ? 89 : PAGE_W, primary: !props.isFullscreen, compact: true });
   }
   if (props.canInstall) {
-    row('install', props.fullscreenAvailable ? tr('Install', 'Установить') : t('Install game'), 236, () => emit('install'),
+    row('install', props.fullscreenAvailable ? tr('Install', 'Установить') : t('Install game'), 248, () => emit('install'),
       { x: props.fullscreenAvailable ? LEFT + 97 : LEFT, w: props.fullscreenAvailable ? 95 : PAGE_W, compact: true });
   }
-  row('replay-intro', tr('Intro', 'Интро'), 264, () => flip('story', () => {
+  row('replay-intro', tr('Intro', 'Интро'), 275, () => flip('story', () => {
     chapter = 0;
     readChapter(1);
   }),
@@ -333,7 +349,7 @@ function settings() {
 }
 function slider(id: string, label: string, enabled: boolean, value: number, y: number, toggle: () => void, update: (value: number) => void) {
   row(id, label, y, toggle, { kind: 'toggle', marked: enabled });
-  const area = { x: LEFT + 7, y: pageY(y + 15), w: 137, h: 15 };
+  const area = { x: LEFT + 7, y: pageY(y + 12), w: 137, h: 13 };
   left.fillStyle = '#100b0d'; left.fillRect(area.x, area.y + 5, area.w, 5);
   left.fillStyle = enabled ? '#b77a45' : '#61504a'; left.fillRect(area.x, area.y + 6, Math.round(area.w * value), 3);
   const focused = focus === id + '-level' || hover === id + '-level';
@@ -355,7 +371,8 @@ async function importAudio(rom: boolean) {
 function sound() {
   const state = props.musicState;
   if (!state) return;
-  heading(t('Sound settings'), props.setup ? tr('THE FIRST LEAF  ·  II', 'ПЕРВЫЙ ЛИСТ  ·  II') : tr('MUSIC, EFFECTS & VOICES', 'МУЗЫКА, ЭФФЕКТЫ И ГОЛОСА'));
+  const parameters = page === 'settings';
+  if (!parameters) heading(t('Sound settings'), props.setup ? tr('THE FIRST LEAF  ·  II', 'ПЕРВЫЙ ЛИСТ  ·  II') : tr('MUSIC, EFFECTS & VOICES', 'МУЗЫКА, ЭФФЕКТЫ И ГОЛОСА'));
   const devices = [{ id: 'adlib', label: 'AdLib (OPL2)' }, { id: 'mt32', label: 'Roland MT-32 / CM-32L' },
     ...state.banks.map(bank => ({ id: 'sf2:' + bank.id, label: bank.name }))];
   const active = devices.find(device => device.id === state.renderer);
@@ -363,14 +380,14 @@ function sound() {
     const count = Math.ceil(devices.length / 5);
     devicePage = Math.max(0, Math.min(devicePage, count - 1));
     devices.slice(devicePage * 5, devicePage * 5 + 5).forEach((device, i) => {
-      row('device-' + device.id, device.label, 125 + i * 24, () => {
+      row('device-' + device.id, device.label, parameters ? 140 + i * 23 : 125 + i * 24, () => {
         choosingDevice = false;
         void props.music.selectRenderer(device.id);
       }, { kind: 'choice', marked: active === device, disabled: state.busy });
     });
     row('close-devices', tr('Back', 'Назад'), 264, () => choosingDevice = false, { x: LEFT + 4, w: 65, compact: true });
     if (count > 1) {
-      if (devicePage > 0) listFade(114, 121);
+      if (devicePage > 0) listFade(parameters ? 129 : 114, parameters ? 136 : 121);
       if (devicePage + 1 < count) listFade(233, 227);
       text(left, (devicePage + 1) + ' / ' + count, LEFT_CENTER, pageY(264), 10, smallInk(),
         'center', textFont, 55, 400, onScroll() ? PARCHMENT_SHADOW : undefined);
@@ -378,10 +395,10 @@ function sound() {
       row('devices-next', '›', 264, () => devicePage++, { x: LEFT + 159, w: 29, compact: true, disabled: devicePage + 1 === count });
     }
   } else {
-    row('device', active?.label ?? 'AdLib', 123, () => { choosingDevice = true; devicePage = 0; }, { kind: 'select', disabled: state.busy });
-    slider('music', t('Music'), state.enabled, state.volume, 153, () => props.music.setEnabled(!state.enabled), value => props.music.setVolume(value));
-    slider('effects', tr('Effects', 'Эффекты'), state.sfxEnabled, state.sfxVolume, 192, () => props.music.setSfxEnabled(!state.sfxEnabled), value => props.music.setSfxVolume(value));
-    slider('voice', tr('CD voices (EN)', 'Голоса CD (EN)'), state.voiceEnabled, state.voiceVolume, 231, () => props.music.setVoiceEnabled(!state.voiceEnabled), value => props.music.setVoiceVolume(value));
+    row('device', active?.label ?? 'AdLib', parameters ? 141 : 123, () => { choosingDevice = true; devicePage = 0; }, { kind: 'select', disabled: state.busy });
+    slider('music', t('Music'), state.enabled, state.volume, parameters ? 166 : 153, () => props.music.setEnabled(!state.enabled), value => props.music.setVolume(value));
+    slider('effects', tr('Effects', 'Эффекты'), state.sfxEnabled, state.sfxVolume, parameters ? 201 : 192, () => props.music.setSfxEnabled(!state.sfxEnabled), value => props.music.setSfxVolume(value));
+    slider('voice', tr('CD voices (EN)', 'Голоса CD (EN)'), state.voiceEnabled, state.voiceVolume, parameters ? 236 : 231, () => props.music.setVoiceEnabled(!state.voiceEnabled), value => props.music.setVoiceVolume(value));
     row('test-audio', state.previewing ? t('Stop test') : tr('Test audio', 'Проверить звук'), FOOT, () => props.music.preview(true), { disabled: state.busy || !state.available });
   }
   heading(tr('Sound banks', 'Банки звука'), tr('THE SOUND OF KYRANDIA', 'ЗВУК КИРАНДИИ'), RIGHT_CENTER);
@@ -417,11 +434,11 @@ function setup() {
   if (touch) lines(tr('Swipe to move the cursor. Tap to select.', 'Свайп ведёт курсор, тап выбирает.'), LEFT, 229, PAGE_W, 11);
   row('setup-next', tr('Sound settings ›', 'Далее: звук ›'), FOOT, () => flip('sound'), { primary: true, compact: true });
 }
-function saveLoad() {
-  const saving = page === 'save';
-  heading(t(saving ? 'Save your story' : 'Saved chapters'), tr('THE BOOKMARKS YOU LEFT', 'ВАШИ ЗАКЛАДКИ'));
+function saves() {
+  heading(savesTitle(), tr('THE BOOKMARKS YOU LEFT', 'ВАШИ ЗАКЛАДКИ'));
   const slot = props.slots.find(slot => slot.index === selectedSlot);
   const occupied = !!(slot?.savedAt || slot?.error);
+  const manual = !!slot && slot.index !== AUTOSAVE_SLOT;
   const save = (slot: Slot) => {
     noticeAt = time;
     emit('save', slot.index, saveName.trim() || slot.name || t('Chapter ' + (slot.index + 1)));
@@ -440,37 +457,33 @@ function saveLoad() {
     row('cancel', t('Keep it'), 242, () => chapterAction = null);
     return;
   }
-  if (saving) row('save-name', (saveName || (editing === 'save' ? '' : t('Chapter name'))) + (editing === 'save' ? '▏' : ''), 122,
+  if (props.canSave) row('save-name', (saveName || (editing === 'save' ? '' : t('Chapter name'))) + (editing === 'save' ? '▏' : ''), 122,
     () => editing = 'save', { kind: 'field' });
-  const slots = props.slots.filter(slot => slot.index !== AUTOSAVE_SLOT || !saving && (slot.savedAt || slot.error));
+  const slots = props.slots.filter(slot => slot.index !== AUTOSAVE_SLOT || slot.savedAt || slot.error);
   slots.forEach((slot, index) => {
     const name = slot.name || t(slot.index === AUTOSAVE_SLOT ? 'Autosave' : 'Chapter ' + (slot.index + 1));
     const hint = slot.error ? t(slot.error) : slot.savedAt ? t(slot.location || '') : tr('Empty slot', 'Пустой слот');
-    const baseline = (saving ? 151 : 125) + index * 32;
-    row('slot-' + slot.index, slot.index === AUTOSAVE_SLOT ? t(name) : name, baseline, () => {
-      if (saving) selectedSlot = slot.index;
-      else emit('load', slot.index);
-    }, { kind: saving ? 'choice' : 'entry', disabled: !saving && (!slot.savedAt || !!slot.error),
-      marked: saving && selectedSlot === slot.index, hint });
-    if (saving) {
-      const y = pageY(baseline);
-      left.strokeStyle = slot.savedAt || slot.error ? '#c69c62' : '#886a51';
-      left.strokeRect(LEFT + PAGE_W - 12.5, y - 5.5, 6, 9);
-      if (slot.savedAt || slot.error) {
-        left.fillStyle = '#b48754';
-        left.fillRect(LEFT + PAGE_W - 11, y - 4, 3, 6);
-      }
+    const baseline = (props.canSave ? 151 : 129) + index * 30;
+    row('slot-' + slot.index, slot.index === AUTOSAVE_SLOT ? t(name) : name, baseline, () => selectedSlot = slot.index,
+      { kind: 'choice', marked: selectedSlot === slot.index, hint });
+    const y = pageY(baseline);
+    left.strokeStyle = slot.savedAt || slot.error ? '#c69c62' : '#886a51';
+    left.strokeRect(LEFT + PAGE_W - 12.5, y - 5.5, 6, 9);
+    if (slot.savedAt || slot.error) {
+      left.fillStyle = '#b48754';
+      left.fillRect(LEFT + PAGE_W - 11, y - 4, 3, 6);
     }
   });
   if (!slots.length) lines(t('This page has no saved chapter.'), LEFT, 135, PAGE_W);
-  if (saving) {
-    row('save-selected', t('Save'), 264, () => {
-      if (occupied) chapterAction = 'replace';
-      else if (slot) save(slot);
-    }, { x: LEFT + 4, w: 88, compact: true, primary: true, disabled: !slot || !props.canSave });
-    row('delete-selected', t('Delete'), 264, () => chapterAction = 'delete',
-      { x: LEFT + 98, w: 90, compact: true, danger: true, disabled: !occupied });
-  }
+  const actionStyle = { compact: true, font: textFont };
+  row('load-selected', tr('Load', 'Загрузить'), FOOT, () => { if (slot?.savedAt && !slot.error) emit('load', slot.index); },
+    { ...actionStyle, w: 63, primary: !!slot?.savedAt && !slot.error, disabled: !slot?.savedAt || !!slot.error });
+  row('save-selected', t('Save'), FOOT, () => {
+    if (occupied) chapterAction = 'replace';
+    else if (slot) save(slot);
+  }, { ...actionStyle, x: LEFT + 66, w: 67, primary: manual && !occupied, disabled: !manual || !props.canSave });
+  row('delete-selected', t('Delete'), FOOT, () => chapterAction = 'delete',
+    { ...actionStyle, x: LEFT + 136, w: 56, danger: true, disabled: !manual || !occupied });
 }
 function dev() {
   heading('Dev Menu', tr('THE ROYAL ARCHIVE', 'КОРОЛЕВСКИЙ АРХИВ'));
@@ -541,7 +554,7 @@ function drawKeyboard() {
   });
 }
 function picture() {
-  if (page === 'sound') return;
+  if (soundPage()) return;
   if (touch && editing) { drawKeyboard(); return; }
   if (page === 'setup') {
     const modern = selectedMode === 'modern', image = art![selectedMode];
@@ -576,7 +589,7 @@ function picture() {
       print = { canvas: printPicture(source, r.w, r.h, focus), x: focus?.x, y: focus?.y };
       prints.set(image, print);
     }
-    if ((page === 'save' || page === 'load') && !reduced.matches) {
+    if (page === 'saves' && !reduced.matches) {
       if (visiblePrint !== print.canvas) {
         previousPrint = visiblePrint;
         visiblePrint = print.canvas;
@@ -606,25 +619,49 @@ function picture() {
   text(left, caption, center, y + 10, 14, FOIL, 'center', titleFont, w - 12, 700);
   if (detail) text(left, detail, center, y + 22, 10, INK, 'center', textFont, w - 12);
 }
+function tabExtension(id: Page, active: boolean, hot: boolean) {
+  const sprite = pages.indexOf(id);
+  const target = active ? 9 : hot ? 5 : 0;
+  bookmarkOffsets[sprite] = reduced.matches ? target : bookmarkOffsets[sprite] + (target - bookmarkOffsets[sprite]) * .45;
+  return Math.round(bookmarkOffsets[sprite]);
+}
+function tabIcon(index: number, x: number, y: number) {
+  left.drawImage(art!.tabIcons, index * 14, 0, 14, 14, x, y, 14, 14);
+}
+function devBookmark() {
+  const hot = hover === 'tab-dev' || focus === 'tab-dev', active = page === 'dev';
+  const edge = Math.round(book.y + book.h), x = book.x + book.w - 66, y = edge - 18;
+  const h = 32 + Math.round(tabExtension('dev', active, hot) / 2), w = 45;
+  left.fillStyle = '#150c09a6';
+  left.fillRect(x + 2, y + 2, w, h);
+  left.save();
+  left.translate(x + w, y);
+  left.rotate(Math.PI / 2);
+  pixels(left, bookmarks[6], { x: 0, y: 0, w: h, h: w });
+  left.restore();
+  left.fillStyle = '#58351a';
+  left.fillRect(x + 1, y, w - 2, 3);
+  tabIcon(3, x + 5, edge - 7);
+  text(left, 'Dev', x + 30, edge, 10, hot || active ? '#fff1bd' : FOIL, 'center', textFont, 22);
+  add('tab-dev', 'Dev Menu', { x, y, w, h }, () => flip('dev'));
+}
 function paintPages() {
   left.clearRect(view.x, view.y, view.w, view.h);
   pixels(left, art!.spread, book);
   spreadLight(left, reduced.matches ? 0 : time, book);
-  const available = props.options ? pages.filter(id => id !== 'story')
+  const available = props.options ? sideTabs
     : props.setup || !props.showPrologue ? [] : ['story', 'sound'] as const;
-  const labels: Record<string, string> = {
-    main: tr('Path', 'Путь'), story: tr('Story', 'Пролог'), save: tr('Save', 'Перо'), load: tr('Load', 'Главы'),
-    settings: tr('Game', 'Игра'), sound: tr('Sound', 'Звук'), dev: 'Dev',
+  const labels = {
+    main: t('Menu'), story: tr('Story', 'Пролог'), saves: savesTitle(),
+    settings: parametersTitle(), sound: t('Sound'),
   };
-  const edge = book.x + book.w, paperEdge = edge - 28;
+  const edge = book.x + book.w, paperEdge = edge - 38;
   available.forEach((id, index) => {
     const y = pageY(84 + index * 27);
     const hot = hover === 'tab-' + id || focus === 'tab-' + id;
     const active = id === page || id === 'settings' && page === 'story' && props.options;
     const sprite = pages.indexOf(id);
-    const target = active ? 9 : hot ? 5 : 0;
-    bookmarkOffsets[sprite] = reduced.matches ? target : bookmarkOffsets[sprite] + (target - bookmarkOffsets[sprite]) * .45;
-    const overhang = 32 + Math.round(bookmarkOffsets[sprite]);
+    const overhang = 38 + tabExtension(id, active, hot);
     // The root disappears under the paper lip; only the leather beyond it can extend.
     left.fillStyle = '#150c09a6';
     left.fillRect(paperEdge - 4, y + 2, edge + overhang - paperEdge + 5, 21);
@@ -638,11 +675,14 @@ function paintPages() {
     left.fillRect(paperEdge - 3, y + 1, 4, 20);
     left.fillStyle = '#e1ae6f';
     left.fillRect(paperEdge - 3, y + 1, 1, 20);
-    text(left, labels[id], (paperEdge + edge + overhang) / 2, y + 11, 10, hot || active ? '#fff1bd' : FOIL,
-      'center', textFont, edge + overhang - paperEdge - 12);
-    add('tab-' + id, names()[id], { x: paperEdge, y, w: edge + overhang - paperEdge, h: 23 }, () => flip(id));
+    if (props.options) tabIcon(index, paperEdge + 4, y + 4);
+    const labelX = paperEdge + (props.options ? 19 : 0);
+    text(left, labels[id], (labelX + edge + overhang) / 2, y + 11, 10, hot || active ? '#fff1bd' : FOIL,
+      'center', textFont, edge + overhang - labelX - 4);
+    add('tab-' + id, labels[id], { x: paperEdge, y, w: edge + overhang - paperEdge, h: 23 }, () => flip(id));
   });
-  ({ main, story, settings, sound, setup, save: saveLoad, load: saveLoad, dev, help })[page]();
+  if (props.options) devBookmark();
+  ({ main, story, settings, sound, setup, saves, dev, help })[page]();
   picture();
 }
 
@@ -987,7 +1027,7 @@ async function prepare() {
 watch(() => props.options, options => {
   if (!options) return;
   // Keep the already open spread when the cover leads straight to Kallak's menu.
-  page = props.initialView;
+  page = initialPage();
   canvasLabel.value = names()[page];
   pendingEnter = closing = false;
   finishAt = null;
@@ -1020,7 +1060,7 @@ onMounted(() => {
   resize();
   canvasSize = new ResizeObserver(resize);
   canvasSize.observe(canvas.value!);
-  canvasLabel.value = props.portrait ? t('Turn your device') : onScroll() ? names().setup : t('Fables and Fiends, Book One');
+  canvasLabel.value = props.portrait ? t('Turn your device') : props.options || onScroll() ? names()[page] : t('Fables and Fiends, Book One');
   canvas.value!.focus({ preventScroll: true });
   renderFrame = requestAnimationFrame(paint);
   void prepare();
@@ -1100,7 +1140,7 @@ function cancelPress() { dragging = touchDrag = undefined; }
 function scroll(event: WheelEvent) {
   if (!hits.length) return;
   if (page === 'dev') devPage += Math.sign(event.deltaY);
-  if (page === 'sound' && choosingDevice) devicePage += Math.sign(event.deltaY);
+  if (soundPage() && choosingDevice) devicePage += Math.sign(event.deltaY);
 }
 function insert(value: string) {
   if (editing === 'query') { query = (query + value).slice(0, 48); devPage = 0; }

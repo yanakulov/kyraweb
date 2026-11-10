@@ -12,13 +12,13 @@ export const ILLUSTRATION = { x: 341, y: 69, w: 179, h: 199 };
 export const CHAPTER_FOCUS = [{ x: .44, y: .5 }, { x: .5, y: .5 }, { x: .54, y: .5 }, { x: .58, y: .5 }];
 export const RUBRIC = '#e5b97a', INK = '#e9d0ae', MUTED = '#b79674', FOIL = '#f1d198';
 export type Rect = { x: number; y: number; w: number; h: number };
-export type Art = Record<'desk' | 'spread' | 'cover' | 'retail' | 'title' | 'bookmark' | 'modern' | 'classic' | 'studio' | 'scroll', HTMLImageElement>;
+export type Art = Record<'desk' | 'spread' | 'cover' | 'retail' | 'title' | 'bookmark' | 'tabIcons' | 'modern' | 'classic' | 'studio' | 'scroll', HTMLImageElement>;
 type Point = { x: number; y: number };
 
 export async function loadBookArt(): Promise<Art> {
   const files = {
     desk: 'pixel-book/desk.webp', spread: 'pixel-book/spread.webp', cover: 'pixel-book/cover.webp', retail: 'book-cover.webp', title: 'kyrandia-title.webp',
-    bookmark: 'pixel-book/bookmark.webp', scroll: 'pixel-book/scroll.webp',
+    bookmark: 'pixel-book/bookmark.webp', tabIcons: 'pixel-book/bookmark-icons.png', scroll: 'pixel-book/scroll.webp',
     modern: 'controls-modern.webp', classic: 'controls-classic.webp', studio: 'akulaflow-studio.webp',
   };
   const entries = await Promise.all(Object.entries(files).map(async ([key, file]) => {
