@@ -35,8 +35,8 @@ button, canvas { -webkit-tap-highlight-color: transparent; user-select: none; -w
 body {
   margin: 0;
   min-width: 280px;
-  min-height: 100svh;
-  padding: max(4px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   background: #080a09;
   display: grid;
   place-items: center;
@@ -45,7 +45,7 @@ body {
 #app { width: 100%; }
 
 .app {
-  width: min(100%, 1280px, calc((100svh - 8px) * 1.6));
+  width: min(100%, calc((100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)) * 1.6));
   margin-inline: auto;
 }
 .app.is-modern { width: 100%; }
