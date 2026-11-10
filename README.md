@@ -2,7 +2,7 @@
 
 ![The Legend of Kyrandia](public/assets/interface/kyrandia-title.webp)
 
-[Play](https://lok.akulaflow.ru/) · [Engine wiki (Russian)](https://lok.akulaflow.ru/howitworks/) · [Русский README](README.ru.md)
+[Play](https://lok.akulaflow.ru/) · [Engine wiki](https://lok.akulaflow.ru/howitworks/en/) · [Русский README](README.ru.md)
 
 KyraWeb brings the first *Legend of Kyrandia* to the browser. The adventure is playable from the opening lift to the original CD ending and credits. The game uses Westwood’s art, animation, scripts and sound data. **WebKyr** is the TypeScript engine that runs them.
 
@@ -48,7 +48,7 @@ npm run check:size
 
 ## Engine notes
 
-- [Interactive wiki](https://lok.akulaflow.ru/howitworks/) covers palette changes, depth masks, frame deltas, sound, and build sizes.
+- [Interactive wiki](https://lok.akulaflow.ru/howitworks/en/) covers palette changes, depth masks, frame deltas, sound, and build sizes.
 - [Resource packs](docs/resources.md) and [import tools](extractor/README.md) describe how the original data is converted for the browser.
 - [Rooms and scripts](docs/world.md), [movement](docs/movement.md), [animation](docs/animations.md), and [subtitles](docs/subtitles.md) document the game runtime.
 
