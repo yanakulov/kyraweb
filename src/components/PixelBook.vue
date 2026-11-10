@@ -18,7 +18,7 @@ import { devHighlights, devIntroScenes, devVariants, type DevScene } from '../en
 import { prologue } from './prologue';
 import { roomFrameFocus } from './bookTransition';
 import { WIDTH, HEIGHT, SPREAD, COVER, ILLUSTRATION, CHAPTER_FOCUS, RUBRIC, FOIL, INK, MUTED,
-  loadBookArt, loadChapterFrame, printPicture, cropFrame, bookmarkPalette, coverBoard, surface, photoBounds, buttonPlate, unroll,
+  loadBookArt, loadChapterFrame, printPicture, cropFrame, bookmarkPalette, bookmarkRibbon, coverBoard, surface, photoBounds, buttonPlate, unroll,
   clamp, ease, mix, pixels, frame, text, sparkle, desk, bookShadow, spreadLight, turnLeaf, type Art, type Rect } from './pixelBookPaint';
 
 type WalkSpeed = 'slowest' | 'slow' | 'fast' | 'fastest';
@@ -102,7 +102,7 @@ const speedValues: WalkSpeed[] = ['slowest', 'slow', 'fast', 'fastest'];
 const speedLabels = ['Slowest', 'Slow', 'Fast', 'Fastest'];
 const textFont = 'Georgia, serif';
 const menuFont = 'Kyrandia, Georgia, serif', titleFont = '"Cormorant Garamond", Georgia, serif';
-const LEFT = 113, RIGHT = 339, PAGE_W = 192, PAGE_TOP = 108, FOOT = 273;
+const LEFT = 115, RIGHT = 339, PAGE_W = 186, PAGE_TOP = 106, FOOT = 262;
 const LEFT_CENTER = LEFT + PAGE_W / 2, RIGHT_CENTER = RIGHT + PAGE_W / 2;
 const mainTitle = () => props.gameOver ? t("It didn't happen that way!") : t('Menu');
 const savesTitle = () => tr('Saves', 'Сохранения');
@@ -122,14 +122,15 @@ function add(id: string, label: string, area: Rect, action: Hit['action'], level
 }
 function row(id: string, label: string, baseline: number, action: () => void, opts: {
   x?: number; w?: number; disabled?: boolean; marked?: boolean; primary?: boolean; compact?: boolean; wrap?: boolean;
-  kind?: 'field' | 'select' | 'choice' | 'toggle' | 'entry'; hint?: string; danger?: boolean; font?: string;
+  kind?: 'field' | 'select' | 'choice' | 'toggle' | 'entry' | 'tab'; hint?: string; danger?: boolean; font?: string; height?: number;
 } = {}) {
   const y = pageY(baseline);
   const x = opts.x ?? LEFT, w = opts.w ?? PAGE_W;
   const hot = !opts.disabled && (hover === id || focus === id);
   const { kind, hint } = opts;
   const onPaper = onScroll() && (kind === 'choice' || kind === 'toggle');
-  const area = { x, y: y - 11, w, h: hint ? 29 : 22 };
+  const height = opts.height ?? (hint ? 28 : 22);
+  const area = { x, y: y - 11, w, h: height };
   if (!kind) {
     buttonPlate(left, area, hot, opts.primary ? 'green' : opts.danger ? 'red' : 'leather', opts.disabled);
     if (!opts.compact) sparkle(left, x + 8, y, hot || opts.primary ? 2 : 1, opts.disabled ? '#766452' : '#bc8d52');
@@ -137,7 +138,7 @@ function row(id: string, label: string, baseline: number, action: () => void, op
     const field = kind === 'field' || kind === 'select';
     left.fillStyle = field ? hot ? '#2d2016' : '#211510' : hot || opts.marked ? '#89644034' : '#0000';
     left.fillRect(x, area.y, w, area.h);
-    left.fillStyle = onPaper ? '#7643208e' : hot ? '#d8ac6c' : '#96704d83';
+    left.fillStyle = onPaper ? '#7643208e' : hot || kind === 'tab' && opts.marked ? '#d8ac6c' : '#96704d83';
     left.fillRect(x, area.y + area.h - 1, w, 1);
     if (field) left.fillRect(x, area.y, w, 1);
     if (kind === 'field') {
@@ -154,7 +155,7 @@ function row(id: string, label: string, baseline: number, action: () => void, op
         left.stroke();
       } else left.strokeRect(x + 4.5, y - 4.5, 9, 9);
       if (opts.marked) sparkle(left, x + 9, y, 3, onPaper ? PARCHMENT_RED : '#c99856');
-    } else if (!opts.disabled) {
+    } else if (!opts.disabled && kind !== 'tab') {
       text(left, '›', x + 8, y, 13, RUBRIC, 'center', textFont, 14);
     }
   }
@@ -166,12 +167,12 @@ function row(id: string, label: string, baseline: number, action: () => void, op
   if (opts.wrap && left.measureText(label).width > labelWidth) {
     left.save();
     left.beginPath();
-    left.rect(x + inset, y - 11, labelWidth, 22);
+    left.rect(x + inset, area.y, labelWidth, height);
     left.clip();
-    lines(label, x + inset, baseline - 6, labelWidth, 9.5, Infinity, false, baseline + 11, color);
+    lines(label, x + inset, baseline - 4, labelWidth, 10, Infinity, false, baseline + height - 12, color);
     left.restore();
   } else {
-    text(left, label, opts.compact ? x + w / 2 : x + inset, hint ? y - 2 : y, opts.compact ? 10 : hint ? 12 : 11, color,
+    text(left, label, opts.compact ? x + w / 2 : x + inset, hint ? y - 2 : y, opts.compact ? 10 : 11, color,
       opts.compact ? 'center' : 'left', font, opts.compact ? w - 5 : labelWidth, 400, onPaper ? PARCHMENT_SHADOW : undefined);
   }
   if (hint) text(left, hint, x + inset, y + 10, 9, MUTED, 'left', textFont, labelWidth);
@@ -179,13 +180,13 @@ function row(id: string, label: string, baseline: number, action: () => void, op
 }
 function heading(title: string, kicker: string, x = LEFT_CENTER) {
   const shadow = onScroll() ? PARCHMENT_SHADOW : undefined;
-  text(left, kicker, x, pageY(69), 8, smallInk(), 'center', textFont, PAGE_W, 400, shadow);
-  text(left, title, x, pageY(87), 24, onScroll() ? PARCHMENT_RED : RUBRIC, 'center', titleFont, PAGE_W, 700, shadow);
+  text(left, kicker, x, pageY(65), 8, smallInk(), 'center', textFont, PAGE_W, 400, shadow);
+  text(left, title, x, pageY(82), 24, onScroll() ? PARCHMENT_RED : RUBRIC, 'center', titleFont, PAGE_W, 700, shadow);
   left.fillStyle = '#ab794d8a';
-  left.fillRect(x - 65, pageY(100), 130, 1);
-  sparkle(left, x, pageY(100), 2, '#b5844f');
+  left.fillRect(x - 65, pageY(96), 130, 1);
+  sparkle(left, x, pageY(96), 2, '#b5844f');
 }
-function lines(value: string, x: number, y: number, width: number, size = 13, limit = Infinity, drop = false, bottom = 285, color = bodyInk()) {
+function lines(value: string, x: number, y: number, width: number, size = 13, limit = Infinity, drop = false, bottom = 274, color = bodyInk()) {
   y = pageY(y);
   bottom = pageY(bottom);
   const shadow = onScroll() ? PARCHMENT_SHADOW : undefined;
@@ -202,6 +203,11 @@ function lines(value: string, x: number, y: number, width: number, size = 13, li
     if (line) wrapped.push(line);
     if (y + (wrapped.length - 1) * (size + 3) + size / 2 <= bottom || size <= 9) break;
     size -= .5;
+  }
+  const capacity = Math.max(0, Math.floor((bottom - y - size / 2) / (size + 3)) + 1);
+  if (wrapped.length > capacity) {
+    wrapped = wrapped.slice(0, capacity);
+    if (capacity) wrapped[capacity - 1] = wrapped[capacity - 1].replace(/[.,;:!?]$/, '') + '…';
   }
   let written = 0;
   for (const [index, content] of wrapped.entries()) {
@@ -274,11 +280,11 @@ function story() {
   const entry = prologue[locale.value][chapter];
   heading(entry.title, tr('CHRONICLES OF KYRANDIA', 'ЛЕТОПИСИ КИРАНДИИ'));
   const ink = revealAll || reduced.matches ? Infinity : Math.floor(Math.max(0, time - storyAt) / 10);
-  lines(entry.text, LEFT + 5, PAGE_TOP + 9, PAGE_W - 7, 12, ink, true, 230);
-  if (chapter > 0) row('previous', tr('‹ Back', '‹ Назад'), 243, () => flip('story', () => chapter--, false), { w: 65, compact: true });
-  text(left, ['I', 'II', 'III', 'IV'][chapter], LEFT_CENTER, pageY(243), 9, MUTED, 'center');
+  lines(entry.text, LEFT + 5, PAGE_TOP + 9, PAGE_W - 7, 12, ink, true, 219);
+  if (chapter > 0) row('previous', tr('‹ Back', '‹ Назад'), 234, () => flip('story', () => chapter--, false), { w: 65, compact: true });
+  text(left, ['I', 'II', 'III', 'IV'][chapter], LEFT_CENTER, pageY(234), 9, MUTED, 'center');
   if (ink < entry.text.length || chapter < 3) {
-    row('next', ink < entry.text.length ? tr('Reveal', 'Весь текст') : tr('Next ›', 'Далее ›'), 243, () => {
+    row('next', ink < entry.text.length ? tr('Reveal', 'Весь текст') : tr('Next ›', 'Далее ›'), 234, () => {
       if (ink < entry.text.length) revealAll = true;
       else flip('story', () => { chapter++; readChapter(chapter + 1); });
     }, { x: LEFT + PAGE_W - 83, w: 83, compact: true });
@@ -308,8 +314,8 @@ function main() {
 }
 function select<T extends string>(id: string, label: string, values: readonly T[], labels: string[], value: T, y: number, set: (value: T) => void, disabled = false) {
   const index = Math.max(0, values.indexOf(value));
-  text(left, label, LEFT, pageY(y - 12), 9, MUTED);
-  row(id, labels[index], y + 2, () => set(values[(index + 1) % values.length]), { kind: 'select', disabled });
+  text(left, label, LEFT, pageY(y - 16), 8, MUTED, 'left', textFont, PAGE_W);
+  row(id, labels[index], y, () => set(values[(index + 1) % values.length]), { kind: 'select', disabled });
 }
 function settings() {
   heading(parametersTitle(), tr('THE SCRIBE’S DESK', 'СТОЛ ПИСЦА'));
@@ -320,28 +326,29 @@ function settings() {
     return;
   }
   (['game', 'sound'] as const).forEach((id, index) => {
-    row('parameter-' + id, t(id === 'game' ? 'Game' : 'Sound'), 117, () => {
+    row('parameter-' + id, t(id === 'game' ? 'Game' : 'Sound'), 111, () => {
       if (id === parameterPage) return;
       props.music.stopPreview();
       choosingDevice = false;
       parameterPage = id;
-    }, { x: LEFT + index * 98, w: 94, compact: true, primary: parameterPage === id });
+    }, { x: LEFT + index * 96, w: 90, compact: true, kind: 'tab', height: 20,
+      marked: parameterPage === id, primary: parameterPage === id });
   });
   if (parameterPage === 'sound') { sound(); return; }
-  select('language', t('Language'), ['en', 'ru'], ['English', 'Русский'], locale.value, 152, setLocale);
-  select('speed', t('Walk speed'), speedValues, speedLabels.map(t), props.walkSpeed, 185, value => emit('speed', value));
-  select('controls', t('Controls'), ['modern', 'classic'], [t('Modern'), t('Classic')], props.controlMode, 218, value => emit('control', value));
+  select('language', t('Language'), ['en', 'ru'], ['English', 'Русский'], locale.value, 141, setLocale);
+  select('speed', t('Walk speed'), speedValues, speedLabels.map(t), props.walkSpeed, 173, value => emit('speed', value));
+  select('controls', t('Controls'), ['modern', 'classic'], [t('Modern'), t('Classic')], props.controlMode, 205, value => emit('control', value));
   if (props.fullscreenAvailable) {
     const label = props.canInstall ? props.isFullscreen ? tr('Exit screen', 'Свернуть') : tr('Full screen', 'Весь экран')
       : t(props.isFullscreen ? 'Exit full screen' : 'Full screen');
-    row('fullscreen', label, 248, () => emit('fullscreen'),
-      { w: props.canInstall ? 89 : PAGE_W, primary: !props.isFullscreen, compact: true });
+    row('fullscreen', label, 234, () => emit('fullscreen'),
+      { w: props.canInstall ? 90 : PAGE_W, compact: true });
   }
   if (props.canInstall) {
-    row('install', props.fullscreenAvailable ? tr('Install', 'Установить') : t('Install game'), 248, () => emit('install'),
-      { x: props.fullscreenAvailable ? LEFT + 97 : LEFT, w: props.fullscreenAvailable ? 95 : PAGE_W, compact: true });
+    row('install', props.fullscreenAvailable ? tr('Install', 'Установить') : t('Install game'), 234, () => emit('install'),
+      { x: props.fullscreenAvailable ? LEFT + 96 : LEFT, w: props.fullscreenAvailable ? 90 : PAGE_W, compact: true });
   }
-  row('replay-intro', tr('Intro', 'Интро'), 275, () => flip('story', () => {
+  row('replay-intro', tr('Intro', 'Интро'), FOOT, () => flip('story', () => {
     chapter = 0;
     readChapter(1);
   }),
@@ -349,12 +356,12 @@ function settings() {
 }
 function slider(id: string, label: string, enabled: boolean, value: number, y: number, toggle: () => void, update: (value: number) => void) {
   row(id, label, y, toggle, { kind: 'toggle', marked: enabled });
-  const area = { x: LEFT + 7, y: pageY(y + 12), w: 137, h: 13 };
+  const area = { x: LEFT + 7, y: pageY(y) + 12, w: PAGE_W - 48, h: 13 };
   left.fillStyle = '#100b0d'; left.fillRect(area.x, area.y + 5, area.w, 5);
   left.fillStyle = enabled ? '#b77a45' : '#61504a'; left.fillRect(area.x, area.y + 6, Math.round(area.w * value), 3);
   const focused = focus === id + '-level' || hover === id + '-level';
   sparkle(left, area.x + Math.round(area.w * value), area.y + 7, focused ? 4 : 3, RUBRIC);
-  text(left, Math.round(value * 100) + '%', LEFT + 150, area.y + 7, 9, smallInk(),
+  text(left, Math.round(value * 100) + '%', LEFT + PAGE_W - 34, area.y + 7, 9, smallInk(),
     'left', textFont, 40, 400, onScroll() ? PARCHMENT_SHADOW : undefined);
   add(id + '-level', label + ' ' + Math.round(value * 100) + '%', area, x => update(clamp((x - area.x) / area.w)), value);
 }
@@ -380,26 +387,26 @@ function sound() {
     const count = Math.ceil(devices.length / 5);
     devicePage = Math.max(0, Math.min(devicePage, count - 1));
     devices.slice(devicePage * 5, devicePage * 5 + 5).forEach((device, i) => {
-      row('device-' + device.id, device.label, parameters ? 140 + i * 23 : 125 + i * 24, () => {
+      row('device-' + device.id, device.label, parameters ? 138 + i * 23 : 120 + i * 24, () => {
         choosingDevice = false;
         void props.music.selectRenderer(device.id);
       }, { kind: 'choice', marked: active === device, disabled: state.busy });
     });
-    row('close-devices', tr('Back', 'Назад'), 264, () => choosingDevice = false, { x: LEFT + 4, w: 65, compact: true });
+    row('close-devices', tr('Back', 'Назад'), FOOT, () => choosingDevice = false, { w: 59, compact: true });
     if (count > 1) {
       if (devicePage > 0) listFade(parameters ? 129 : 114, parameters ? 136 : 121);
       if (devicePage + 1 < count) listFade(233, 227);
-      text(left, (devicePage + 1) + ' / ' + count, LEFT_CENTER, pageY(264), 10, smallInk(),
-        'center', textFont, 55, 400, onScroll() ? PARCHMENT_SHADOW : undefined);
-      row('devices-prev', '‹', 264, () => devicePage--, { x: LEFT + 121, w: 29, compact: true, disabled: devicePage === 0 });
-      row('devices-next', '›', 264, () => devicePage++, { x: LEFT + 159, w: 29, compact: true, disabled: devicePage + 1 === count });
+      text(left, (devicePage + 1) + ' / ' + count, LEFT + 87, pageY(FOOT), 10, smallInk(),
+        'center', textFont, 43, 400, onScroll() ? PARCHMENT_SHADOW : undefined);
+      row('devices-prev', '‹', FOOT, () => devicePage--, { x: LEFT + 116, w: 31, compact: true, disabled: devicePage === 0 });
+      row('devices-next', '›', FOOT, () => devicePage++, { x: LEFT + 155, w: 31, compact: true, disabled: devicePage + 1 === count });
     }
   } else {
-    row('device', active?.label ?? 'AdLib', parameters ? 141 : 123, () => { choosingDevice = true; devicePage = 0; }, { kind: 'select', disabled: state.busy });
-    slider('music', t('Music'), state.enabled, state.volume, parameters ? 166 : 153, () => props.music.setEnabled(!state.enabled), value => props.music.setVolume(value));
-    slider('effects', tr('Effects', 'Эффекты'), state.sfxEnabled, state.sfxVolume, parameters ? 201 : 192, () => props.music.setSfxEnabled(!state.sfxEnabled), value => props.music.setSfxVolume(value));
-    slider('voice', tr('CD voices (EN)', 'Голоса CD (EN)'), state.voiceEnabled, state.voiceVolume, parameters ? 236 : 231, () => props.music.setVoiceEnabled(!state.voiceEnabled), value => props.music.setVoiceVolume(value));
-    row('test-audio', state.previewing ? t('Stop test') : tr('Test audio', 'Проверить звук'), FOOT, () => props.music.preview(true), { disabled: state.busy || !state.available });
+    row('device', active?.label ?? 'AdLib', parameters ? 138 : 117, () => { choosingDevice = true; devicePage = 0; }, { kind: 'select', disabled: state.busy });
+    slider('music', t('Music'), state.enabled, state.volume, parameters ? 164 : 144, () => props.music.setEnabled(!state.enabled), value => props.music.setVolume(value));
+    slider('effects', tr('Effects', 'Эффекты'), state.sfxEnabled, state.sfxVolume, parameters ? 200 : 180, () => props.music.setSfxEnabled(!state.sfxEnabled), value => props.music.setSfxVolume(value));
+    slider('voice', tr('CD voices (EN)', 'Голоса CD (EN)'), state.voiceEnabled, state.voiceVolume, parameters ? 236 : 216, () => props.music.setVoiceEnabled(!state.voiceEnabled), value => props.music.setVoiceVolume(value));
+    row('test-audio', state.previewing ? t('Stop test') : tr('Test audio', 'Проверить звук'), FOOT, () => props.music.preview(true), { x: RIGHT, primary: true, disabled: state.busy || !state.available });
   }
   heading(tr('Sound banks', 'Банки звука'), tr('THE SOUND OF KYRANDIA', 'ЗВУК КИРАНДИИ'), RIGHT_CENTER);
   const description = state.renderer === 'mt32'
@@ -408,23 +415,25 @@ function sound() {
       ? tr('Original DOS sound. You can also load Roland ROMs or your own SF2 bank.', 'Звук DOS. Здесь же можно загрузить ROM Roland или свой банк SF2.')
       : tr('Your SoundFont plays through the General MIDI mapping.', 'SoundFont воспроизводится через раскладку General MIDI.');
   lines(description, RIGHT + 3, 119, PAGE_W - 5, 12, Infinity, false, 164);
-  row('roms', tr('Import MT-32 ROMs', 'Импорт ROM MT-32'), 178, () => void importAudio(true), { x: RIGHT, disabled: state.busy });
-  row('soundfont', tr('Import SF2', 'Импорт SF2'), 202, () => void importAudio(false), { x: RIGHT, disabled: state.busy });
-  if (props.setup) {
-    row('back-setup', tr('Back', 'Назад'), 264, () => flip('setup'), { x: RIGHT + 6, w: 64, compact: true });
-    row('finish-setup', t('Continue'), 264, () => {
+  const canRemoveRoms = state.renderer === 'mt32' && state.available && state.source !== 'local';
+  row('roms', canRemoveRoms ? tr('Import ROMs', 'Импорт ROM') : tr('Import MT-32 ROMs', 'Импорт ROM MT-32'), 176, () => void importAudio(true),
+    { x: RIGHT, w: canRemoveRoms ? 106 : PAGE_W, compact: canRemoveRoms, disabled: state.busy });
+  if (canRemoveRoms) row('remove-roms', t('Delete'), 176, () => void props.music.forgetRoms(),
+    { x: RIGHT + 112, w: PAGE_W - 112, compact: true, danger: true, disabled: state.busy });
+  row('soundfont', tr('Import SF2', 'Импорт SF2'), 204, () => void importAudio(false), { x: RIGHT, disabled: state.busy });
+  if (props.setup && !choosingDevice) {
+    row('back-setup', tr('Back', 'Назад'), FOOT, () => flip('setup'), { w: 62, compact: true });
+    row('finish-setup', t('Continue'), FOOT, () => {
       props.music.stopPreview();
       emit('finishSetup', selectedMode);
       flip('story');
       startCover();
       if (!props.showPrologue) enterMenu();
     },
-      { x: RIGHT + 79, w: 104, primary: true, compact: true, disabled: state.busy || state.renderer === 'mt32' && !state.available });
-  } else if (state.renderer === 'mt32' && state.available && state.source !== 'local') {
-    row('remove-roms', t('Remove ROMs'), FOOT, () => void props.music.forgetRoms(), { x: RIGHT, disabled: state.busy });
+      { x: LEFT + 70, w: PAGE_W - 70, primary: true, compact: true, disabled: state.busy || state.renderer === 'mt32' && !state.available });
   }
   const message = state.soundFontProgress !== undefined ? t('Loading SoundFont…') + ' ' + state.soundFontProgress + '%' : t(state.message);
-  if (message) lines(message, RIGHT, 226, PAGE_W, 11, Infinity, false, 254, onScroll() ? PARCHMENT_RED : RUBRIC);
+  if (message) lines(message, RIGHT, 227, PAGE_W, 11, Infinity, false, choosingDevice ? 270 : 246, onScroll() ? PARCHMENT_RED : RUBRIC);
 }
 function setup() {
   heading(t('Controls'), tr('FIRST START  ·  I / II', 'ПЕРВЫЙ ЗАПУСК  ·  I / II'));
@@ -457,13 +466,13 @@ function saves() {
     row('cancel', t('Keep it'), 242, () => chapterAction = null);
     return;
   }
-  if (props.canSave) row('save-name', (saveName || (editing === 'save' ? '' : t('Chapter name'))) + (editing === 'save' ? '▏' : ''), 122,
+  if (props.canSave) row('save-name', (saveName || (editing === 'save' ? '' : t('Chapter name'))) + (editing === 'save' ? '▏' : ''), 115,
     () => editing = 'save', { kind: 'field' });
   const slots = props.slots.filter(slot => slot.index !== AUTOSAVE_SLOT || slot.savedAt || slot.error);
   slots.forEach((slot, index) => {
     const name = slot.name || t(slot.index === AUTOSAVE_SLOT ? 'Autosave' : 'Chapter ' + (slot.index + 1));
     const hint = slot.error ? t(slot.error) : slot.savedAt ? t(slot.location || '') : tr('Empty slot', 'Пустой слот');
-    const baseline = (props.canSave ? 151 : 129) + index * 30;
+    const baseline = (props.canSave ? 144 : 121) + index * 28;
     row('slot-' + slot.index, slot.index === AUTOSAVE_SLOT ? t(name) : name, baseline, () => selectedSlot = slot.index,
       { kind: 'choice', marked: selectedSlot === slot.index, hint });
     const y = pageY(baseline);
@@ -477,13 +486,13 @@ function saves() {
   if (!slots.length) lines(t('This page has no saved chapter.'), LEFT, 135, PAGE_W);
   const actionStyle = { compact: true, font: textFont };
   row('load-selected', tr('Load', 'Загрузить'), FOOT, () => { if (slot?.savedAt && !slot.error) emit('load', slot.index); },
-    { ...actionStyle, w: 63, primary: !!slot?.savedAt && !slot.error, disabled: !slot?.savedAt || !!slot.error });
+    { ...actionStyle, w: 59, primary: !!slot?.savedAt && !slot.error, disabled: !slot?.savedAt || !!slot.error });
   row('save-selected', t('Save'), FOOT, () => {
     if (occupied) chapterAction = 'replace';
     else if (slot) save(slot);
-  }, { ...actionStyle, x: LEFT + 66, w: 67, primary: manual && !occupied, disabled: !manual || !props.canSave });
+  }, { ...actionStyle, x: LEFT + 64, w: 63, primary: manual && !occupied, disabled: !manual || !props.canSave });
   row('delete-selected', t('Delete'), FOOT, () => chapterAction = 'delete',
-    { ...actionStyle, x: LEFT + 136, w: 56, danger: true, disabled: !manual || !occupied });
+    { ...actionStyle, x: LEFT + 132, w: 54, danger: true, disabled: !manual || !occupied });
 }
 function dev() {
   heading('Dev Menu', tr('THE ROYAL ARCHIVE', 'КОРОЛЕВСКИЙ АРХИВ'));
@@ -496,21 +505,23 @@ function dev() {
     ...devVariants.map(scene => ({ scene, detail: '#' + scene.room.room + ' ' + scene.room.resource })),
     ...((rooms ?? []).map(room => ({ scene: { label: room.title, room: { room: room.id } }, detail: '#' + room.id + ' ' + room.name }))),
   ].filter(({ scene, detail }) => needle.every(word => [t(scene.label), scene.label, detail].join(' ').toLocaleLowerCase().includes(word)));
-  const count = Math.max(1, Math.ceil(scenes.length / 5));
+  const pending = roomFetchFailed || roomLoading;
+  const perPage = pending ? 3 : 4;
+  const count = Math.max(1, Math.ceil(scenes.length / perPage));
   devPage = Math.max(0, Math.min(devPage, count - 1));
-  scenes.slice(devPage * 5, devPage * 5 + 5).forEach(({ scene, detail }, index) => {
-    const y = 145 + index * 23;
-    row('scene-' + (devPage * 5 + index), t(scene.label), y, () => emit('devRun', scene), { w: PAGE_W - 29, kind: 'entry', wrap: true });
+  scenes.slice(devPage * perPage, devPage * perPage + perPage).forEach(({ scene, detail }, index) => {
+    const y = (pending ? 173 : 143) + index * 30;
+    row('scene-' + (devPage * perPage + index), t(scene.label), y, () => emit('devRun', scene), { w: PAGE_W - 29, kind: 'entry', wrap: true, height: 26 });
     text(left, detail.startsWith('#') ? detail.split(' ')[0] : '', LEFT + PAGE_W, pageY(y), 8, MUTED, 'right', 'monospace', 28);
   });
-  if (!scenes.length) text(left, t('No matching scenes.'), LEFT, pageY(150), 11, INK);
-  if (roomFetchFailed) row('retry-scenes', t('Retry scene list'), 259, () => void loadRooms());
-  if (roomLoading) text(left, t('Loading scene list…'), LEFT, pageY(264), 9, MUTED);
+  if (!scenes.length) text(left, t('No matching scenes.'), LEFT, pageY(pending ? 180 : 150), 11, INK, 'left', textFont, PAGE_W);
+  if (roomFetchFailed) row('retry-scenes', t('Retry scene list'), 145, () => void loadRooms());
+  if (roomLoading) text(left, t('Loading scene list…'), LEFT, pageY(145), 9, MUTED, 'left', textFont, PAGE_W);
   if (devPage > 0) listFade(134, 141);
-  if (devPage + 1 < count) listFade(251, 243);
-  row('dev-prev', '‹', 265, () => devPage--, { x: LEFT + 5, w: 44, compact: true, disabled: devPage === 0 });
-  text(left, (devPage + 1) + ' / ' + count, LEFT_CENTER, pageY(265), 10, MUTED, 'center');
-  row('dev-next', '›', 265, () => devPage++, { x: LEFT + PAGE_W - 49, w: 44, compact: true, disabled: devPage + 1 >= count });
+  if (devPage + 1 < count) listFade(249, 245);
+  row('dev-prev', '‹', FOOT, () => devPage--, { w: 44, compact: true, disabled: devPage === 0 });
+  text(left, (devPage + 1) + ' / ' + count, LEFT_CENTER, pageY(FOOT), 10, MUTED, 'center');
+  row('dev-next', '›', FOOT, () => devPage++, { x: LEFT + PAGE_W - 44, w: 44, compact: true, disabled: devPage + 1 >= count });
 }
 function listFade(edge: number, inside: number) {
   const outer = pageY(edge), inner = pageY(inside);
@@ -622,7 +633,7 @@ function picture() {
 }
 function tabExtension(id: Page, active: boolean, hot: boolean) {
   const sprite = pages.indexOf(id);
-  const target = active ? 9 : hot ? 5 : 0;
+  const target = active ? 4 : hot ? 2 : 0;
   bookmarkOffsets[sprite] = reduced.matches ? target : bookmarkOffsets[sprite] + (target - bookmarkOffsets[sprite]) * .45;
   return Math.round(bookmarkOffsets[sprite]);
 }
@@ -631,19 +642,13 @@ function tabIcon(index: number, x: number, y: number) {
 }
 function devBookmark() {
   const hot = hover === 'tab-dev' || focus === 'tab-dev', active = page === 'dev';
-  const edge = Math.round(book.y + book.h), x = book.x + book.w - 66, y = edge - 18;
-  const h = 32 + Math.round(tabExtension('dev', active, hot) / 2), w = 45;
-  left.fillStyle = '#150c09a6';
-  left.fillRect(x + 2, y + 2, w, h);
-  left.save();
-  left.translate(x + w, y);
-  left.rotate(Math.PI / 2);
-  pixels(left, bookmarks[6], { x: 0, y: 0, w: h, h: w });
-  left.restore();
-  left.fillStyle = '#58351a';
-  left.fillRect(x + 1, y, w - 2, 3);
-  tabIcon(3, x + 5, edge - 7);
-  text(left, 'Dev', x + 30, edge, 10, hot || active ? '#fff1bd' : FOIL, 'center', textFont, 22);
+  const edge = pageY(320), x = book.x + book.w - 110, y = edge - 4;
+  const h = 30 + tabExtension('dev', active, hot), w = 60;
+  bookmarkRibbon(left, bookmarks[6], { x, y, w, h }, active, hot, true);
+  left.fillStyle = '#1b100bc0'; left.fillRect(x, y, w, 4);
+  left.fillStyle = '#ad804e'; left.fillRect(x + 2, y, w - 4, 1);
+  tabIcon(3, x + 9, y + 7);
+  text(left, 'Dev', x + 37, y + 15, 11, hot || active ? '#fff1bd' : INK, 'center', textFont, 24);
   add('tab-dev', 'Dev Menu', { x, y, w, h }, () => flip('dev'));
 }
 function paintPages() {
@@ -656,31 +661,22 @@ function paintPages() {
     main: t('Menu'), story: tr('Story', 'Пролог'), saves: savesTitle(),
     settings: parametersTitle(), sound: t('Sound'),
   };
-  const edge = book.x + book.w, paperEdge = edge - 38;
+  const paperEdge = book.x + book.w - 39;
   available.forEach((id, index) => {
-    const y = pageY(84 + index * 27);
+    const y = pageY(88 + index * 44);
     const hot = hover === 'tab-' + id || focus === 'tab-' + id;
-    const active = id === page || id === 'settings' && page === 'story' && props.options;
+    const active = id === page || id === 'main' && page === 'help'
+      || id === 'settings' && (page === 'story' || page === 'sound') && props.options;
     const sprite = pages.indexOf(id);
-    const overhang = 38 + tabExtension(id, active, hot);
-    // The root disappears under the paper lip; only the leather beyond it can extend.
-    left.fillStyle = '#150c09a6';
-    left.fillRect(paperEdge - 4, y + 2, edge + overhang - paperEdge + 5, 21);
-    left.save();
-    left.beginPath();
-    left.rect(paperEdge, y - 1, edge + overhang - paperEdge, 24);
-    left.clip();
-    pixels(left, bookmarks[sprite], { x: paperEdge - 8, y, w: edge + overhang - paperEdge + 8, h: 23 });
-    left.restore();
-    left.fillStyle = '#58351a';
-    left.fillRect(paperEdge - 3, y + 1, 4, 20);
-    left.fillStyle = '#e1ae6f';
-    left.fillRect(paperEdge - 3, y + 1, 1, 20);
-    if (props.options) tabIcon(index, paperEdge + 4, y + 4);
-    const labelX = paperEdge + (props.options ? 19 : 0);
-    text(left, labels[id], (labelX + edge + overhang) / 2, y + 11, 10, hot || active ? '#fff1bd' : FOIL,
-      'center', textFont, edge + overhang - labelX - 4);
-    add('tab-' + id, labels[id], { x: paperEdge, y, w: edge + overhang - paperEdge, h: 23 }, () => flip(id));
+    const area = { x: paperEdge, y, w: 77 + tabExtension(id, active, hot), h: 38 };
+    bookmarkRibbon(left, bookmarks[sprite], area, active, hot);
+    // A shaded fold anchors the ribbon in the page stack. The label never moves on hover.
+    left.fillStyle = '#20120bc7'; left.fillRect(paperEdge, y, 5, area.h);
+    left.fillStyle = active ? '#e3bc7a' : '#926c40'; left.fillRect(paperEdge, y + 2, 1, area.h - 4);
+    if (props.options) tabIcon(index, paperEdge + 32, y + 5);
+    text(left, labels[id], paperEdge + 39, y + (props.options ? 27 : 19), 11, hot || active ? '#fff1bd' : INK,
+      'center', textFont, 67);
+    add('tab-' + id, labels[id], area, () => flip(id));
   });
   if (props.options) devBookmark();
   ({ main, story, settings, sound, setup, saves, dev, help })[page]();
